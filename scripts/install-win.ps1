@@ -108,8 +108,23 @@ if (-not $NoStartup) {
     Write-Host "[install-win] Startup shortcut created: $ShortcutPath"
 }
 
-Write-Host "[install-win] Launching daemon via wscript.exe..."
-Start-Process -FilePath 'wscript.exe' -ArgumentList """$VbsPath""" -WorkingDirectory $RepoRoot
+Write-Host "[install-win] Launching daemon via detached Win32_Process (survives terminal/agent exit)..."
+$launchedDetached = $false
+try {
+    $cmdLine = "wscript.exe `"$VbsPath`""
+    $cimRes = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+        CommandLine = $cmdLine
+        CurrentDirectory = $RepoRoot
+    } -ErrorAction Stop
+    if ($cimRes.ReturnValue -eq 0) {
+        $launchedDetached = $true
+    }
+} catch {
+    $launchedDetached = $false
+}
+if (-not $launchedDetached) {
+    Start-Process -FilePath 'wscript.exe' -ArgumentList """$VbsPath""" -WorkingDirectory $RepoRoot
+}
 
 for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep -Milliseconds 250

@@ -1557,10 +1557,7 @@
   function injectMainSidebarButton() {
     if (document.getElementById('agy-custom-theme-sidebar-btn')) return;
 
-    const sidebar = document.querySelector('.bg-sidebar');
-    if (!sidebar) return;
-
-    const spans = Array.from(sidebar.querySelectorAll('span'));
+    const spans = Array.from(document.querySelectorAll('aside span, [data-sidebar] span, .bg-sidebar span'));
     const customSpan = spans.find(s => s.textContent?.trim() === 'Customizations');
     if (!customSpan) return;
 
