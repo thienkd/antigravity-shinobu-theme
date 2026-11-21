@@ -1,118 +1,79 @@
-# Antigravity Custom Theme Skill
+# 🦋 Antigravity Custom Theme — Shinobu Wisteria & Interactive Chibi NPC
 
-Turn any wallpaper, aesthetic mood, or color palette into a live, 60fps custom theme inside **Antigravity** — packaged as both a standalone cross-platform CDP theme engine and a drop-in **AI Agent Skill** (`SKILL.md`).
+Bộ tùy biến giao diện **60fps Zero-Live-Blur** dành cho ứng dụng **Google Antigravity 2.x** (đóng gói đồng thời làm **AI Agent Skill**), tích hợp sẵn chủ đề **Shinobu Wisteria**, lớp **Live Wallpaper** và **NPC Chibi Shinobu Kocho tương tác & trò chuyện 2 chiều** ngay trên góc khung hội thoại mà không sửa đổi tệp nhị phân của ứng dụng.
 
-> Give your AI agent an image + vibe ("cosmic violin gold on deep midnight", "cozy Kyoto matcha", "cyberpunk neon cyan"), and let it extract the palette, stage assets, compile the payload, and hot-reload your Antigravity UI cleanly without touching Electron app binaries.
+---
 
-## Features
+## ✨ Tính năng nổi bật
 
-- **Zero Live Blur Architecture (60fps Scroll):** Uses pre-baked offscreen canvas glass (`syncPrebakedGlass`) and gradient scrims instead of CSS `backdrop-filter: blur()`, preventing Electron/GPU scroll lag.
-- **Unified L-Glass + Split-Browser Safe:** Automatically detects Antigravity's split embedded Chromium view (`data-has-browser-hole`) and cuts an `evenodd` `clip-path` window so embedded pages never get tinted or blurred.
-- **Live Settings Modal:** Switch presets, upload custom wallpapers or **User / AI Agent circular avatars** (auto-compressed WebP), adjust scrim darkness, and persist choices to `theme_config.json`.
-- **Light & Dark Glass Modes:** Supports both deep dark themes and daytime bright palettes (`isLight: true`) with adaptive ink, frosted pills, and titlebar controls.
-- **Two Lightweight Sample Presets Included:**
-  - `WLOP Cosmic` — 2K starlight wallpaper + custom SVG flourishes (`themes/assets/wlop_cosmic_2k.webp`)
-  - `Midnight Obsidian` — Ultra-light zero-image pure-CSS gradient preset
-- **Data/Engine Separation:** Add your own themes solely inside `themes/themes.json` + `themes/assets/` and compile via `scripts/build_payload.py`.
-- **Cross-Platform Daemon (`daemon/theme_daemon.js`):** Windows, macOS, and Linux support using Node >= 22 built-in `WebSocket`.
+- **Chủ đề mặc định `Shinobu Wisteria`** *(kèm thêm `WLOP Cosmic` & `Midnight Obsidian`)*:
+  - Hình nền **Shinobu Kocho** dưới ánh trăng tròn & giàn hoa tử đằng tím, kiến trúc kính mờ dựng sẵn (**Zero Live Blur** — cuộn mượt 60/120fps).
+  - **Live Wallpaper 60fps**: Bướm phát sáng tím–xanh ngọc vỗ cánh bay lượn, cánh hoa tử đằng rơi, đom đóm lơ lửng và sao băng xẹt qua bầu trời đêm.
+  - **Iridescent Composer Strip**: Dải màu chuyển sắc tím – hồng – xanh ngọc trên thanh Composer cùng bộ Avatar tròn đồng bộ (User: Cánh bướm neon, AI: Shinobu Kocho).
+- **NPC Chibi Shinobu Kocho (`themes/assets/shinobu_ornament.svg`)**:
+  - Ngồi tựa hai bàn tay lên góc phải của cả **khung nhập Composer** (`.surface-composer`) và **bong bóng tin nhắn đã gửi** (`.group/user-input-step`).
+  - Chuyển động nghiêng người nhẹ nhàng (`chibiSway`) + bướm vỗ cánh (`wingFlapL` / `wingFlapR`), nảy vui vẻ khi chạm vào.
+- **Hộp thoại RPG & Chat 2 chiều (`Shinobu Kocho • NPC`)**:
+  - Hiệu ứng gõ chữ từng ký tự (*Visual Novel style*).
+  - 4 nút tương tác nhanh: `✨ Cổ vũ`, `🍵 Pha trà`, `🦋 Điệp Phủ`, `💬 Trò chuyện`.
+  - Nhắn tin Tiếng Việt 2 chiều theo ngữ cảnh trực tiếp với Shinobu, nút đổi câu ngẫu nhiên `🎲`, tạm dừng chuyển động `⏸`/`▶`, thu gọn thành huy hiệu `🦋 Shinobu` (`✕`).
+- **Tự biên dịch linh hoạt**: Hỗ trợ cả Node.js thuần (`scripts/build_payload.js`) lẫn Python (`scripts/build_payload.py`) — sang máy mới **chỉ cần Node.js >= 22** (không bắt buộc cài Python).
 
-## Prerequisites
+---
 
-- **Antigravity** running with CDP debugging port active (`DevToolsActivePort`)
-- **Node.js >= 22** (uses native `globalThis.WebSocket`, zero `npm install` needed)
-- **Python 3.9+** (optional `Pillow` package recommended for auto-compressing large >2K wallpapers into WebP)
+## 🚀 Cài đặt nhanh trên máy mới (1 bước)
 
-## Quick Start
+> **Yêu cầu duy nhất:** Máy có **Git** và **Node.js >= 22** (`node -v`).
 
-### 1. Build the Runtime Payload
+### Trên Windows (PowerShell)
 
-```bash
-python scripts/build_payload.py
-```
-
-This resolves `themes/themes.json` + `themes/assets/*` and compiles them with `engine/core.js` into gitignored `dist/theme_payload.js`.
-
-### 2. Install & Run the Daemon
-
-**Windows (PowerShell):**
+Mở **PowerShell** và dán cụm lệnh sau để vừa tải về thư mục Skill toàn cục của Antigravity vừa tự động biên dịch & kích hoạt giao diện chạy ngầm:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/install-win.ps1
+git clone https://github.com/thienkd/antigravity-shinobu-theme.git "$HOME\.gemini\config\skills\antigravity-custom-theme"
+powershell -ExecutionPolicy Bypass -File "$HOME\.gemini\config\skills\antigravity-custom-theme\scripts\install-win.ps1"
 ```
 
-Creates a hidden launcher in your Windows Startup folder (`AntigravityCustomTheme.lnk`) without hardcoding paths and attaches silently. Pass `-NoStartup` if you only want to run it for the current session.
+**Sau khi chạy lệnh lần đầu tiên:**
+1. Nhìn xuống khay hệ thống góc dưới bên phải Windows (**System Tray**), bấm chuột phải vào biểu tượng **Antigravity** → chọn **`Quit`** (Thoát hẳn).
+2. Mở lại **Antigravity** từ **Desktop** hoặc **Start Menu** *(nếu dùng icon ghim dưới Taskbar, hãy bỏ ghim cũ rồi ghim lại từ Start Menu để nhận cờ `--remote-debugging-port=0`)*.
+3. Giao diện **Shinobu Wisteria** và **NPC Chibi Shinobu** sẽ tự động hiện lên! Bấm mục **`Custom theme`** ở thanh bên trái để mở bảng **Custom Theme Studio** tùy chỉnh bất cứ lúc nào.
 
-**macOS / Linux (Bash):**
+---
+
+### Trên macOS / Linux (Terminal)
 
 ```bash
-bash scripts/install-unix.sh
+git clone https://github.com/thienkd/antigravity-shinobu-theme.git "$HOME/.gemini/config/skills/antigravity-custom-theme"
+bash "$HOME/.gemini/config/skills/antigravity-custom-theme/scripts/install-unix.sh"
 ```
 
-- On **macOS**, installs a `~/Library/LaunchAgents/io.antigravity.custom-theme.plist` LaunchAgent.
-- On **Linux**, installs a `systemd --user` service (or falls back to `nohup`).
-- Use `bash scripts/install-unix.sh --foreground` to run interactively in your terminal, or `stop` / `status`.
+*(Khởi chạy Antigravity kèm cờ `--remote-debugging-port=0`, ví dụ trên macOS: `open -a Antigravity --args --remote-debugging-port=0`).*
 
-> **Platform Testing Note:** Windows (`install-win.ps1`, CDP hot-reload, uninstall) has been verified live against Antigravity on Windows 11. macOS (`launchd`) and Linux (`systemd --user`) scripts are implemented and shell-syntax verified, and welcome community runtime feedback across macOS/Linux setups (you can override `DevToolsActivePort` location anytime via `AGY_PORT_FILE=/path/to/DevToolsActivePort`).
+---
 
-### 3. Verify Live via CDP
+## 🔄 Cập nhật giao diện khi có chỉnh sửa mới
 
-```bash
-node scripts/verify_cdp.js
+Khi kéo bản cập nhật mới từ GitHub về máy khác:
+
+```powershell
+cd "$HOME\.gemini\config\skills\antigravity-custom-theme"
+git pull
+node scripts/build_payload.js
 ```
 
-### 4. Uninstall Cleanly
+*(Daemon đang chạy ngầm sẽ tự phát hiện `dist/theme_payload.js` mới và hot-reload trực tiếp lên cửa sổ Antigravity ngay lập tức mà không cần khởi động lại app!)*
 
-```bash
-node scripts/uninstall.js
+---
+
+## 🧹 Gỡ cài đặt (Khôi phục Antigravity mặc định)
+
+```powershell
+node "$HOME\.gemini\config\skills\antigravity-custom-theme\scripts\uninstall.js"
 ```
 
-Removes auto-start shortcuts/services, stops the background daemon, and immediately restores Antigravity's default styling on open windows.
+---
 
-## Troubleshooting: Theme Disappeared After an Antigravity Update
+## 📄 Giấy phép & Ghi công
 
-Starting with **Antigravity v2.33.0+**, Antigravity no longer creates `DevToolsActivePort` by default unless launched with `--remote-debugging-port=0`, and the built-in auto-updater restarts `Antigravity.exe --updated` without shortcut flags.
-
-- **Windows:**
-  1. Re-run `powershell -ExecutionPolicy Bypass -File scripts/install-win.ps1` (it automatically patches `--remote-debugging-port=0` onto your `Antigravity.lnk` shortcuts in Start Menu, Desktop, Startup, and Taskbar).
-  2. **Quit Antigravity completely** (right-click the System Tray icon -> **Quit**) and reopen it from the **Start Menu**.
-  3. If you use a **Taskbar pin**, **Unpin** the old icon and re-pin it from the Start Menu `Antigravity` shortcut so the `--remote-debugging-port=0` flag is preserved.
-- **macOS / Linux:**
-  - Start Antigravity with `--remote-debugging-port=0` (`open -a Antigravity --args --remote-debugging-port=0` on macOS, or append `--remote-debugging-port=0` to the `Exec=` command in your `.desktop` entry on Linux).
-
-## Use as an Antigravity Skill (`SKILL.md`)
-
-Copy or clone this repository into either:
-
-- **Global skill directory:** `~/.gemini/config/skills/antigravity-custom-theme/`
-- **Workspace skill directory:** `.agents/skills/antigravity-custom-theme/`
-
-Once installed, simply prompt your Antigravity agent with an image and aesthetic preference (e.g., *"Use `antigravity-custom-theme` to build me a dark emerald studio Ghibli theme from this image"*). The agent reads `SKILL.md` + `references/theme-schema.md`, creates your preset in `themes/`, builds `dist/theme_payload.js`, and verifies it via `verify_cdp.js`.
-
-## Repository Structure
-
-```text
-antigravity-custom-theme-skill/
-├── SKILL.md                    # Agent skill definition & workflow
-├── README.md
-├── LICENSE                     # MIT
-├── references/
-│   └── theme-schema.md         # themes.json schema & DOM notes
-├── themes/
-│   ├── themes.json             # Sample theme presets
-│   └── assets/                 # Wallpapers & SVG stickers/corners
-├── engine/
-│   └── core.js                 # Core injection engine (Zero Live Blur + UI)
-├── daemon/
-│   └── theme_daemon.js         # Cross-platform CDP injector & config persistence
-├── scripts/
-│   ├── build_payload.py        # Compiles themes.json + core.js -> dist/theme_payload.js
-│   ├── install-win.ps1         # Windows Startup launcher setup
-│   ├── install-unix.sh         # macOS LaunchAgent / Linux systemd user setup
-│   ├── uninstall.js            # Clean cross-platform removal
-│   └── verify_cdp.js           # Live CDP diagnostic & assertion check
-└── dist/                       # Gitignored compiled runtime output
-```
-
-## License
-
-MIT
+Phát hành theo giấy phép **MIT**, phát triển mở rộng dựa trên kiến trúc gốc của [antigravity-custom-theme-skill](https://github.com/giakiet22102006/antigravity-custom-theme-skill).

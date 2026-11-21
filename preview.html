@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Antigravity — Shinobu Wisteria Live Theme & Chibi NPC Preview</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #08081c;
+      color: #f8fafc;
+      font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+      font-size: 13.5px;
+    }
+    button, input, textarea { font-family: inherit; }
+
+    .agy-shell {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Top native-like menubar + toolbar */
+    .agy-top-chrome {
+      z-index: 10;
+      flex-shrink: 0;
+    }
+    .agy-menubar {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      font-size: 12px;
+      color: rgba(241, 245, 249, 0.86);
+      user-select: none;
+    }
+    .agy-menubar-left {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    .agy-menubar-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      opacity: 0.78;
+    }
+    .titlebar-Sub {
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+    }
+    .toolbar-left, .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .agy-logo {
+      font-weight: 800;
+      font-size: 16px;
+      letter-spacing: -0.5px;
+      margin-right: 4px;
+    }
+    .nav-icon-btn {
+      background: transparent;
+      border: none;
+      color: #cbd5e1;
+      cursor: pointer;
+      padding: 4px 6px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    .nav-icon-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+    .mode-switch-pill {
+      padding: 4px 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(192, 132, 252, 0.42);
+      background: rgba(31, 18, 54, 0.65);
+      color: #f3e8ff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+    .mode-switch-pill.active, .mode-switch-pill:hover {
+      background: rgba(126, 34, 206, 0.55);
+      border-color: #5eead4;
+      color: #ffffff;
+    }
+    .open-ide-btn {
+      padding: 4px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(15, 23, 42, 0.45);
+      color: #f8fafc;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* Main split area */
+    .agy-main-split {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      position: relative;
+      z-index: 4;
+    }
+
+    /* Left Sidebar */
+    aside.bg-sidebar {
+      width: clamp(190px, 20vw, 246px);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid rgba(168, 85, 247, 0.16);
+      padding: 10px 10px 12px 10px;
+      gap: 4px;
+      user-select: none;
+    }
+    .agy-button-custom {
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: 9px;
+      border: 1px solid rgba(192, 132, 252, 0.35);
+      color: #f8fafc;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: left;
+      cursor: pointer;
+      margin-bottom: 6px;
+    }
+    .sidebar-nav-row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      background: transparent;
+      border: none;
+      color: #cbd5e1;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .sidebar-nav-row:hover { background: rgba(168, 85, 247, 0.16); color: #fff; }
+    .sidebar-section-label {
+      font-size: 11.5px;
+      color: #94a3b8;
+      padding: 12px 10px 4px 10px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .sidebar-conv-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding-right: 2px;
+    }
+    .conv-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      border-radius: 7px;
+      color: #cbd5e1;
+      font-size: 12.5px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .conv-item.active {
+      background: rgba(139, 92, 246, 0.22);
+      color: #ffffff;
+      font-weight: 500;
+    }
+    .conv-time { font-size: 11px; color: #94a3b8; margin-left: 8px; flex-shrink: 0; }
+
+    /* Workspace Canvas */
+    .workspace-body {
+      flex: 1;
+      display: flex;
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+    }
+
+    /* View 1: Welcome View */
+    #welcome-view {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 36px 28px 26px 28px;
+      min-width: 0;
+    }
+    .welcome-hero {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .welcome-hero h1 {
+      font-size: 25px;
+      font-weight: 500;
+      color: #f8fafc;
+      letter-spacing: -0.3px;
+      text-shadow: 0 2px 14px rgba(0, 0, 0, 0.85);
+      margin: 0;
+    }
+
+    /* View 2: Split Chat + SVG Preview */
+    #chat-split-view {
+      flex: 1;
+      display: none;
+      min-width: 0;
+      min-height: 0;
+    }
+    .chat-column {
+      width: 52%;
+      min-width: 300px;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid rgba(168, 85, 247, 0.16);
+      min-height: 0;
+    }
+    .chat-scroller {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 20px 12px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .user-msg-row {
+      display: flex;
+      justify-content: flex-end;
+    }
+    .code-chip {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 5px;
+      background: rgba(25, 24, 44, 0.9);
+      border: 1px solid rgba(192, 132, 252, 0.25);
+      color: #c4b5fd;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+    }
+    .preview-column {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .preview-tabs {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      border-bottom: 1px solid rgba(168, 85, 247, 0.16);
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+    .preview-tab {
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(139, 92, 246, 0.18);
+      border: 1px solid rgba(192, 132, 252, 0.32);
+      color: #fff;
+    }
+    .preview-breadcrumb {
+      padding: 7px 16px;
+      font-size: 12px;
+      color: #94a3b8;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .svg-showcase {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 24px 32px 0 32px;
+      position: relative;
+      overflow: hidden;
+    }
+    .svg-showcase-hint {
+      position: absolute;
+      top: 28%;
+      font-size: 12px;
+      color: rgba(226, 232, 240, 0.65);
+    }
+    .svg-showcase img {
+      width: min(92%, 680px);
+      height: auto;
+      display: block;
+      margin-bottom: -8px;
+    }
+
+    /* Composer Shared */
+    .composer-host {
+      width: 100%;
+      max-width: 760px;
+      padding: 0 8px;
+    }
+    .chat-column .composer-host {
+      max-width: 100%;
+      padding: 0 16px 16px 16px;
+    }
+    .composer-top-strip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .composer-pill-btn {
+      padding: 3.5px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .surface-composer-card {
+      padding: 12px 14px 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .composer-textarea {
+      width: 100%;
+      min-height: 28px;
+      max-height: 90px;
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      color: #f8fafc;
+      font-size: 13.5px;
+    }
+    .composer-textarea::placeholder {
+      color: #94a3b8;
+    }
+    .composer-bottom-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+    .composer-bottom-left, .composer-bottom-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .send-circle {
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      background: #f8fafc;
+      color: #0f172a;
+      border: none;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="agy-shell">
+    <!-- Top Chrome -->
+    <div class="agy-top-chrome @container/titlebar">
+      <div class="agy-menubar">
+        <div class="agy-menubar-left">
+          <span>Antigravity</span>
+          <span>Workspace</span>
+          <span>View</span>
+          <span>Window</span>
+        </div>
+        <div class="agy-menubar-right">
+          <span>─</span><span>□</span><span>✕</span>
+        </div>
+      </div>
+      <div class="titlebar-Sub" data-testid="pane-titlebar-toolbar">
+        <div class="toolbar-left">
+          <span class="agy-logo">A</span>
+          <button type="button" class="nav-icon-btn">◫</button>
+          <button type="button" class="nav-icon-btn">←</button>
+          <button type="button" class="nav-icon-btn">→</button>
+          <button type="button" class="nav-icon-btn">🔍</button>
+          <span data-testid="breadcrumb-segment" id="top-breadcrumb" style="margin-left:8px; font-weight:500;">Shinobu Wisteria — Live Preview</span>
+        </div>
+        <div class="toolbar-right">
+          <button type="button" class="mode-switch-pill active" id="btn-view-welcome">1. Màn hình Welcome</button>
+          <button type="button" class="mode-switch-pill" id="btn-view-chat">2. Màn hình Hội thoại & Split SVG</button>
+          <button type="button" class="mode-switch-pill" id="btn-open-studio">🎨 Custom Theme Studio</button>
+          <button type="button" class="open-ide-btn border">Open IDE</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Split -->
+    <div class="agy-main-split" data-testid="sidebar-split">
+      <!-- Left Sidebar -->
+      <aside class="bg-sidebar" data-sidebar="true">
+        <button type="button" class="agy-button-custom border border-border" id="sidebar-new-conv">+ New Conversation</button>
+        <button type="button" class="sidebar-nav-row group/headerbtn"><span>🕒</span><span>Automations</span></button>
+        <button type="button" class="sidebar-nav-row group/headerbtn"><span>🧰</span><span>Customizations</span></button>
+
+        <div class="sidebar-section-label">
+          <span>Projects</span>
+          <span>▾</span>
+        </div>
+        <div class="sidebar-conv-list overflow-y-auto">
+          <div style="padding: 4px 10px; font-size: 12px; color: #e2e8f0; font-weight: 600;">📁 workspace</div>
+          <a class="conv-item" id="conv-link-npc">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Thêm NPC Chibi Vào Hội Thoại</span>
+            <span class="conv-time">1m</span>
+          </a>
+          <a class="conv-item">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Anime Live Wallpaper Theme</span>
+            <span class="conv-time">1h</span>
+          </a>
+          <a class="conv-item">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Shinobu Wisteria Custom UI</span>
+            <span class="conv-time">2d</span>
+          </a>
+        </div>
+        <button type="button" class="sidebar-nav-row" id="sidebar-settings-btn" style="margin-top:auto;">
+          <span>⚙️</span><span>Settings</span>
+        </button>
+      </aside>
+
+      <!-- Workspace Content -->
+      <div class="workspace-body" data-main-content-body="true">
+        <!-- Mode 1: Welcome View -->
+        <div id="welcome-view">
+          <div style="height: 20px;"></div>
+          <div class="welcome-hero">
+            <h1 id="welcome-heading">Welcome back! Where should we pick up?</h1>
+          </div>
+
+          <div class="composer-host" id="composer-slot-welcome">
+            <div class="surface-composer" id="shared-composer">
+              <div class="composer-top-strip" id="composer-project-strip">
+                <button type="button" class="composer-pill-btn" data-testid="project-selector-trigger">📁 mod ▾</button>
+                <button type="button" class="composer-pill-btn" aria-label="Select Environment">💻 Local Checkout ▾</button>
+              </div>
+              <div class="surface-composer-card">
+                <textarea class="composer-textarea" rows="1" id="main-prompt-input" placeholder="Ask anything, @ to mention, / for actions"></textarea>
+                <div class="composer-bottom-bar">
+                  <div class="composer-bottom-left">
+                    <span>＋</span>
+                    <span>Gemini 4 Carbon (Medium) ▾</span>
+                  </div>
+                  <div class="composer-bottom-right">
+                    <span>🛡️ Turbo ▾</span>
+                    <span>🎤</span>
+                    <button type="button" class="send-circle" id="main-send-btn" title="Gửi thử tin nhắn">↑</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mode 2: Split Conversation + SVG Preview -->
+        <div id="chat-split-view">
+          <div class="chat-column">
+            <div class="chat-scroller overflow-y-auto" id="demo-chat-list">
+              <div class="user-msg-row group/user-input-step">
+                <div data-testid="user-message">
+                  <div class="agy-user-bubble-frame">
+                    <div class="agy-user-bubble">có thể cho thêm npc chibi trong góc khung hội thoại được không</div>
+                  </div>
+                </div>
+              </div>
+
+              <div data-testid="agent-response">
+                <div style="font-size:12px; color:#a78bfa; margin-bottom:6px;">Worked for 4m ▸</div>
+                <p style="margin:0 0 8px 0; line-height:1.55;">
+                  Đã thêm <strong>NPC Chibi Shinobu Kocho</strong> (<span class="code-chip">shinobu_ornament.svg</span>) ngồi tựa hai bàn tay lên góc phải viền khung hội thoại (<span class="code-chip">stickerW: 135</span>, <span class="code-chip">stickerH: 66</span>, <span class="code-chip">stickerTop: -58</span>, <span class="code-chip">stickerRight: 10</span>) và bật hệ thống tương tác &amp; chat 2 chiều!
+                </p>
+                <ul style="margin:0; padding-left:18px; line-height:1.6; color:#e2e8f0;">
+                  <li><span class="code-chip">✨ Cổ vũ</span>, <span class="code-chip">🍵 Pha trà</span>, <span class="code-chip">🦋 Điệp Phủ</span>: Tương tác nhanh kiểu Visual Novel / RPG.</li>
+                  <li><span class="code-chip">💬 Trò chuyện</span>: Mở ô nhập nhắn tin 2 chiều trực tiếp với Shinobu.</li>
+                  <li>Chạm trực tiếp vào người Chibi trên bong bóng chat hoặc thanh Composer để nhân vật nảy nhẹ vui vẻ.</li>
+                </ul>
+              </div>
+
+              <div class="user-msg-row group/user-input-step">
+                <div data-testid="user-message">
+                  <div class="agy-user-bubble-frame">
+                    <div class="agy-user-bubble">có thêm nó cho nói chuyện được không</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="composer-host" id="composer-slot-chat"></div>
+          </div>
+
+          <div class="preview-column" data-side-panel-body="true">
+            <div class="preview-tabs">
+              <span class="preview-tab">🦋 shinobu_ornament.svg</span>
+            </div>
+            <div class="preview-breadcrumb">
+              skills &rsaquo; antigravity-custom-theme &rsaquo; themes &rsaquo; assets &rsaquo; <strong style="color:#f8fafc;">shinobu_ornament.svg</strong>
+            </div>
+            <div class="svg-showcase">
+              <span class="svg-showcase-hint">Bản xem trước cận cảnh Vector &amp; Chibi Animation (180×88)</span>
+              <img src="./themes/assets/shinobu_ornament.svg" alt="Chibi Shinobu Kocho Ornament SVG" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./dist/theme_payload.js"></script>
+  <script>
+    (function () {
+      const btnWelcome = document.getElementById('btn-view-welcome');
+      const btnChat = document.getElementById('btn-view-chat');
+      const btnStudio = document.getElementById('btn-open-studio');
+      const sidebarNew = document.getElementById('sidebar-new-conv');
+      const sidebarSettings = document.getElementById('sidebar-settings-btn');
+      const convLink = document.getElementById('conv-link-npc');
+
+      const welcomeView = document.getElementById('welcome-view');
+      const chatView = document.getElementById('chat-split-view');
+      const slotWelcome = document.getElementById('composer-slot-welcome');
+      const slotChat = document.getElementById('composer-slot-chat');
+      const composer = document.getElementById('shared-composer');
+      const projStrip = document.getElementById('composer-project-strip');
+      const breadcrumb = document.getElementById('top-breadcrumb');
+
+      function setMode(mode) {
+        if (mode === 'chat') {
+          welcomeView.style.display = 'none';
+          chatView.style.display = 'flex';
+          projStrip.style.display = 'none';
+          slotChat.appendChild(composer);
+          btnWelcome.classList.remove('active');
+          btnChat.classList.add('active');
+          convLink.classList.add('active');
+          breadcrumb.textContent = 'mod / Thêm NPC Chibi Vào Hội Thoại';
+        } else {
+          chatView.style.display = 'none';
+          welcomeView.style.display = 'flex';
+          projStrip.style.display = 'flex';
+          slotWelcome.appendChild(composer);
+          btnChat.classList.remove('active');
+          btnWelcome.classList.add('active');
+          convLink.classList.remove('active');
+          breadcrumb.textContent = 'Shinobu Wisteria — Live Preview';
+        }
+        if (window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__) {
+          window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__();
+        }
+      }
+
+      btnWelcome.addEventListener('click', () => setMode('welcome'));
+      sidebarNew.addEventListener('click', () => setMode('welcome'));
+      btnChat.addEventListener('click', () => setMode('chat'));
+      convLink.addEventListener('click', () => setMode('chat'));
+
+      const openModal = () => {
+        if (window.__ANTIGRAVITY_OPEN_THEME_MODAL__) {
+          window.__ANTIGRAVITY_OPEN_THEME_MODAL__();
+        }
+      };
+      btnStudio.addEventListener('click', openModal);
+      sidebarSettings.addEventListener('click', openModal);
+
+      // Allow sending test user messages in preview
+      const promptInput = document.getElementById('main-prompt-input');
+      const sendBtn = document.getElementById('main-send-btn');
+      const chatList = document.getElementById('demo-chat-list');
+
+      function sendDemoPrompt() {
+        const val = promptInput.value.trim();
+        if (!val) return;
+        promptInput.value = '';
+        setMode('chat');
+        const row = document.createElement('div');
+        row.className = 'user-msg-row group/user-input-step';
+        const userWrap = document.createElement('div');
+        userWrap.setAttribute('data-testid', 'user-message');
+        const frame = document.createElement('div');
+        frame.className = 'agy-user-bubble-frame';
+        const bub = document.createElement('div');
+        bub.className = 'agy-user-bubble';
+        bub.textContent = val;
+        frame.appendChild(bub);
+        userWrap.appendChild(frame);
+        row.appendChild(userWrap);
+        chatList.appendChild(row);
+        chatList.scrollTop = chatList.scrollHeight;
+        if (window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__) {
+          window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__();
+        }
+      }
+
+      sendBtn.addEventListener('click', sendDemoPrompt);
+      promptInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendDemoPrompt();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

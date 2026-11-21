@@ -43,7 +43,8 @@
     const rawBubble = localStorage.getItem(STORAGE_BUBBLE) || init.bubbleName || themeName;
     const bubbleName = THEMES[rawBubble] ? rawBubble : themeName;
     const inputStyle = localStorage.getItem(STORAGE_INPUT) || init.inputStyle || 'sync';
-    const dimming = parseInt(localStorage.getItem(STORAGE_DIMMING) || (init.dimming !== undefined ? init.dimming : '69'), 10);
+    const presetDefaultDim = THEMES[themeName]?.defaultDimming !== undefined ? THEMES[themeName].defaultDimming : 69;
+    const dimming = parseInt(localStorage.getItem(STORAGE_DIMMING) || (init.dimming !== undefined ? init.dimming : String(presetDefaultDim)), 10);
     const wpEnabled = localStorage.getItem(STORAGE_WP_ENABLED) !== null
       ? localStorage.getItem(STORAGE_WP_ENABLED) !== 'false'
       : (init.wpEnabled !== undefined ? init.wpEnabled : true);
@@ -265,9 +266,11 @@
     const defaultCornerSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M2 20 L2 6 Q2 2 6 2 L20 2' stroke='%23fbbf24' stroke-width='1.5' fill='none' opacity='0.65'/%3E%3Ccircle cx='6' cy='6' r='2' fill='%23fbbf24' opacity='0.75'/%3E%3C/svg%3E";
     const cornerFiligreeUrl = bubbleTheme.cornerSvg || defaultCornerSvg;
 
+    const bubblePadTop = Math.max(18, Math.abs(bubbleTheme.stickerTop || 0) + 8);
     const bubbleStickerCss = bubbleTheme.sticker ? (bubbleTheme.isOrnament ? `
       .group\\/user-input-step {
-        padding-top: 18px !important;
+        padding-top: ${bubbleTheme.isChibiNpc ? bubblePadTop : 18}px !important;
+        overflow: visible !important;
       }
       .agy-user-bubble-frame::before {
         content: "";
@@ -278,11 +281,15 @@
         height: ${bubbleTheme.stickerH}px;
         background-image: url("${bubbleTheme.sticker}");
         background-size: contain;
-        background-position: center;
+        background-position: ${bubbleTheme.isChibiNpc ? 'bottom center' : 'center'};
         background-repeat: no-repeat;
         z-index: 25;
         pointer-events: none;
-        transition: transform 0.2s ease;
+        transform-origin: 72% 92%;
+        transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      .agy-user-bubble-frame[data-chibi-bounce="1"]::before {
+        transform: translateY(-6px) scale(1.05);
       }
     ` : `
       .group\\/user-input-step {
@@ -308,24 +315,30 @@
     `;
 
     const showInputSticker = st.inputStyle !== 'minimal' && bubbleTheme.sticker;
+    const composerMarginTop = Math.max(16, Math.abs(bubbleTheme.stickerTop || 0) + 8);
     const inputStickerCss = showInputSticker ? (bubbleTheme.isOrnament ? `
       .surface-composer {
-        margin-top: 16px !important;
+        margin-top: ${bubbleTheme.isChibiNpc ? composerMarginTop : 16}px !important;
         overflow: visible !important;
       }
       .surface-composer::before {
         content: "";
         position: absolute;
         top: ${bubbleTheme.stickerTop}px;
-        right: 16px;
-        width: ${bubbleTheme.stickerW + 8}px;
-        height: ${bubbleTheme.stickerH + 2}px;
+        right: ${bubbleTheme.isChibiNpc ? (bubbleTheme.stickerRight ?? 10) : 16}px;
+        width: ${bubbleTheme.isChibiNpc ? bubbleTheme.stickerW : (bubbleTheme.stickerW + 8)}px;
+        height: ${bubbleTheme.isChibiNpc ? bubbleTheme.stickerH : (bubbleTheme.stickerH + 2)}px;
         background-image: url("${bubbleTheme.sticker}");
         background-size: contain;
-        background-position: center;
+        background-position: ${bubbleTheme.isChibiNpc ? 'bottom center' : 'center'};
         background-repeat: no-repeat;
         z-index: 30;
         pointer-events: none;
+        transform-origin: 72% 92%;
+        transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      .surface-composer[data-chibi-bounce="1"]::before {
+        transform: translateY(-7px) scale(1.05);
       }
       .surface-composer::after {
         content: "";
@@ -636,13 +649,20 @@
       .agy-shell {
         position: relative !important;
       }
-      .agy-shell > div:first-of-type {
+      .agy-shell > div:first-of-type:not(#agy-live-fx-host) {
         position: relative !important;
         z-index: 3 !important;
       }
-      .agy-shell > div:not(:first-of-type) {
+      .agy-shell > div:not(:first-of-type):not(#agy-live-fx-host) {
         position: relative !important;
         z-index: 2 !important;
+      }
+      #agy-live-fx-host {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 1 !important;
+        pointer-events: none !important;
+        display: block !important;
       }
       .agy-shell::before {
         content: "";
@@ -803,6 +823,17 @@
         border: ${bubbleTheme.innerBorder || '1px solid rgba(255, 255, 255, 0.07)'} !important;
       }
 
+      ${bubbleTheme.composerHeaderBg ? `
+      .surface-composer > :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox) {
+        background: ${bubbleTheme.composerHeaderBg} !important;
+        border-radius: 14.5px 14.5px 0 0 !important;
+        padding: 4px 8px !important;
+      }
+      .surface-composer:has(> :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox)) .surface-composer-card {
+        border-radius: 0 0 14.5px 14.5px !important;
+      }
+      ` : ''}
+
       /* High-contrast pill badges for top composer bar (adaptive light/dark theme) */
       .surface-composer [data-testid="project-selector-trigger"],
       .surface-composer [data-testid="branch-pill-trigger"],
@@ -887,6 +918,8 @@
 
     syncTitleBarOverlay(st);
     scheduleTitleBarSync(st);
+    syncLiveWallpaperFx(st, mainTheme);
+    syncShinobuNpc(st, bubbleTheme);
   }
 
   function syncTitleBarOverlay(stOverride) {
@@ -920,6 +953,8 @@
 
   function removeCustomTheme() {
     clearTitleBarTimers();
+    teardownLiveWallpaperFx();
+    teardownShinobuNpc();
     if (window.__AGY_SCROLL_AC__) {
       try { window.__AGY_SCROLL_AC__.abort(); } catch (e) {}
     }
@@ -948,6 +983,8 @@
   window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__ = removeCustomTheme;
   window.__ANTIGRAVITY_OPEN_THEME_MODAL__ = openCustomThemeModal;
 
+  teardownLiveWallpaperFx();
+  teardownShinobuNpc();
   applyTheme();
 
   function openCustomThemeModal() {
@@ -1534,7 +1571,7 @@
     btn.id = 'agy-custom-theme-sidebar-btn';
     btn.type = 'button';
     btn.className = 'w-full flex items-center gap-2.5 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground rounded-lg transition-colors cursor-pointer select-none';
-    btn.style.cssText = 'text-align: left;';
+    btn.style.cssText = 'text-align: left; background: transparent; border: none; color: inherit; display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 12px; border-radius: 8px; cursor: pointer;';
     btn.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
       <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Custom theme</span>
@@ -1677,11 +1714,941 @@
     syncShellMetrics();
   }
 
+  function getShinobuRuntime() {
+    if (!window.__AGY_SHINOBU_RT__) {
+      window.__AGY_SHINOBU_RT__ = {
+        fxRaf: 0,
+        fxPaused: localStorage.getItem('agy_fx_paused_v1') === '1',
+        fxCleanups: [],
+        npcCollapsed: false,
+        npcChatOpen: false,
+        typeTimer: 0,
+        remindTimer: 0,
+        lastKeyEncourageAt: 0,
+        greetedOnce: false
+      };
+    }
+    return window.__AGY_SHINOBU_RT__;
+  }
+
+  function teardownLiveWallpaperFx() {
+    const rt = window.__AGY_SHINOBU_RT__;
+    if (rt) {
+      if (rt.fxRaf) {
+        cancelAnimationFrame(rt.fxRaf);
+        rt.fxRaf = 0;
+      }
+      if (Array.isArray(rt.fxCleanups)) {
+        rt.fxCleanups.forEach(fn => { try { fn(); } catch (_) {} });
+        rt.fxCleanups = [];
+      }
+    }
+    const oldHost = document.getElementById('agy-live-fx-host');
+    if (oldHost) oldHost.remove();
+  }
+
+  function syncLiveWallpaperFx(stOverride, themeOverride) {
+    const st = stOverride || getState();
+    const th = themeOverride || THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    const shell = document.querySelector('.agy-shell');
+    if (!shell || !st.wpEnabled || !th.liveWallpaperFx) {
+      teardownLiveWallpaperFx();
+      return;
+    }
+
+    const rt = getShinobuRuntime();
+    let host = document.getElementById('agy-live-fx-host');
+    if (host && host.parentElement === shell && rt.fxRaf) {
+      return;
+    }
+
+    teardownLiveWallpaperFx();
+
+    host = document.createElement('agy-live-fx');
+    host.id = 'agy-live-fx-host';
+    host.setAttribute('aria-hidden', 'true');
+    host.style.cssText = [
+      'position: absolute !important',
+      'inset: 0 !important',
+      'display: block !important',
+      'z-index: 1',
+      'pointer-events: none',
+      'overflow: hidden',
+      'clip-path: var(--agy-hole-clip, none)',
+      'content-visibility: auto',
+      'contain-intrinsic-size: auto none auto 600px'
+    ].join(';');
+
+    const canvas = document.createElement('canvas');
+    canvas.id = 'agy-live-fx-canvas';
+    canvas.style.cssText = 'width: 100%; height: 100%; display: block; pointer-events: none;';
+    host.appendChild(canvas);
+    shell.insertBefore(host, shell.firstChild);
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let width = 1280;
+    let height = 720;
+    let viewSkipped = false;
+    const reducedMq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+
+    function resize() {
+      const rect = shell.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      width = Math.max(320, Math.round(rect.width || window.innerWidth || 1280));
+      height = Math.max(240, Math.round(rect.height || window.innerHeight || 720));
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize();
+
+    const petals = Array.from({ length: 18 }, (_, i) => ({
+      x: ((i * 97) % 100) / 100 * width,
+      y: ((i * 53) % 100) / 100 * height,
+      r: 2.6 + (i % 4) * 1.1,
+      vy: 0.28 + (i % 5) * 0.09,
+      vx: -0.18 - (i % 3) * 0.07,
+      sway: (i % 7) * 0.9,
+      rot: (i * 0.7) % 6.28,
+      vrot: 0.008 + (i % 4) * 0.004,
+      hue: i % 3 === 0 ? '#e879f9' : (i % 2 === 0 ? '#c084fc' : '#a855f7'),
+      alpha: 0.38 + (i % 4) * 0.12
+    }));
+
+    const fireflies = Array.from({ length: 15 }, (_, i) => ({
+      x: ((i * 67 + 15) % 100) / 100 * width,
+      y: ((i * 41 + 20) % 100) / 100 * height,
+      r: 1.4 + (i % 3) * 0.8,
+      vx: (i % 2 === 0 ? 1 : -1) * (0.12 + (i % 4) * 0.04),
+      vy: -0.10 - (i % 3) * 0.05,
+      phase: i * 1.1,
+      color: i % 3 === 0 ? '94, 234, 212' : '192, 132, 252'
+    }));
+
+    const butterflies = Array.from({ length: 7 }, (_, i) => ({
+      x: ((i * 137 + 12) % 92 + 4) / 100 * width,
+      y: ((i * 79 + 18) % 76 + 10) / 100 * height,
+      scale: 0.52 + (i % 4) * 0.16,
+      vx: (i % 2 === 0 ? 1 : -1) * (0.26 + (i % 3) * 0.08),
+      vy: -0.14 + (i % 3) * 0.07,
+      phase: i * 1.4,
+      flapSpeed: 0.0055 + (i % 3) * 0.0014,
+      tint: i % 2 === 0 ? 'mint' : 'violet'
+    }));
+
+    let meteor = null;
+    let nextMeteorAt = performance.now() + 2600;
+
+    function shouldAnimate() {
+      if (document.hidden || viewSkipped || rt.fxPaused) return false;
+      if (reducedMq && reducedMq.matches) return false;
+      return true;
+    }
+
+    function drawStaticGlowFrame() {
+      ctx.clearRect(0, 0, width, height);
+      fireflies.forEach(f => {
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(${f.color}, 0.38)`;
+        ctx.arc(f.x, f.y, f.r * 1.4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    function drawButterfly(b, now) {
+      const flap = 0.34 + 0.66 * Math.abs(Math.sin(now * b.flapSpeed + b.phase));
+      const tilt = Math.atan2(b.vy, b.vx) * 0.22;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(tilt);
+      ctx.scale(b.scale, b.scale);
+
+      const wingColorTop = b.tint === 'mint' ? 'rgba(94, 234, 212, 0.76)' : 'rgba(232, 121, 249, 0.78)';
+      const wingColorBot = b.tint === 'mint' ? 'rgba(192, 132, 252, 0.68)' : 'rgba(94, 234, 212, 0.68)';
+
+      ctx.shadowColor = b.tint === 'mint' ? 'rgba(94, 234, 212, 0.65)' : 'rgba(192, 132, 252, 0.65)';
+      ctx.shadowBlur = 8;
+
+      [-1, 1].forEach(dir => {
+        ctx.save();
+        ctx.scale(dir * flap, 1);
+        ctx.fillStyle = wingColorTop;
+        ctx.beginPath();
+        ctx.moveTo(0, -1);
+        ctx.bezierCurveTo(5, -12, 16, -12, 14, -2);
+        ctx.bezierCurveTo(13, 3, 6, 4, 0, 1.5);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = wingColorBot;
+        ctx.beginPath();
+        ctx.moveTo(0, 1.5);
+        ctx.bezierCurveTo(7, 4, 11, 11, 5, 12);
+        ctx.bezierCurveTo(2, 12, 0.5, 7, 0, 2.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      });
+
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(248, 250, 252, 0.88)';
+      ctx.fillRect(-0.8, -5, 1.6, 10);
+      ctx.restore();
+    }
+
+    function render(now) {
+      if (!shouldAnimate()) {
+        rt.fxRaf = 0;
+        drawStaticGlowFrame();
+        return;
+      }
+
+      ctx.clearRect(0, 0, width, height);
+
+      // Soft fireflies (slow smooth sine breathing, never rapid flashing)
+      for (let i = 0; i < fireflies.length; i++) {
+        const f = fireflies[i];
+        f.x += f.vx + Math.sin(now * 0.0008 + f.phase) * 0.12;
+        f.y += f.vy;
+        if (f.x < -10) f.x = width + 10;
+        if (f.x > width + 10) f.x = -10;
+        if (f.y < -10) f.y = height + 10;
+        const alpha = 0.22 + 0.36 * (0.5 + 0.5 * Math.sin(now * 0.0014 + f.phase));
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(${f.color}, ${alpha.toFixed(3)})`;
+        ctx.arc(f.x, f.y, f.r * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Drifting wisteria petals
+      for (let i = 0; i < petals.length; i++) {
+        const p = petals[i];
+        p.x += p.vx + Math.sin(now * 0.0011 + p.sway) * 0.25;
+        p.y += p.vy;
+        p.rot += p.vrot;
+        if (p.y > height + 14) {
+          p.y = -12;
+          p.x = ((p.x + width * 0.37) % width);
+        }
+        if (p.x < -14) p.x = width + 12;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.hue;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, p.r * 1.45, p.r * 0.78, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Glowing butterflies
+      for (let i = 0; i < butterflies.length; i++) {
+        const b = butterflies[i];
+        b.x += b.vx + Math.cos(now * 0.0009 + b.phase) * 0.18;
+        b.y += b.vy + Math.sin(now * 0.0013 + b.phase) * 0.22;
+        if (b.x < -28) b.x = width + 24;
+        if (b.x > width + 28) b.x = -24;
+        if (b.y < 24) b.vy = Math.abs(b.vy);
+        if (b.y > height - 36) b.vy = -Math.abs(b.vy);
+        drawButterfly(b, now);
+      }
+
+      // Occasional shooting star across upper night sky
+      if (!meteor && now >= nextMeteorAt) {
+        meteor = {
+          x: width * (0.32 + Math.random() * 0.52),
+          y: height * (0.05 + Math.random() * 0.20),
+          vx: -6.8 - Math.random() * 2.4,
+          vy: 2.9 + Math.random() * 1.2,
+          life: 0,
+          maxLife: 44
+        };
+      }
+      if (meteor) {
+        meteor.x += meteor.vx;
+        meteor.y += meteor.vy;
+        meteor.life++;
+        const p = meteor.life / meteor.maxLife;
+        const opacity = p < 0.2 ? (p / 0.2) : Math.max(0, 1 - (p - 0.2) / 0.8);
+        const tailX = meteor.x - meteor.vx * 11;
+        const tailY = meteor.y - meteor.vy * 11;
+        const grad = ctx.createLinearGradient(meteor.x, meteor.y, tailX, tailY);
+        grad.addColorStop(0, `rgba(240, 253, 250, ${(opacity * 0.92).toFixed(3)})`);
+        grad.addColorStop(0.35, `rgba(94, 234, 212, ${(opacity * 0.65).toFixed(3)})`);
+        grad.addColorStop(1, 'rgba(192, 132, 252, 0)');
+        ctx.save();
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1.6;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(meteor.x, meteor.y);
+        ctx.lineTo(tailX, tailY);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(255, 255, 255, ${(opacity * 0.95).toFixed(3)})`;
+        ctx.arc(meteor.x, meteor.y, 1.9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        if (meteor.life >= meteor.maxLife) {
+          meteor = null;
+          nextMeteorAt = now + 5200 + Math.random() * 4500;
+        }
+      }
+
+      rt.fxRaf = requestAnimationFrame(render);
+    }
+
+    function resumeOrPause() {
+      if (shouldAnimate()) {
+        if (!rt.fxRaf) rt.fxRaf = requestAnimationFrame(render);
+      } else {
+        if (rt.fxRaf) {
+          cancelAnimationFrame(rt.fxRaf);
+          rt.fxRaf = 0;
+        }
+        drawStaticGlowFrame();
+      }
+    }
+
+    const onResize = () => resize();
+    const onVis = () => resumeOrPause();
+    window.addEventListener('resize', onResize, { passive: true });
+    document.addEventListener('visibilitychange', onVis);
+    rt.fxCleanups.push(() => window.removeEventListener('resize', onResize));
+    rt.fxCleanups.push(() => document.removeEventListener('visibilitychange', onVis));
+
+    if (reducedMq && typeof reducedMq.addEventListener === 'function') {
+      reducedMq.addEventListener('change', onVis);
+      rt.fxCleanups.push(() => reducedMq.removeEventListener('change', onVis));
+    }
+
+    // Pause canvas loop automatically when browser skips rendering or off-screen
+    if ('contentVisibility' in document.documentElement.style) {
+      const onCv = (ev) => {
+        viewSkipped = Boolean(ev.skipped);
+        resumeOrPause();
+      };
+      host.addEventListener('contentvisibilityautostatechange', onCv);
+      rt.fxCleanups.push(() => host.removeEventListener('contentvisibilityautostatechange', onCv));
+    } else if (typeof IntersectionObserver !== 'undefined') {
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          viewSkipped = !entry.isIntersecting;
+          resumeOrPause();
+        });
+      }, { rootMargin: '200px' });
+      io.observe(host);
+      rt.fxCleanups.push(() => io.disconnect());
+    }
+
+    rt.toggleFxPause = () => {
+      rt.fxPaused = !rt.fxPaused;
+      try { localStorage.setItem('agy_fx_paused_v1', rt.fxPaused ? '1' : '0'); } catch (_) {}
+      resumeOrPause();
+      return rt.fxPaused;
+    };
+
+    resumeOrPause();
+  }
+
+  function getShinobuDialogs() {
+    return {
+      welcome: [
+        'Ara ara~ Mình ngồi canh góc khung hội thoại cho bạn đây, chạm vào mình để trò chuyện nhé! 🦋',
+        'Bạn tập trung lâu rồi kìa, nhớ chớp mắt và uống ngụm nước cho đỡ mỏi nha! 💜',
+        'Đêm trăng hoa tử đằng yên bình quá nhỉ~ Có bài toán hay đoạn code nào khó cứ giao cho tụi mình nhé! ✨',
+        'Moshi moshi~ Hôm nay tiến độ công việc của bạn thế nào rồi? Nhớ giữ nhịp thở đều đặn nha! 🦋'
+      ],
+      cheer: [
+        'Cố lên nhé! Hơi thở của Côn Trùng sẽ tiếp thêm tốc độ gõ code mượt không một vết bug cho bạn! ✨💜',
+        'Ara ara~ Từng dòng code bạn viết đều đang tiến gần hơn tới kết quả hoàn hảo rồi đó, tự tin lên nha! 🦋',
+        'Đừng áp lực quá nhé! Dù bug có lì lợm đến đâu thì bình tĩnh phân tích từng bước là gỡ sạch ngay thôi! ✨',
+        'Bạn làm tốt lắm rồi! Cứ giữ đà tập trung này nhé, mình luôn ngồi ngay góc khung chat cổ vũ bạn đây~ 💜'
+      ],
+      tea: [
+        'Mình vừa pha một tách trà hoa tử đằng ấm dịu rồi đây~ Thả lỏng hai vai 10 giây rồi làm tiếp nha! 🍵💜',
+        'Uống một ngụm nước ấm hoặc trà thảo mộc sẽ giúp đầu óc tỉnh táo hơn gấp đôi so với cố nhồi code đó nha~ 🍵',
+        'Ara ara~ Ngồi thẳng lưng lên một chút nào, nhấp ngụm trà thơm cho dịu mắt rồi mình chiến tiếp nhé! 🍵✨'
+      ],
+      mansion: [
+        'Ở Điệp Phủ tụi mình luôn nhắc các kiếm sĩ nghỉ mắt quy tắc 20-20-20: mỗi 20 phút nhìn xa 6 mét trong 20 giây đó! 🦋',
+        'Hoa tử đằng nở rộ quanh năm để xua tan mệt mỏi và lũ bug đáng ghét khỏi màn hình của bạn đấy~ 🌸💜',
+        'Mẹo nhỏ từ Điệp Phủ: Chia nhỏ yêu cầu phức tạp thành từng bước rõ ràng sẽ giúp AI xử lý chính xác hơn nhiều nha! 🦋✨'
+      ],
+      typing: [
+        'Ara ara~ Ý tưởng mới đang tuôn trào kìa, cứ gõ thoải mái nhé! ✨',
+        'Mình đang chăm chú xem bạn soạn câu lệnh đây, cố lên nha! 🦋'
+      ],
+      sent: [
+        'Tin nhắn đã bay đi rồi~ Trong lúc đợi phản hồi, thả lỏng cổ tay một chút nhé! 💜',
+        'Tuyệt vời! Để xem nhiệm vụ này được giải quyết gọn gàng thế nào nha~ 🦋✨'
+      ]
+    };
+  }
+
+  function getShinobuReplyForInput(rawInput) {
+    const text = String(rawInput || '').trim();
+    const low = text.toLowerCase();
+    if (!text) {
+      return 'Ara ara~ Bạn định nói gì với mình sao? Cứ gõ tự nhiên nha! 🦋';
+    }
+    if (/(^|\s)(xin chào|chào|chao|hello|hi|hey|alo|moshi)(\s|[!,.?~]|$)/i.test(low)) {
+      return 'Moshi moshi~ Rất vui được trò chuyện cùng bạn ngay góc khung chat này! Hôm nay bạn đang làm dự án gì thế? 🦋💜';
+    }
+    if (/(mệt|met|đuối|duoi|oải|oai|kiệt sức|đau lưng|mỏi mắt|moi mat)/i.test(low)) {
+      return 'Ara ara~ Vất vả cho bạn quá rồi! Dựa lưng nghỉ ngơi vài phút, nhắm mắt hít thở sâu một chút đi, sức khỏe là số một ở Điệp Phủ đó nha! 🍵💜';
+    }
+    if (/(bug|lỗi|loi|error|crash|đỏ lòm|khó quá|kho qua|sai)/i.test(low)) {
+      return 'Ara ara, lũ bug này gan thật đấy~ Đừng nóng vội nhé, gửi log lỗi vào khung chat bên dưới để AI truy tận gốc từng dòng cho bạn nha! 🦋⚔️';
+    }
+    if (/(xinh|đẹp|dep|dễ thương|de thuong|cute|đáng yêu|dang yeu|yêu|thích shinobu)/i.test(low)) {
+      return 'Ara ara~ Bạn khéo khen làm mình ngại ghê đó! Được ngồi dưới ánh trăng tử đằng đồng hành cùng bạn mình cũng vui lắm~ 🌸💜';
+    }
+    if (/(đói|doi|ăn gì|an gi|cơm|mì|trà sữa|bụng)/i.test(low)) {
+      return 'Bụng đói là không nghĩ ra thuật toán hay được đâu nha! Mau đi nạp năng lượng bằng món gì ngon ấm bụng đi, mình canh máy cho~ 🍙🍵';
+    }
+    if (/(ngủ|ngu|khuya|muộn|thức đêm|buồn ngủ)/i.test(low)) {
+      return 'Thức khuya quá sẽ hại sức khỏe lắm đó... Nốt phần việc nhỏ này rồi lưu code lại đi ngủ sớm nhé, mai mình lại đồng hành tiếp cùng bạn! 🌙💜';
+    }
+    if (/(deadline|gấp|gap|kịp không|chạy số|nộp bài)/i.test(low)) {
+      return 'Bình tĩnh nào! Hít một hơi thật sâu, ưu tiên phần cốt lõi chạy được trước rồi tinh chỉnh sau—tụi mình cùng tăng tốc về đích nhé! ✨🦋';
+    }
+    if (/(cảm ơn|cam on|thank|tks|cám ơn|tuyệt vời|hay quá|xịn)/i.test(low)) {
+      return 'Không có chi đâu nè~ Giúp bạn có thêm cảm hứng làm việc mỗi ngày là niềm vui của mình mà! 💜🦋';
+    }
+    return `Ara ara~ "${text.slice(0, 46)}${text.length > 46 ? '...' : ''}" ư? Mình nghe rõ rồi nè! Cứ yên tâm triển khai tiếp nhé, mình luôn ngồi đây tiếp sức cho bạn! 🦋✨`;
+  }
+
+  function triggerChibiBounce(targetEl) {
+    if (!targetEl) return;
+    targetEl.dataset.chibiBounce = '1';
+    clearTimeout(targetEl.__agyBounceTimer);
+    targetEl.__agyBounceTimer = setTimeout(() => {
+      delete targetEl.dataset.chibiBounce;
+    }, 280);
+  }
+
+  function speakShinobuLine(line, expandIfCollapsed = true) {
+    const rt = getShinobuRuntime();
+    if (expandIfCollapsed) {
+      rt.npcCollapsed = false;
+    }
+    const wrap = document.getElementById('agy-shinobu-npc-wrap');
+    if (!wrap) return;
+    const popover = wrap.querySelector('.agy-npc-popover');
+    const badge = wrap.querySelector('.agy-npc-badge');
+    const textEl = wrap.querySelector('.agy-npc-dialog-text');
+    if (popover && badge) {
+      popover.style.display = rt.npcCollapsed ? 'none' : 'flex';
+      badge.style.display = rt.npcCollapsed ? 'inline-flex' : 'none';
+    }
+    if (!textEl) return;
+
+    clearInterval(rt.typeTimer);
+    const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced || rt.npcCollapsed) {
+      textEl.textContent = line;
+      return;
+    }
+
+    const chars = Array.from(line);
+    let idx = 0;
+    textEl.textContent = '';
+    textEl.dataset.typing = '1';
+    rt.typeTimer = setInterval(() => {
+      idx += 1;
+      textEl.textContent = chars.slice(0, idx).join('');
+      if (idx >= chars.length) {
+        clearInterval(rt.typeTimer);
+        rt.typeTimer = 0;
+        delete textEl.dataset.typing;
+      }
+    }, 22);
+  }
+
+  function pickRandomLine(category, currentText) {
+    const dialogs = getShinobuDialogs();
+    const list = dialogs[category] || dialogs.welcome;
+    const candidates = list.length > 1 ? list.filter(item => item !== currentText) : list;
+    return candidates[Math.floor(Math.random() * candidates.length)] || list[0];
+  }
+
+  function teardownShinobuNpc() {
+    const rt = window.__AGY_SHINOBU_RT__;
+    if (rt) {
+      if (rt.typeTimer) { clearInterval(rt.typeTimer); rt.typeTimer = 0; }
+      if (rt.remindTimer) { clearInterval(rt.remindTimer); rt.remindTimer = 0; }
+    }
+    const npcStyle = document.getElementById('antigravity-shinobu-npc-style');
+    if (npcStyle) npcStyle.remove();
+    const wrap = document.getElementById('agy-shinobu-npc-wrap');
+    if (wrap) wrap.remove();
+    document.querySelectorAll('.agy-chibi-hitbox').forEach(el => el.remove());
+  }
+
+  function ensureShinobuNpcStyles() {
+    if (document.getElementById('antigravity-shinobu-npc-style')) return;
+    const stEl = document.createElement('style');
+    stEl.id = 'antigravity-shinobu-npc-style';
+    stEl.textContent = `
+      .agy-chibi-hitbox {
+        position: absolute;
+        top: -58px;
+        right: 10px;
+        width: 96px;
+        height: 60px;
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+        z-index: 42;
+        border-radius: 14px;
+      }
+      .agy-chibi-hitbox:focus-visible {
+        outline: 1.5px solid #5eead4;
+        outline-offset: 2px;
+      }
+      #agy-shinobu-npc-wrap {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 0;
+        height: 0;
+        overflow: visible;
+        z-index: 58;
+        font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+      }
+      .agy-npc-badge {
+        position: absolute;
+        bottom: 6px;
+        right: 112px;
+        display: none;
+        align-items: center;
+        gap: 5px;
+        padding: 3.5px 10px;
+        border-radius: 9999px;
+        background: rgba(31, 18, 54, 0.94);
+        border: 1px solid rgba(192, 132, 252, 0.58);
+        color: #f8fafc;
+        font-size: 11.5px;
+        font-weight: 600;
+        white-space: nowrap;
+        cursor: pointer;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 10px rgba(168, 85, 247, 0.28);
+        transition: transform 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+      }
+      .agy-npc-badge:hover {
+        background: rgba(48, 27, 82, 0.96);
+        border-color: #5eead4;
+        transform: translateY(-1px);
+      }
+      .agy-npc-popover {
+        position: absolute;
+        bottom: 10px;
+        right: 112px;
+        width: 294px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px 12px 11px 12px;
+        border-radius: 13px;
+        background: rgba(21, 14, 43, 0.95);
+        border: 1px solid rgba(168, 85, 247, 0.62);
+        box-shadow: 0 12px 32px rgba(4, 3, 14, 0.72), 0 0 18px rgba(168, 85, 247, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        color: #f8fafc;
+        pointer-events: auto;
+        transform-origin: bottom right;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .agy-npc-popover {
+          animation: agyNpcPopIn 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+      }
+      @keyframes agyNpcPopIn {
+        from { opacity: 0; transform: translateY(6px) scale(0.96); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      .agy-npc-popover::after {
+        content: "";
+        position: absolute;
+        right: -6px;
+        bottom: 14px;
+        width: 10px;
+        height: 10px;
+        background: rgba(21, 14, 43, 0.95);
+        border-right: 1px solid rgba(168, 85, 247, 0.62);
+        border-bottom: 1px solid rgba(168, 85, 247, 0.62);
+        transform: rotate(-45deg);
+      }
+      .agy-npc-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+      }
+      .agy-npc-title-group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+      }
+      .agy-npc-dot {
+        width: 6.5px;
+        height: 6.5px;
+        border-radius: 9999px;
+        background: #34d399;
+        box-shadow: 0 0 7px rgba(52, 211, 153, 0.85);
+        flex-shrink: 0;
+      }
+      .agy-npc-title {
+        font-size: 11.5px;
+        font-weight: 700;
+        color: #e9d5ff;
+        letter-spacing: 0.1px;
+        white-space: nowrap;
+      }
+      .agy-npc-tools {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .agy-npc-icon-btn {
+        width: 21px;
+        height: 21px;
+        border-radius: 6px;
+        background: rgba(168, 85, 247, 0.14);
+        border: 1px solid rgba(192, 132, 252, 0.26);
+        color: #e2e8f0;
+        font-size: 11px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+      }
+      .agy-npc-icon-btn:hover {
+        background: rgba(168, 85, 247, 0.34);
+        border-color: #c084fc;
+        color: #ffffff;
+      }
+      .agy-npc-dialog-text {
+        font-size: 12.3px;
+        line-height: 1.46;
+        color: #f1f5f9;
+        min-height: 36px;
+        word-break: break-word;
+      }
+      .agy-npc-dialog-text[data-typing="1"]::after {
+        content: "▍";
+        color: #5eead4;
+        margin-left: 2px;
+        font-size: 11px;
+      }
+      .agy-npc-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      .agy-npc-pill {
+        padding: 3.5px 9px;
+        border-radius: 9999px;
+        background: rgba(58, 28, 88, 0.68);
+        border: 1px solid rgba(192, 132, 252, 0.34);
+        color: #f3e8ff;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+      }
+      .agy-npc-pill:hover {
+        background: rgba(88, 42, 132, 0.85);
+        border-color: #5eead4;
+        color: #ffffff;
+        transform: translateY(-1px);
+      }
+      .agy-npc-chat-row {
+        display: none;
+        align-items: center;
+        gap: 5px;
+        padding-top: 4px;
+        border-top: 1px solid rgba(192, 132, 252, 0.18);
+      }
+      .agy-npc-chat-input {
+        flex: 1;
+        min-width: 0;
+        background: rgba(11, 7, 24, 0.85);
+        border: 1px solid rgba(192, 132, 252, 0.38);
+        border-radius: 8px;
+        padding: 5px 9px;
+        color: #f8fafc;
+        font-size: 11.5px;
+        outline: none;
+      }
+      .agy-npc-chat-input:focus {
+        border-color: #5eead4;
+        box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.28);
+      }
+      .agy-npc-chat-send {
+        padding: 5px 9px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #a855f7, #ec4899);
+        border: none;
+        color: #ffffff;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      @media (max-width: 700px) {
+        .agy-npc-popover {
+          right: 12px;
+          bottom: 62px;
+          width: 262px;
+        }
+        .agy-npc-popover::after {
+          right: 34px;
+          bottom: -6px;
+          transform: rotate(45deg);
+        }
+      }
+    `;
+    document.head.appendChild(stEl);
+  }
+
+  function syncShinobuNpc(stOverride, bubbleThemeOverride) {
+    const st = stOverride || getState();
+    const bTheme = bubbleThemeOverride || THEMES[st.bubbleName] || THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    if (st.inputStyle === 'minimal' || !bTheme.isChibiNpc) {
+      teardownShinobuNpc();
+      return;
+    }
+
+    ensureShinobuNpcStyles();
+    const rt = getShinobuRuntime();
+
+    // Attach clickable hitboxes onto user message bubbles so tapping Chibi on sent messages also triggers joy bounce + dialog
+    document.querySelectorAll('.agy-user-bubble-frame').forEach(frame => {
+      if (frame.querySelector(':scope > .agy-chibi-hitbox')) return;
+      const hit = document.createElement('button');
+      hit.type = 'button';
+      hit.className = 'agy-chibi-hitbox';
+      hit.title = 'Chạm vào Shinobu Kocho';
+      hit.setAttribute('aria-label', 'Tương tác với NPC Chibi Shinobu');
+      hit.addEventListener('click', (e) => {
+        e.stopPropagation();
+        triggerChibiBounce(frame);
+        const composerEl = document.querySelector('.surface-composer');
+        if (composerEl) triggerChibiBounce(composerEl);
+        const curText = document.querySelector('#agy-shinobu-npc-wrap .agy-npc-dialog-text')?.textContent || '';
+        speakShinobuLine(pickRandomLine('cheer', curText), true);
+      });
+      frame.appendChild(hit);
+    });
+
+    const composer = document.querySelector('.surface-composer');
+    if (!composer) return;
+
+    if (!composer.querySelector(':scope > .agy-chibi-hitbox')) {
+      const mainHit = document.createElement('button');
+      mainHit.type = 'button';
+      mainHit.className = 'agy-chibi-hitbox';
+      mainHit.title = 'Chạm vào Chibi Shinobu để trò chuyện';
+      mainHit.setAttribute('aria-label', 'Mở hộp thoại NPC Chibi Shinobu');
+      mainHit.addEventListener('click', (e) => {
+        e.stopPropagation();
+        triggerChibiBounce(composer);
+        const curText = document.querySelector('#agy-shinobu-npc-wrap .agy-npc-dialog-text')?.textContent || '';
+        speakShinobuLine(pickRandomLine('welcome', curText), true);
+      });
+      composer.appendChild(mainHit);
+    }
+
+    if (!composer.dataset.agyNpcKeyBound) {
+      composer.dataset.agyNpcKeyBound = '1';
+      composer.addEventListener('keydown', (e) => {
+        if (e.target && e.target.closest && e.target.closest('#agy-shinobu-npc-wrap')) return;
+        const now = Date.now();
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+          setTimeout(() => {
+            if (!rt.npcCollapsed) {
+              speakShinobuLine(pickRandomLine('sent', ''), false);
+            }
+          }, 180);
+          rt.lastKeyEncourageAt = now;
+        } else if (e.key && e.key.length === 1 && now - rt.lastKeyEncourageAt > 55000) {
+          rt.lastKeyEncourageAt = now;
+          if (!rt.npcCollapsed) {
+            speakShinobuLine(pickRandomLine('typing', ''), false);
+          }
+        }
+      }, true);
+    }
+
+    let wrap = document.getElementById('agy-shinobu-npc-wrap');
+    if (wrap && wrap.parentElement !== composer) {
+      wrap.remove();
+      wrap = null;
+    }
+
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'agy-shinobu-npc-wrap';
+      wrap.className = 'agy-shinobu-npc-wrap';
+      const fxPausedInit = Boolean(rt.fxPaused);
+      wrap.innerHTML = `
+        <button type="button" class="agy-npc-badge" title="Mở hộp thoại Shinobu Kocho">🦋 Shinobu</button>
+        <div class="agy-npc-popover" role="region" aria-label="Shinobu Kocho NPC">
+          <div class="agy-npc-header">
+            <div class="agy-npc-title-group">
+              <span class="agy-npc-dot"></span>
+              <span class="agy-npc-title">Shinobu Kocho • NPC</span>
+            </div>
+            <div class="agy-npc-tools">
+              <button type="button" class="agy-npc-icon-btn" data-npc-act="motion" title="${fxPausedInit ? 'Phát hiệu ứng nền' : 'Tạm dừng hiệu ứng nền'}" aria-label="${fxPausedInit ? 'Phát hiệu ứng nền' : 'Tạm dừng hiệu ứng nền'}">${fxPausedInit ? '▶' : '⏸'}</button>
+              <button type="button" class="agy-npc-icon-btn" data-npc-act="random" title="Đổi câu thoại ngẫu nhiên" aria-label="Đổi câu thoại ngẫu nhiên">🎲</button>
+              <button type="button" class="agy-npc-icon-btn" data-npc-act="chat-toggle" title="Nhắn tin riêng với Shinobu" aria-label="Nhắn tin riêng với Shinobu">💬</button>
+              <button type="button" class="agy-npc-icon-btn" data-npc-act="close" title="Thu gọn hộp thoại" aria-label="Thu gọn hộp thoại">✕</button>
+            </div>
+          </div>
+          <div class="agy-npc-dialog-text"></div>
+          <div class="agy-npc-pills">
+            <button type="button" class="agy-npc-pill" data-npc-cat="cheer">✨ Cổ vũ</button>
+            <button type="button" class="agy-npc-pill" data-npc-cat="tea">🍵 Pha trà</button>
+            <button type="button" class="agy-npc-pill" data-npc-cat="mansion">🦋 Điệp Phủ</button>
+            <button type="button" class="agy-npc-pill" data-npc-act="chat-open">💬 Trò chuyện</button>
+          </div>
+          <form class="agy-npc-chat-row">
+            <input type="text" class="agy-npc-chat-input" placeholder="Nói gì đó với Shinobu..." autocomplete="off" />
+            <button type="submit" class="agy-npc-chat-send">Gửi</button>
+          </form>
+        </div>
+      `;
+      composer.appendChild(wrap);
+
+      const badge = wrap.querySelector('.agy-npc-badge');
+      const popover = wrap.querySelector('.agy-npc-popover');
+      const chatRow = wrap.querySelector('.agy-npc-chat-row');
+      const chatInput = wrap.querySelector('.agy-npc-chat-input');
+      const motionBtn = wrap.querySelector('[data-npc-act="motion"]');
+
+      function syncChatVisibility(focusInput) {
+        chatRow.style.display = rt.npcChatOpen ? 'flex' : 'none';
+        if (rt.npcChatOpen && focusInput && chatInput) {
+          setTimeout(() => chatInput.focus(), 20);
+        }
+      }
+
+      badge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        rt.npcCollapsed = false;
+        triggerChibiBounce(composer);
+        speakShinobuLine(pickRandomLine('welcome', ''), true);
+      });
+
+      wrap.querySelectorAll('[data-npc-cat]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const cat = btn.getAttribute('data-npc-cat');
+          triggerChibiBounce(composer);
+          const cur = wrap.querySelector('.agy-npc-dialog-text')?.textContent || '';
+          speakShinobuLine(pickRandomLine(cat, cur), true);
+        });
+      });
+
+      wrap.querySelector('[data-npc-act="random"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const cats = ['welcome', 'cheer', 'tea', 'mansion'];
+        const chosen = cats[Math.floor(Math.random() * cats.length)];
+        const cur = wrap.querySelector('.agy-npc-dialog-text')?.textContent || '';
+        triggerChibiBounce(composer);
+        speakShinobuLine(pickRandomLine(chosen, cur), true);
+      });
+
+      if (motionBtn) {
+        motionBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const paused = typeof rt.toggleFxPause === 'function' ? rt.toggleFxPause() : false;
+          motionBtn.textContent = paused ? '▶' : '⏸';
+          const lbl = paused ? 'Phát hiệu ứng nền' : 'Tạm dừng hiệu ứng nền';
+          motionBtn.title = lbl;
+          motionBtn.setAttribute('aria-label', lbl);
+        });
+      }
+
+      const toggleChat = (e) => {
+        e.stopPropagation();
+        rt.npcChatOpen = !rt.npcChatOpen;
+        syncChatVisibility(true);
+      };
+      wrap.querySelector('[data-npc-act="chat-toggle"]').addEventListener('click', toggleChat);
+      wrap.querySelector('[data-npc-act="chat-open"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        rt.npcChatOpen = true;
+        syncChatVisibility(true);
+      });
+
+      wrap.querySelector('[data-npc-act="close"]').addEventListener('click', (e) => {
+        e.stopPropagation();
+        rt.npcCollapsed = true;
+        popover.style.display = 'none';
+        badge.style.display = 'inline-flex';
+      });
+
+      ['keydown', 'keyup', 'keypress'].forEach(evtName => {
+        chatInput.addEventListener(evtName, (e) => {
+          e.stopPropagation();
+          if (evtName === 'keydown' && e.key === 'Escape') {
+            rt.npcChatOpen = false;
+            syncChatVisibility(false);
+          }
+        });
+      });
+
+      chatRow.addEventListener('submit', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const msg = chatInput.value;
+        chatInput.value = '';
+        triggerChibiBounce(composer);
+        speakShinobuLine(getShinobuReplyForInput(msg), true);
+      });
+
+      popover.style.display = rt.npcCollapsed ? 'none' : 'flex';
+      badge.style.display = rt.npcCollapsed ? 'inline-flex' : 'none';
+      syncChatVisibility(false);
+
+      const dialogs = getShinobuDialogs();
+      const initialLine = rt.greetedOnce
+        ? dialogs.welcome[1]
+        : dialogs.welcome[0];
+      rt.greetedOnce = true;
+      speakShinobuLine(initialLine, false);
+    }
+
+    if (!rt.remindTimer) {
+      rt.remindTimer = setInterval(() => {
+        if (!document.hidden && !rt.npcCollapsed) {
+          speakShinobuLine('Bạn tập trung lâu rồi kìa, nhớ chớp mắt và uống ngụm nước cho đỡ mỏi nha! 💜', false);
+        }
+      }, 180000);
+    }
+  }
+
   function tick() {
     injectMainSidebarButton();
     injectSettingsModalButton();
     hookSidebarScroll();
     hookShellMetrics();
+    syncLiveWallpaperFx();
+    syncShinobuNpc();
   }
 
   function scheduleTick() {

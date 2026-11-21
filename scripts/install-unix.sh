@@ -6,6 +6,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DAEMON_JS="$REPO_ROOT/daemon/theme_daemon.js"
 PAYLOAD_JS="$REPO_ROOT/dist/theme_payload.js"
 BUILD_PY="$REPO_ROOT/scripts/build_payload.py"
+BUILD_NODE="$REPO_ROOT/scripts/build_payload.js"
 PID_FILE="$REPO_ROOT/daemon.pid"
 LOG_FILE="$REPO_ROOT/daemon.log"
 
@@ -37,12 +38,14 @@ ensure_payload() {
         py_bin="$(command -v python3)"
     elif command -v python >/dev/null 2>&1; then
         py_bin="$(command -v python)"
-    else
-        echo "[install-unix] Error: dist/theme_payload.js missing and python3/python not found." >&2
-        exit 1
     fi
-    echo "[install-unix] Building dist/theme_payload.js..."
-    "$py_bin" "$BUILD_PY"
+    if [ -n "$py_bin" ]; then
+        echo "[install-unix] Building dist/theme_payload.js via Python..."
+        "$py_bin" "$BUILD_PY" || "$NODE_BIN" "$BUILD_NODE"
+    else
+        echo "[install-unix] Building dist/theme_payload.js via Node.js..."
+        "$NODE_BIN" "$BUILD_NODE"
+    fi
 }
 
 stop_existing_pid() {

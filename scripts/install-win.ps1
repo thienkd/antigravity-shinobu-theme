@@ -9,6 +9,7 @@ $RepoRoot = Split-Path -Parent $ScriptDir
 $DaemonJs = Join-Path $RepoRoot 'daemon\theme_daemon.js'
 $PayloadJs = Join-Path $RepoRoot 'dist\theme_payload.js'
 $BuildPy = Join-Path $RepoRoot 'scripts\build_payload.py'
+$BuildNode = Join-Path $RepoRoot 'scripts\build_payload.js'
 $PidFile = Join-Path $RepoRoot 'daemon.pid'
 $VbsPath = Join-Path $RepoRoot 'silent-start.vbs'
 
@@ -27,13 +28,19 @@ if (-not (Test-Path $PayloadJs)) {
     if (-not $PyCmd) {
         $PyCmd = Get-Command python3 -ErrorAction SilentlyContinue
     }
-    if (-not $PyCmd) {
-        Write-Error "dist/theme_payload.js is missing and Python was not found to build it."
+    if ($PyCmd) {
+        Write-Host "[install-win] Building dist/theme_payload.js via Python..."
+        & $PyCmd.Source $BuildPy
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[install-win] Python build failed, falling back to Node builder..."
+            & $NodeExe $BuildNode
+        }
+    } else {
+        Write-Host "[install-win] Building dist/theme_payload.js via Node.js..."
+        & $NodeExe $BuildNode
     }
-    Write-Host "[install-win] Building dist/theme_payload.js..."
-    & $PyCmd.Source $BuildPy
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "build_payload.py failed with exit code $LASTEXITCODE."
+    if (-not (Test-Path $PayloadJs)) {
+        Write-Error "Failed to build dist/theme_payload.js."
     }
 }
 
