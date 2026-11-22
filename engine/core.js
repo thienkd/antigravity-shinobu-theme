@@ -784,6 +784,12 @@
         box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3) !important;
       }
 
+      /* Prevent Antigravity's [&:has(>.agy-user-bubble-frame>:empty)]:hidden from ever hiding non-empty user messages */
+      .agy-shell [data-testid="user-message"] div:has(> .agy-user-bubble-frame > [data-testid="user-message-bubble"]:not(:empty)),
+      .agy-shell div:has(> .agy-user-bubble-frame > .agy-user-bubble:not(:empty)) {
+        display: flex !important;
+      }
+
       /* User Chat Bubble Double-Border Frame & Ornament */
       .agy-user-bubble-frame {
         background: ${bubbleTheme.frameBg} !important;
@@ -2461,6 +2467,8 @@
         hit = document.createElement('button');
         hit.type = 'button';
         hit.className = 'agy-chibi-hitbox';
+        // Never leave :empty inside .agy-user-bubble-frame (triggers [&:has(>.agy-user-bubble-frame>:empty)]:hidden)
+        hit.innerHTML = '<i aria-hidden="true"></i>';
         hit.addEventListener('click', (e) => {
           e.stopPropagation();
           if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill === 'function') {
@@ -2481,6 +2489,7 @@
       }
       hit.title = `⚡ Nhấn vào ${prof.badgeLabel || 'Chibi'} để nhảy ra thi triển Hơi Thở!`;
       hit.setAttribute('aria-label', hit.title);
+      if (hit.children.length === 0) hit.innerHTML = '<i aria-hidden="true"></i>';
     });
 
     const composer = document.querySelector('.surface-composer');
@@ -2491,6 +2500,7 @@
       mainHit = document.createElement('button');
       mainHit.type = 'button';
       mainHit.className = 'agy-chibi-hitbox';
+      mainHit.innerHTML = '<i aria-hidden="true"></i>';
       mainHit.addEventListener('click', (e) => {
         e.stopPropagation();
         if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill === 'function') {
@@ -2740,6 +2750,7 @@
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'agy-yoriichi-msg-hit';
+      btn.innerHTML = '<i aria-hidden="true"></i>';
       btn.title = 'Khai Tổ Vũ Điệu Hỏa Thần — Nhấn để khai mở Nhật Chi Hô Hấp!';
       btn.setAttribute('aria-label', btn.title);
       btn.style.cssText = 'position:absolute;right:0;bottom:6px;width:34px;height:34px;border-radius:50%;background:transparent;border:none;cursor:pointer;z-index:5;padding:0;';

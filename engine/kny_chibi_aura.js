@@ -1625,7 +1625,11 @@
         wave = document.createElement('span');
         wave.className = 'agy-user-chibi-aura-wave';
         wave.setAttribute('aria-hidden', 'true');
+        // Never leave element :empty inside .agy-user-bubble-frame (Antigravity hides [&:has(>.agy-user-bubble-frame>:empty)])
+        wave.innerHTML = '<i aria-hidden="true"></i>';
         frame.appendChild(wave);
+      } else if (wave.children.length === 0) {
+        wave.innerHTML = '<i aria-hidden="true"></i>';
       }
       wave.style.setProperty('--agy-bwave-c1', `rgba(${meta.rgb1}, 0.44)`);
       wave.style.setProperty('--agy-bwave-c2', `rgba(${meta.rgb2}, 0.20)`);
