@@ -213,7 +213,17 @@ function main() {
     compiled = `${prepends.join('\n')}\n${compiled}`;
   }
 
-  compiled = `(function(__AGY_BOOT__) {\n${compiled}\n})(typeof __AGY_INJECT_BOOT__ !== "undefined" ? __AGY_INJECT_BOOT__ : null);\n`;
+  compiled = [
+    '(function(__AGY_BOOT__) {',
+    'let __AGY_PRECLEANED__ = false;',
+    'if (typeof window !== "undefined" && typeof window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__ === "function") {',
+    '  try { window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__({ isReinject: true }); } catch (_) {}',
+    '  __AGY_PRECLEANED__ = true;',
+    '}',
+    compiled,
+    '})(typeof __AGY_INJECT_BOOT__ !== "undefined" ? __AGY_INJECT_BOOT__ : null);',
+    ''
+  ].join('\n');
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, compiled, 'utf8');

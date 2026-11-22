@@ -13,7 +13,7 @@
 
   // Clean teardown on hot-reload if a previous instance exists
   if (ROOT.__AGY_BIO_AUDIO__ && typeof ROOT.__AGY_BIO_AUDIO__.destroy === 'function') {
-    try { ROOT.__AGY_BIO_AUDIO__.destroy(); } catch (_) {}
+    try { ROOT.__AGY_BIO_AUDIO__.destroy({ isReinject: true }); } catch (_) {}
   }
 
   const STORAGE_KEY = 'agy_kny_audio_prefs';
@@ -104,7 +104,10 @@
   const state = {
     prefs: loadPrefs(),
     destroyed: false,
-    userInteracted: false,
+    userInteracted: Boolean(
+      ROOT.__AGY_AUDIO_UNLOCKED__ ||
+      (typeof navigator !== 'undefined' && navigator.userActivation && navigator.userActivation.hasBeenActive)
+    ),
     audioCtx: null,
     noiseBuffers: {
       pink: null,
@@ -1511,6 +1514,7 @@
   function openPopover(anchorEl) {
     if (state.destroyed || typeof document === 'undefined' || !document.body) return null;
     state.userInteracted = true;
+    ROOT.__AGY_AUDIO_UNLOCKED__ = true;
     if (state.prefs.enabled) {
       ensureAudioContext();
       markOneShotActivity(3.5);
@@ -1522,6 +1526,8 @@
       return null;
     }
     closePopover();
+    try { ROOT.__AGY_CINEMA_DIRECTOR__?.closePanel?.(); } catch (_) {}
+    try { ROOT.__AGY_TOKEN_HUD__?.closePopover?.(); } catch (_) {}
     state.anchorEl = anchorEl || null;
 
     const pop = document.createElement('div');
@@ -1712,6 +1718,7 @@
 
   function toggle(forceState) {
     state.userInteracted = true;
+    ROOT.__AGY_AUDIO_UNLOCKED__ = true;
     const next = typeof forceState === 'boolean' ? forceState : !state.prefs.enabled;
     state.prefs.enabled = next;
     if (next && !state.prefs.chimeEnabled && !state.prefs.swordSfxEnabled && state.prefs.ambientMode === 'off') {
@@ -1746,6 +1753,7 @@
     if (state.destroyed) return;
     const firstTime = !state.userInteracted;
     state.userInteracted = true;
+    ROOT.__AGY_AUDIO_UNLOCKED__ = true;
     if (!state.prefs.enabled) return;
 
     if (state.prefs.ambientMode !== 'off') {
@@ -1802,17 +1810,25 @@
 
     document.addEventListener('pointerdown', onFirstGesture, { capture: true, passive: true });
     document.addEventListener('click', onFirstGesture, { capture: true, passive: true });
-    document.addEventListener('click', onDocClickOutside);
+    document.addEventListener('click', onDocClickOutside, true);
     document.addEventListener('keydown', onDocKeyDown, { passive: true });
 
     state.cleanups.push(() => document.removeEventListener('pointerdown', onFirstGesture, { capture: true }));
     state.cleanups.push(() => document.removeEventListener('click', onFirstGesture, { capture: true }));
-    state.cleanups.push(() => document.removeEventListener('click', onDocClickOutside));
+    state.cleanups.push(() => document.removeEventListener('click', onDocClickOutside, true));
     state.cleanups.push(() => document.removeEventListener('keydown', onDocKeyDown));
+
+    if (state.userInteracted && state.prefs.enabled && state.prefs.ambientMode !== 'off') {
+      syncAmbientSoundscape();
+    }
   }
 
-  function destroy() {
+  function destroy(opts) {
+    const isReinject = Boolean(opts && opts.isReinject);
     state.destroyed = true;
+    if (!isReinject) {
+      delete ROOT.__AGY_AUDIO_UNLOCKED__;
+    }
     closePopover();
     stopAmbientNodes(true);
     clearTimeout(state.suspendTimer);

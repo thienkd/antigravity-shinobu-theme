@@ -32,6 +32,89 @@ function isPidAlive(pid) {
     }
 }
 
+function resolveLiveDaemonPid() {
+    const home = os.homedir();
+    const pidFileCandidates = [
+        process.env.AGY_DAEMON_PID_FILE,
+        PID_FILE,
+        path.join(home, '.gemini', 'config', 'skills', 'antigravity-custom-theme', 'daemon.pid'),
+        path.join(home, '.gemini', 'antigravity', 'skills', 'antigravity-custom-theme', 'daemon.pid'),
+        path.join(home, '.agents', 'skills', 'antigravity-custom-theme', 'daemon.pid'),
+    ].filter(Boolean);
+
+    const seenPaths = new Set();
+    for (const candidate of pidFileCandidates) {
+        const resolved = path.resolve(candidate);
+        if (seenPaths.has(resolved)) continue;
+        seenPaths.add(resolved);
+        if (!fs.existsSync(resolved)) continue;
+        try {
+            const pid = parseInt(fs.readFileSync(resolved, 'utf8').replace(/^\uFEFF/, '').trim(), 10);
+            if (pid > 0 && isVerifiedDaemonProcess(pid)) {
+                return { pid, source: resolved };
+            }
+        } catch (_) {}
+    }
+
+    // Fallback: scan live OS processes running theme_daemon.js
+    if (process.platform === 'win32') {
+        try {
+            const out = execFileSync(
+                'powershell.exe',
+                [
+                    '-NoProfile',
+                    '-NonInteractive',
+                    '-Command',
+                    `Get-CimInstance Win32_Process -Filter "Name LIKE 'node%'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match 'theme_daemon\\.js' } | Select-Object -ExpandProperty ProcessId`,
+                ],
+                { encoding: 'utf8', windowsHide: true, timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
+            ).trim();
+            for (const line of out.split(/\r?\n/)) {
+                const pid = parseInt(line.trim(), 10);
+                if (pid > 0 && isVerifiedDaemonProcess(pid)) {
+                    return { pid, source: 'process-scan' };
+                }
+            }
+        } catch (_) {
+            try {
+                const wmicOut = execFileSync(
+                    'wmic.exe',
+                    ['process', 'where', "Name like 'node%'", 'get', 'ProcessId,CommandLine', '/FORMAT:LIST'],
+                    { encoding: 'utf8', windowsHide: true, timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] }
+                ).trim();
+                for (const block of wmicOut.split(/\r?\n\s*\r?\n/)) {
+                    if (!DAEMON_SCRIPT_RE.test(block)) continue;
+                    const m = block.match(/ProcessId=(\d+)/i);
+                    const pid = m ? parseInt(m[1], 10) : 0;
+                    if (pid > 0 && isVerifiedDaemonProcess(pid)) {
+                        return { pid, source: 'process-scan' };
+                    }
+                }
+            } catch (__) {}
+        }
+    } else {
+        try {
+            const psOut = execFileSync('ps', ['-ax', '-o', 'pid=,command='], {
+                encoding: 'utf8',
+                timeout: 3000,
+                stdio: ['ignore', 'pipe', 'ignore'],
+            });
+            for (const line of psOut.split(/\r?\n/)) {
+                const trimmed = line.trim();
+                if (!trimmed || !DAEMON_SCRIPT_RE.test(trimmed)) continue;
+                const m = trimmed.match(/^(\d+)\s+(.*)$/);
+                if (!m) continue;
+                const pid = parseInt(m[1], 10);
+                if (pid > 0 && pid !== process.pid && NODE_PROC_RE.test(m[2]) && isVerifiedDaemonProcess(pid)) {
+                    return { pid, source: 'process-scan' };
+                }
+            }
+        } catch (_) {}
+    }
+
+    return null;
+}
+
 function isVerifiedDaemonProcess(pid) {
     if (!Number.isInteger(pid) || pid <= 0 || !isPidAlive(pid)) return false;
 
@@ -154,7 +237,19 @@ function isCandidateAntigravityUrl(rawUrl) {
             p.startsWith('/launchpad/') ||
             p === '/workbench' ||
             p.startsWith('/workbench/') ||
-            p.startsWith('/c/')
+            p.startsWith('/c/') ||
+            p.startsWith('/p/') ||
+            p === '/projects' ||
+            p.startsWith('/projects/') ||
+            p === '/settings' ||
+            p.startsWith('/settings/') ||
+            p === '/manager' ||
+            p.startsWith('/manager/') ||
+            p === '/workspace' ||
+            p.startsWith('/workspace/') ||
+            p.startsWith('/w/') ||
+            p === '/chat' ||
+            p.startsWith('/chat/')
         );
     } catch (_) {
         return false;
@@ -261,6 +356,16 @@ const INSPECT_EXPR = `(() => {
         typeof window.__AGY_INJECT_BOOT__ !== 'undefined' ||
         typeof window.__AGY_BOOT__ !== 'undefined'
     );
+    const cinemaBtnPresent = Boolean(document.querySelector('.agy-cinema-mask-btn'));
+    const kaguraBtnPresent = Boolean(document.querySelector('.agy-kagura-bell-btn'));
+    const cinemaDirectorAlive = Boolean(
+        typeof window.__AGY_CINEMA_DIRECTOR__?.openPanel === 'function' &&
+        document.getElementById('antigravity-kny-cinema-director-style')
+    );
+    const bioAudioAlive = Boolean(
+        typeof window.__AGY_BIO_AUDIO__?.openPopover === 'function' &&
+        document.getElementById('antigravity-kny-bio-audio-style')
+    );
     return {
         isAntigravityDom: true,
         url: location.pathname,
@@ -280,17 +385,19 @@ const INSPECT_EXPR = `(() => {
         leakedWindowToken,
         settingsTriggerPresent: Boolean(document.getElementById('agy-custom-theme-sidebar-btn')),
         composerPresent: Boolean(document.querySelector('div.relative.flex.flex-col.rounded-lg.border')),
+        cinemaBtnPresent,
+        kaguraBtnPresent,
+        cinemaDirectorAlive,
+        bioAudioAlive,
     };
 })()`;
 
 async function main() {
-    if (!fs.existsSync(PID_FILE)) {
-        console.error(`[verify-cdp] FAIL: daemon.pid not found at ${PID_FILE} (theme_daemon.js is not running).`);
-        process.exit(1);
-    }
-    const daemonPid = parseInt(fs.readFileSync(PID_FILE, 'utf8').replace(/^\uFEFF/, '').trim(), 10);
-    if (!daemonPid || !isVerifiedDaemonProcess(daemonPid)) {
-        console.error(`[verify-cdp] FAIL: daemon.pid (${daemonPid || 'invalid'}) does not point to a live theme_daemon.js process.`);
+    const liveDaemon = resolveLiveDaemonPid();
+    if (!liveDaemon) {
+        console.error(
+            `[verify-cdp] FAIL: No live theme_daemon.js process found (checked ${PID_FILE}, standard global skill directories, and OS process table).`
+        );
         process.exit(1);
     }
 
@@ -343,7 +450,15 @@ async function main() {
         console.error('[verify-cdp] FAIL: Ephemeral boot/auth token leaked onto global window object.');
         process.exit(1);
     }
-    console.log(`[verify-cdp] PASS: ${themedPages.length}/${results.length} verified page(s) themed with zero live blur and zero token leak.`);
+    if (themedPages.some((r) => r.cinemaBtnPresent && r.kaguraBtnPresent && (!r.cinemaDirectorAlive || !r.bioAudioAlive))) {
+        console.error(
+            '[verify-cdp] FAIL: HUD utility buttons (.agy-cinema-mask-btn / .agy-kagura-bell-btn) present, but __AGY_CINEMA_DIRECTOR__ or __AGY_BIO_AUDIO__ (or their styles) died after injection!'
+        );
+        process.exit(1);
+    }
+    console.log(
+        `[verify-cdp] PASS: ${themedPages.length}/${results.length} verified page(s) themed (daemon PID ${liveDaemon.pid} via ${liveDaemon.source}) with zero live blur, zero token leak, and live Cinema/BioAudio modules.`
+    );
 }
 
 main().catch((err) => {

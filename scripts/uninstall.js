@@ -361,7 +361,19 @@ function isCandidateAntigravityUrl(rawUrl) {
             p.startsWith('/launchpad/') ||
             p === '/workbench' ||
             p.startsWith('/workbench/') ||
-            p.startsWith('/c/')
+            p.startsWith('/c/') ||
+            p.startsWith('/p/') ||
+            p === '/projects' ||
+            p.startsWith('/projects/') ||
+            p === '/settings' ||
+            p.startsWith('/settings/') ||
+            p === '/manager' ||
+            p.startsWith('/manager/') ||
+            p === '/workspace' ||
+            p.startsWith('/workspace/') ||
+            p.startsWith('/w/') ||
+            p === '/chat' ||
+            p.startsWith('/chat/')
         );
     } catch (_) {
         return false;

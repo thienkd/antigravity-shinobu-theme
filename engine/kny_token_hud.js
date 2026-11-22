@@ -298,10 +298,15 @@
         -webkit-app-region: no-drag;
       }
 
+      #${HUD_BAR_ID}[data-open="1"] {
+        z-index: 95;
+      }
+
       /* Split-View Container Responsive Tiers (observed via ResizeObserver on composer.clientWidth) */
       #${HUD_BAR_ID}[data-compact="1"] .agy-tok-ctx-prefix,
       #${HUD_BAR_ID}[data-compact="1"] .agy-tok-turn-prefix,
       #${HUD_BAR_ID}[data-compact="1"] .agy-blade-tier-txt,
+      #${HUD_BAR_ID}[data-compact="1"] .agy-tok-draft-tag,
       #${HUD_BAR_ID}[data-compact="2"] .agy-tok-ctx-prefix,
       #${HUD_BAR_ID}[data-compact="2"] .agy-tok-turn-prefix,
       #${HUD_BAR_ID}[data-compact="2"] .agy-blade-tier-txt,
@@ -312,23 +317,33 @@
         gap: 3.5px;
       }
       #${HUD_BAR_ID}[data-compact="1"] .agy-tok-pill {
-        padding: 3px 6.5px;
+        padding: 3px 6px;
         font-size: 10.5px;
       }
+      #${HUD_BAR_ID}[data-compact="1"] .agy-nichirin-svg {
+        width: 34px;
+        height: 11px;
+      }
       #${HUD_BAR_ID}[data-compact="2"] {
-        bottom: calc(100% + 33px);
+        bottom: calc(100% + 5px);
         left: 4px;
-        gap: 3px;
-        max-width: calc(100% - 98px);
-        flex-wrap: wrap;
+        gap: 2.5px;
+        max-width: calc(100% - 96px);
+        flex-wrap: nowrap;
       }
       #${HUD_BAR_ID}[data-compact="2"] .agy-tok-pill {
-        padding: 2.5px 5.5px;
-        font-size: 10px;
+        padding: 2px 5px;
+        font-size: 9.8px;
+        gap: 3px;
       }
       #${HUD_BAR_ID}[data-compact="2"] .agy-nichirin-svg {
-        width: 30px;
-        height: 11px;
+        width: 24px;
+        height: 10px;
+      }
+      #${HUD_BAR_ID}[data-compact="2"] .agy-yoriichi-crest-btn,
+      #${HUD_BAR_ID}[data-compact="2"] .agy-hud-util-btn {
+        width: 22px;
+        height: 22px;
       }
       #${HUD_BAR_ID}[data-compact="2"] .agy-tok-popover {
         width: min(296px, calc(100vw - 20px));
@@ -343,8 +358,8 @@
       }
       @media (max-width: 560px) {
         #${HUD_BAR_ID} {
-          bottom: calc(100% + 33px);
-          left: 6px;
+          bottom: calc(100% + 5px);
+          left: 4px;
         }
       }
 
@@ -1808,6 +1823,10 @@
     state.popoverOpen = Boolean(open);
     if (!state.barEl) return;
     if (state.popoverOpen) {
+      if (typeof window !== 'undefined') {
+        try { window.__AGY_BIO_AUDIO__?.closePopover?.(); } catch (_) {}
+        try { window.__AGY_CINEMA_DIRECTOR__?.closePanel?.(); } catch (_) {}
+      }
       state.barEl.dataset.open = '1';
       renderDomValues();
     } else {
@@ -2089,7 +2108,7 @@
     cinemaBtn.type = 'button';
     cinemaBtn.className = 'agy-hud-util-btn agy-cinema-mask-btn';
     cinemaBtn.dataset.agyCinemaTrigger = '1';
-    cinemaBtn.title = 'Mặt nạ Cáo Urokodaki — Mở Khiên Che Mật & Đạo Diễn Cinema';
+    cinemaBtn.title = 'Mặt nạ Cáo Urokodaki — Nhấn mở Khiên Che Mật & Đạo Diễn Cinema • Shift+Click hoặc Chuột phải để Bật/Tắt Khiên nhanh';
     cinemaBtn.setAttribute('aria-label', cinemaBtn.title);
     cinemaBtn.innerHTML = ic ? ic.getFuncSvg('cinema_mask', 13) : '🦊';
 
@@ -2237,10 +2256,13 @@
       const cw = Math.round(composer.clientWidth || (composer.getBoundingClientRect && composer.getBoundingClientRect().width) || 800);
       if (cw > 0 && cw < 440) {
         bar.dataset.compact = '2';
+        if (composer.dataset) composer.dataset.agyCompact = '2';
       } else if (cw > 0 && cw < 620) {
         bar.dataset.compact = '1';
+        if (composer.dataset) composer.dataset.agyCompact = '1';
       } else {
         delete bar.dataset.compact;
+        if (composer.dataset) delete composer.dataset.agyCompact;
       }
     };
     syncCompactTier();
@@ -2304,8 +2326,22 @@
       quickToggleBioAudio();
     });
 
+    const quickTogglePrivacyShield = () => {
+      const dir = typeof window !== 'undefined' ? window.__AGY_CINEMA_DIRECTOR__ : null;
+      if (dir && typeof dir.togglePrivacyShield === 'function') {
+        try {
+          dir.togglePrivacyShield();
+          refreshUtilityButtonStates();
+        } catch (_) {}
+      }
+    };
+
     cinemaBtn.addEventListener('click', (ev) => {
       ev.stopPropagation();
+      if (ev.shiftKey) {
+        quickTogglePrivacyShield();
+        return;
+      }
       const dir = typeof window !== 'undefined' ? window.__AGY_CINEMA_DIRECTOR__ : null;
       if (dir) {
         try {
@@ -2315,6 +2351,12 @@
         } catch (_) {}
         setTimeout(refreshUtilityButtonStates, 50);
       }
+    });
+
+    cinemaBtn.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      quickTogglePrivacyShield();
     });
 
     // Capture Enter key & Send button click BEFORE React clears the editor so user's message always shows!
@@ -2358,9 +2400,13 @@
     };
 
     const onOutside = (ev) => {
-      if (state.popoverOpen && bar && !bar.contains(ev.target)) {
-        setPopoverOpen(false);
-      }
+      if (!state.popoverOpen) return;
+      const t = ev.target;
+      if (state.popoverEl && state.popoverEl.contains(t)) return;
+      if (ctxBtn && ctxBtn.contains(t)) return;
+      if (turnBtn && turnBtn.contains(t)) return;
+      if (bladeBtn && bladeBtn.contains(t)) return;
+      setPopoverOpen(false);
     };
     const onKey = (ev) => {
       if (ev.isComposing || ev.keyCode === 229) return;
@@ -2389,14 +2435,14 @@
 
     composer.addEventListener('keydown', onCaptureKeyDown, true);
     composer.addEventListener('click', onCaptureSendClick, true);
-    document.addEventListener('click', onOutside);
+    document.addEventListener('click', onOutside, true);
     document.addEventListener('keydown', onKey);
     composer.addEventListener('input', onComposerInput);
     document.addEventListener('visibilitychange', onVis);
 
     state.cleanups.push(() => composer.removeEventListener('keydown', onCaptureKeyDown, true));
     state.cleanups.push(() => composer.removeEventListener('click', onCaptureSendClick, true));
-    state.cleanups.push(() => document.removeEventListener('click', onOutside));
+    state.cleanups.push(() => document.removeEventListener('click', onOutside, true));
     state.cleanups.push(() => document.removeEventListener('keydown', onKey));
     state.cleanups.push(() => composer.removeEventListener('input', onComposerInput));
     state.cleanups.push(() => document.removeEventListener('visibilitychange', onVis));
@@ -2513,6 +2559,7 @@
     }
     if (state.composer && state.composer.dataset) {
       delete state.composer.dataset.agyCrisis;
+      delete state.composer.dataset.agyCompact;
     }
     if (typeof document !== 'undefined') {
       document.querySelectorAll(`#${HUD_BAR_ID}, #${ECHO_BAR_ID}`).forEach((el) => el.remove());
@@ -2542,6 +2589,7 @@
 
   const api = {
     mountTokenHud,
+    closePopover: () => setPopoverOpen(false),
     castYoriichiSunBreathing,
     showUserMessageEcho,
     hideUserMessageEcho,

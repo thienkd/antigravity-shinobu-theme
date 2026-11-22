@@ -13,9 +13,17 @@
 
   const ROOT = typeof window !== 'undefined' ? window : globalThis;
 
-  // Clean teardown on hot-reload if a previous instance exists
+  // Clean teardown on hot-reload if a previous instance exists (preserve active Privacy Shield without flicker)
+  const wasShieldActive = Boolean(
+    (ROOT.__AGY_CINEMA_DIRECTOR__ &&
+      typeof ROOT.__AGY_CINEMA_DIRECTOR__.isPrivacyShieldActive === 'function' &&
+      ROOT.__AGY_CINEMA_DIRECTOR__.isPrivacyShieldActive()) ||
+    (typeof document !== 'undefined' &&
+      document.documentElement &&
+      document.documentElement.dataset.agyPrivacyShield === '1')
+  );
   if (ROOT.__AGY_CINEMA_DIRECTOR__ && typeof ROOT.__AGY_CINEMA_DIRECTOR__.destroy === 'function') {
-    try { ROOT.__AGY_CINEMA_DIRECTOR__.destroy(); } catch (_) {}
+    try { ROOT.__AGY_CINEMA_DIRECTOR__.destroy({ isReinject: true }); } catch (_) {}
   }
 
   const STORAGE_THEME = 'agy_theme_v3';
@@ -930,7 +938,16 @@
 
       const skillsApi = ROOT.__AGY_BREATHING_SKILLS__ || ROOT.__AGY_KNY_SKILLS__;
       if (skillsApi && typeof skillsApi.castSkill === 'function') {
-        skillsApi.castSkill('yoriichi', 3, { charId: 'yoriichi', durationMs: 3150 });
+        const crestEl = typeof document !== 'undefined' ? document.querySelector('.agy-yoriichi-crest-btn') : null;
+        const originRect = crestEl && typeof crestEl.getBoundingClientRect === 'function'
+          ? crestEl.getBoundingClientRect()
+          : null;
+        skillsApi.castSkill('yoriichi', 3, {
+          charId: 'yoriichi',
+          durationMs: 3150,
+          composerEl: null,
+          originRect
+        });
       } else if (ROOT.__AGY_TOKEN_HUD__ && typeof ROOT.__AGY_TOKEN_HUD__.castYoriichiSunBreathing === 'function') {
         ROOT.__AGY_TOKEN_HUD__.castYoriichiSunBreathing();
       }
@@ -1050,6 +1067,8 @@
       return null;
     }
     closePanel();
+    try { ROOT.__AGY_BIO_AUDIO__?.closePopover?.(); } catch (_) {}
+    try { ROOT.__AGY_TOKEN_HUD__?.closePopover?.(); } catch (_) {}
     state.anchorEl = anchorEl || null;
 
     const panel = document.createElement('div');
@@ -1283,16 +1302,37 @@
     };
 
     ROOT.addEventListener('keydown', onKeyDown, true);
-    document.addEventListener('click', onDocClick);
+    document.addEventListener('click', onDocClick, true);
 
     state.cleanups.push(() => ROOT.removeEventListener('keydown', onKeyDown, true));
-    state.cleanups.push(() => document.removeEventListener('click', onDocClick));
+    state.cleanups.push(() => document.removeEventListener('click', onDocClick, true));
+
+    if (
+      wasShieldActive ||
+      (typeof document !== 'undefined' &&
+        document.documentElement &&
+        document.documentElement.dataset.agyPrivacyShield === '1')
+    ) {
+      togglePrivacyShield(true);
+    }
   }
 
-  function destroy() {
+  function destroy(opts) {
+    const isReinject = Boolean(opts && opts.isReinject);
+    const keepShieldOnReinject = isReinject && (
+      state.shieldActive ||
+      Boolean(typeof document !== 'undefined' && document.documentElement && document.documentElement.dataset.agyPrivacyShield === '1')
+    );
     state.destroyed = true;
     stopShowcase(true);
-    togglePrivacyShield(false);
+    if (!isReinject) {
+      togglePrivacyShield(false);
+    } else if (keepShieldOnReinject && typeof document !== 'undefined' && document.documentElement) {
+      document.documentElement.dataset.agyPrivacyShield = '1';
+      if (state.prefs && state.prefs.strictRedact) {
+        document.documentElement.dataset.agyPrivacyStrict = '1';
+      }
+    }
     disconnectShieldObserver();
     closePanel();
     clearInterval(state.hudMountTimer);
@@ -1304,15 +1344,18 @@
     }
 
     if (typeof document !== 'undefined') {
-      [
-        STYLE_ID,
+      const idsToRemove = [
         SHIELD_BADGE_ID,
         PANEL_ID,
         STAGE_BANNER_ID,
         METSU_SEAL_ID,
         RED_BLADE_SHOWCASE_ID,
         AUTO_HUD_BTN_ID
-      ].forEach((id) => {
+      ];
+      if (!isReinject) {
+        idsToRemove.unshift(STYLE_ID);
+      }
+      idsToRemove.forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.remove();
       });

@@ -1,6 +1,6 @@
 (() => {
-  if (typeof window !== 'undefined' && typeof window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__ === 'function') {
-    try { window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__(); } catch (_) {}
+  if ((typeof __AGY_PRECLEANED__ === 'undefined' || !__AGY_PRECLEANED__) && typeof window !== 'undefined' && typeof window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__ === 'function') {
+    try { window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__({ isReinject: true }); } catch (_) {}
   }
 
   const SEC = (typeof __AGY_SEC__ === 'object' && __AGY_SEC__) ? __AGY_SEC__ : {
@@ -22,6 +22,7 @@
   const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(String(navigator.platform || navigator.userAgent || ''));
   const BLUR_CACHE_MAX_ENTRIES = 12;
 
+  let coreDestroyed = false;
   let transientOverrideState = null;
   let blurSliderDebounceTimer = 0;
   let prebakeReqSeq = 0;
@@ -412,7 +413,7 @@
     }
 
     const applyTaintedFileFallback = () => {
-      if (reqSeq !== prebakeReqSeq) return;
+      if (coreDestroyed || reqSeq !== prebakeReqSeq) return;
       const curShell = document.querySelector('.agy-shell');
       if (!curShell || !safeWp) return;
       const safeTint = tintBg ? `linear-gradient(180deg, ${tintBg}, ${tintBg}), ` : '';
@@ -425,7 +426,7 @@
       img.crossOrigin = 'anonymous';
     }
     img.onload = () => {
-      if (reqSeq !== prebakeReqSeq) return;
+      if (coreDestroyed || reqSeq !== prebakeReqSeq) return;
       try {
         const w = 1920;
         const h = Math.max(360, Math.round((img.naturalHeight || 2160) * (w / (img.naturalWidth || 3840))));
@@ -445,7 +446,7 @@
           ctx.fillRect(0, 0, w, h);
         }
         const rawBaked = canvas.toDataURL('image/webp', 0.92);
-        if (reqSeq !== prebakeReqSeq) return;
+        if (coreDestroyed || reqSeq !== prebakeReqSeq) return;
         const baked = safeCssUrl(rawBaked);
         if (!baked) {
           applyTaintedFileFallback();
@@ -1449,7 +1450,8 @@
     });
   }
 
-  function removeCustomTheme() {
+  function removeCustomTheme(opts) {
+    coreDestroyed = true;
     transientOverrideState = null;
     if (window.__AGY_MODAL_OBSERVER__) {
       try { window.__AGY_MODAL_OBSERVER__.disconnect(); } catch (e) {}
@@ -1495,8 +1497,8 @@
     ].forEach((mod) => {
       if (!mod) return;
       try {
-        if (typeof mod.teardown === 'function') mod.teardown();
-        else if (typeof mod.destroy === 'function') mod.destroy();
+        if (typeof mod.teardown === 'function') mod.teardown(opts);
+        else if (typeof mod.destroy === 'function') mod.destroy(opts);
       } catch (e) {}
     });
     document.querySelectorAll('[data-agy-scroll-bound]').forEach(el => delete el.dataset.agyScrollBound);
@@ -1576,6 +1578,10 @@
   };
 
   function openCustomThemeModal() {
+    try { window.__AGY_TOKEN_HUD__?.closePopover?.(); } catch (_) {}
+    try { window.__AGY_BIO_AUDIO__?.closePopover?.(); } catch (_) {}
+    try { window.__AGY_CINEMA_DIRECTOR__?.closePanel?.(); } catch (_) {}
+
     let backdrop = document.getElementById('agy-custom-theme-modal-backdrop');
     if (!backdrop) {
       backdrop = document.createElement('div');
@@ -1583,7 +1589,7 @@
       backdrop.style.cssText = `
         position: fixed;
         inset: 0;
-        z-index: 99999;
+        z-index: 100060;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -3504,7 +3510,7 @@
       }
       .agy-npc-popover {
         position: absolute;
-        bottom: 10px;
+        bottom: 36px;
         right: 116px;
         width: 304px;
         display: flex;
@@ -3518,6 +3524,11 @@
         color: #f8fafc;
         pointer-events: auto;
         transform-origin: bottom right;
+      }
+      .surface-composer[data-agy-compact] .agy-npc-popover {
+        right: 8px;
+        bottom: 62px;
+        width: min(288px, calc(100vw - 24px));
       }
       #agy-shinobu-npc-wrap[data-royal="1"] .agy-npc-popover {
         border: 1.4px solid rgba(250, 204, 21, 0.78);
@@ -4258,7 +4269,6 @@
   try { teardownLiveWallpaperFx(); } catch (e) {}
   try { teardownShinobuNpc(); } catch (e) {}
   try { document.querySelectorAll('.agy-yoriichi-msg-hit').forEach(el => el.remove()); } catch (e) {}
-  try { if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.teardown === 'function') window.__AGY_TOKEN_HUD__.teardown(); } catch (e) {}
   try { if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.stopActiveSkill === 'function') window.__AGY_KNY_SKILLS__.stopActiveSkill(); } catch (e) {}
 
   window.__AGY_SCROLL_AC__ = new AbortController();
@@ -4272,7 +4282,7 @@
   }
 
   const INTERNAL_ENGINE_MUTATION_SELECTOR =
-    '#agy-token-context-bar, #agy-yoriichi-msg-echo, #agy-shinobu-npc-wrap, #agy-chibi-skill-bar, agy-chibi-aura, agy-hashira-squad, agy-skill-vfx, agy-live-fx, #agy-live-fx-host';
+    '#agy-token-context-bar, #agy-yoriichi-msg-echo, #agy-shinobu-npc-wrap, #agy-chibi-skill-bar, agy-chibi-aura, agy-hashira-squad, agy-skill-vfx, agy-live-fx, #agy-live-fx-host, #agy-cinema-director-panel, #agy-cinema-privacy-badge, #agy-cinema-stage-banner, #agy-cinema-metsu-seal, #agy-cinema-red-blade-crest, #agy-kny-bio-audio-popover, #agy-kny-circadian-toast, agy-circadian-veil, #agy-kny-dawn-glow-layer, #agy-metsu-victory-overlay, .agy-kasugai-crow-flyby, #agy-custom-theme-modal-backdrop';
 
   function isInternalEngineMutation(m) {
     const t = m && m.target;

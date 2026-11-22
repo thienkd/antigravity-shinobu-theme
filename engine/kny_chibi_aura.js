@@ -1633,6 +1633,8 @@
         padding-top: 6px;
         margin-top: 2px;
         border-top: 1px solid rgba(255, 255, 255, 0.12);
+        max-height: 196px;
+        overflow-y: auto;
       }
       .agy-npc-skills-drawer[data-open="1"] {
         display: flex;
@@ -2150,6 +2152,7 @@
           sourceFrameEl: opts.sourceFrameEl || null,
           themeCfg: state.uiThemeCfg,
           actionSticker: safeResolveAsset(state.uiThemeCfg && state.uiThemeCfg.actionSticker),
+          noActionSprite: Boolean(state.uiThemeCfg && (state.uiThemeCfg.isMultiversePreset || (state.uiThemeCfg.isForged && !state.uiThemeCfg.actionSticker))),
           composerEl: composer,
           soundEnabled: !muted,
           muted,

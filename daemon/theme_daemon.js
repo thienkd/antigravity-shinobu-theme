@@ -1496,6 +1496,7 @@ function startAssetServer() {
             // 2. Symlink-Safe Static Theme Image Assets (/assets/...)
             const assetBaseHeaders = {
                 'Access-Control-Allow-Origin': '*',
+                'Cross-Origin-Resource-Policy': 'cross-origin',
                 'X-Content-Type-Options': 'nosniff',
                 'Content-Security-Policy': ASSET_CSP,
                 'Cache-Control': 'no-cache',
@@ -2063,7 +2064,19 @@ function isCandidateAntigravityUrl(rawUrl) {
         pathname.startsWith('/launchpad/') ||
         pathname === '/workbench' ||
         pathname.startsWith('/workbench/') ||
-        pathname.startsWith('/c/')
+        pathname.startsWith('/c/') ||
+        pathname.startsWith('/p/') ||
+        pathname === '/projects' ||
+        pathname.startsWith('/projects/') ||
+        pathname === '/settings' ||
+        pathname.startsWith('/settings/') ||
+        pathname === '/manager' ||
+        pathname.startsWith('/manager/') ||
+        pathname === '/workspace' ||
+        pathname.startsWith('/workspace/') ||
+        pathname.startsWith('/w/') ||
+        pathname === '/chat' ||
+        pathname.startsWith('/chat/')
     );
 }
 
@@ -2344,7 +2357,16 @@ function createSession(target) {
             const navUrl = String(msg.params.frame.url || '');
             const wasVerified = session.verified;
             session.currentUrl = navUrl;
-            if (!isCandidateAntigravityUrl(navUrl)) {
+            let isSameTrustedOrigin = false;
+            if (wasVerified) {
+                try {
+                    const u = new URL(navUrl);
+                    const originKey =
+                        u.protocol === 'vscode-file:' ? `${u.protocol}//${u.host || 'vscode-app'}` : u.origin;
+                    isSameTrustedOrigin = trustedOrigins.has(originKey);
+                } catch (_) {}
+            }
+            if (!isCandidateAntigravityUrl(navUrl) && !(wasVerified && isSameTrustedOrigin)) {
                 session.verified = false;
                 if (!wasVerified) {
                     rememberIgnoredTarget(target.id, navUrl);
