@@ -38,6 +38,139 @@ const ASSET_MIME_TYPES = {
 
 let assetServer = null;
 let assetPort = 0;
+const telemetryCache = new Map();
+
+function resolveBrainDir() {
+    if (process.env.AGY_BRAIN_DIR) return process.env.AGY_BRAIN_DIR;
+    return path.join(os.homedir(), '.gemini', 'antigravity', 'brain');
+}
+
+function readConversationTelemetry(rawCid) {
+    const cid = String(rawCid || '').trim().toLowerCase();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(cid)) {
+        return { ok: false, reason: 'invalid_cid' };
+    }
+    const transcriptPath = path.join(resolveBrainDir(), cid, '.system_generated', 'logs', 'transcript.jsonl');
+    let st;
+    try {
+        st = fs.statSync(transcriptPath);
+        if (!st.isFile()) return { ok: false, reason: 'not_found', cid };
+    } catch (_) {
+        return { ok: false, reason: 'not_found', cid };
+    }
+
+    const cached = telemetryCache.get(cid);
+    if (cached && cached.size === st.size && cached.mtimeMs === st.mtimeMs) {
+        return cached.data;
+    }
+
+    let rawText = '';
+    try {
+        rawText = fs.readFileSync(transcriptPath, 'utf8');
+    } catch (_) {
+        return { ok: false, reason: 'read_error', cid };
+    }
+
+    const lines = rawText.split(/\r?\n/);
+    let lastUserIdx = -1;
+    let totalTurns = 0;
+    const parsed = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        try {
+            const obj = JSON.parse(line);
+            parsed.push(obj);
+            if (obj.type === 'USER_INPUT') {
+                lastUserIdx = parsed.length - 1;
+                totalTurns++;
+            }
+        } catch (_) {
+            // Ignore partial line while file is actively flushing
+        }
+    }
+
+    let contextTokens = 0;
+    let inputTokens = 0;
+    let cacheTokens = 0;
+    let prevTurnContextTokens = 0;
+    let turnOutputTokens = 0;
+    let totalOutputTokens = 0;
+    let turnSteps = 0;
+    let latestStepIndex = 0;
+    let latestStatus = 'IDLE';
+    let modelName = '';
+
+    for (let i = 0; i < parsed.length; i++) {
+        const step = parsed[i];
+        if (typeof step.step_index === 'number') latestStepIndex = step.step_index;
+        if (step.status) latestStatus = String(step.status);
+
+        const inTok = Number(step.input_tokens) || 0;
+        const cTok = Number(step.cache_read_tokens) || 0;
+        const outTok = Number(step.output_tokens) || 0;
+        const ctxSum = inTok + cTok;
+
+        if (ctxSum > 0) {
+            contextTokens = ctxSum;
+            inputTokens = inTok;
+            cacheTokens = cTok;
+            if (i < lastUserIdx) {
+                prevTurnContextTokens = ctxSum;
+            }
+        }
+        if (step.model && typeof step.model === 'string') {
+            modelName = step.model;
+        }
+        if (outTok > 0) {
+            totalOutputTokens += outTok;
+            if (i > lastUserIdx) {
+                turnOutputTokens += outTok;
+            }
+        } else if (i > lastUserIdx && step.type === 'PLANNER_RESPONSE') {
+            // In-flight step before output_tokens is finalized
+            const thinkChars = typeof step.thinking === 'string' ? step.thinking.length : 0;
+            const contentChars = typeof step.content === 'string' ? step.content.length : 0;
+            const est = Math.round((thinkChars + contentChars) / 3.7);
+            turnOutputTokens += est;
+            totalOutputTokens += est;
+        }
+
+        if (i > lastUserIdx && step.type === 'PLANNER_RESPONSE') {
+            turnSteps++;
+        }
+    }
+
+    // Fallback context estimate from raw transcript size if brand new conversation has no finalized planner step yet
+    if (contextTokens === 0 && st.size > 0) {
+        contextTokens = Math.round(st.size / 4.2);
+    }
+
+    const data = {
+        ok: true,
+        cid,
+        contextTokens,
+        inputTokens,
+        cacheTokens,
+        turnContextDelta: prevTurnContextTokens > 0 ? Math.max(0, contextTokens - prevTurnContextTokens) : contextTokens,
+        turnOutputTokens,
+        totalOutputTokens,
+        turnSteps,
+        totalTurns,
+        latestStepIndex,
+        latestStatus,
+        fileBytes: st.size,
+        updatedAt: Math.floor(st.mtimeMs)
+    };
+
+    if (telemetryCache.size > 20) {
+        const oldestKey = telemetryCache.keys().next().value;
+        if (oldestKey) telemetryCache.delete(oldestKey);
+    }
+    telemetryCache.set(cid, { size: st.size, mtimeMs: st.mtimeMs, data });
+    return data;
+}
 
 function startAssetServer() {
     return new Promise((resolve) => {
@@ -65,11 +198,32 @@ function startAssetServer() {
             }
 
             let rawPathname = '/';
+            let queryString = '';
             try {
-                rawPathname = decodeURIComponent(String(req.url || '/').split(/[?#]/)[0]);
+                const rawUrl = String(req.url || '/');
+                const qIdx = rawUrl.indexOf('?');
+                rawPathname = decodeURIComponent(qIdx >= 0 ? rawUrl.slice(0, qIdx) : rawUrl);
+                queryString = qIdx >= 0 ? rawUrl.slice(qIdx + 1).split('#')[0] : '';
             } catch (_) {
                 res.writeHead(400, { ...corsHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
                 res.end('Bad Request');
+                return;
+            }
+
+            if (rawPathname === '/__telemetry') {
+                const params = new URLSearchParams(queryString);
+                const payload = readConversationTelemetry(params.get('cid') || '');
+                const body = JSON.stringify(payload);
+                res.writeHead(200, {
+                    ...corsHeaders,
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Content-Length': Buffer.byteLength(body),
+                });
+                if (req.method === 'HEAD') {
+                    res.end();
+                    return;
+                }
+                res.end(body);
                 return;
             }
 

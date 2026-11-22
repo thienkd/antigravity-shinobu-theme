@@ -126,7 +126,7 @@ function main() {
 
   let compiled = engineSrc.replace(PLACEHOLDER, () => JSON.stringify(resolved));
 
-  const extraModules = ['kny_fx_modes.js', 'kny_breathing_skills.js', 'kny_chibi_aura.js'];
+  const extraModules = ['kny_fx_modes.js', 'kny_breathing_skills.js', 'kny_chibi_aura.js', 'kny_token_hud.js'];
   const prepends = [];
   for (const modName of extraModules) {
     const modPath = path.join(path.dirname(enginePath), modName);

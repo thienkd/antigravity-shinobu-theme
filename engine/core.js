@@ -835,12 +835,12 @@
       }
 
       ${bubbleTheme.composerHeaderBg ? `
-      .surface-composer > :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox) {
+      .surface-composer > :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-chibi-skill-bar):not(agy-chibi-aura) {
         background: ${bubbleTheme.composerHeaderBg} !important;
         border-radius: 14.5px 14.5px 0 0 !important;
         padding: 4px 8px !important;
       }
-      .surface-composer:has(> :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox)) .surface-composer-card {
+      .surface-composer:has(> :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-chibi-skill-bar):not(agy-chibi-aura)) .surface-composer-card {
         border-radius: 0 0 14.5px 14.5px !important;
       }
       ` : ''}
@@ -2662,6 +2662,18 @@
     }
   }
 
+  function syncTokenHud() {
+    const composer = document.querySelector('.surface-composer');
+    if (!composer || !window.__AGY_TOKEN_HUD__ || typeof window.__AGY_TOKEN_HUD__.mountTokenHud !== 'function') {
+      return;
+    }
+    const st = getState();
+    const bTheme = THEMES[st.bubbleName] || THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    try {
+      window.__AGY_TOKEN_HUD__.mountTokenHud(composer, bTheme);
+    } catch (_) {}
+  }
+
   function tick() {
     injectMainSidebarButton();
     injectSettingsModalButton();
@@ -2669,6 +2681,7 @@
     hookShellMetrics();
     syncLiveWallpaperFx();
     syncShinobuNpc();
+    syncTokenHud();
   }
 
   function scheduleTick() {
@@ -2707,6 +2720,7 @@
   if (staleSettingsBtn) staleSettingsBtn.remove();
   try { teardownLiveWallpaperFx(); } catch (e) {}
   try { teardownShinobuNpc(); } catch (e) {}
+  try { if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.teardown === 'function') window.__AGY_TOKEN_HUD__.teardown(); } catch (e) {}
   try { if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.stopActiveSkill === 'function') window.__AGY_KNY_SKILLS__.stopActiveSkill(); } catch (e) {}
   try { applyStyles(); } catch (e) {}
 
