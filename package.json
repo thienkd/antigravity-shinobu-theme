@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "node scripts/build_payload.js",
+    "test": "node tests/run_all.js",
     "verify": "node scripts/verify_cdp.js",
     "start": "node daemon/theme_daemon.js",
     "uninstall": "node scripts/uninstall.js",

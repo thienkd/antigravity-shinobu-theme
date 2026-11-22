@@ -12,16 +12,15 @@
    * Features:
    *  1. mountChibiAura(composerEl, themeCfg, charId)
    *     - Mounts <agy-chibi-aura> (162x84 mini 2D canvas, z-index: 29) directly behind/around
-   *       the composer Chibi with 14 bespoke character elemental animations at 60fps zero-GC.
+   *       the composer Chibi with 16 bespoke character elemental animations at 60fps zero-GC.
    *     - Adds subtle elemental wave accents beneath Chibi stickers on .agy-user-bubble-frame.
    *     - Auto-pauses when document.hidden, prefers-reduced-motion: reduce, or agy_fx_paused_v1 === '1'.
    *  2. playChibiAttackMotion(composerEl, themeCfg, skillInfo)
    *     - Smooth 60fps CSS transform & drop-shadow attack choreography on .surface-composer::before
    *       plus a 1.8s 2x luminance/particle surge on <agy-chibi-aura>.
    *  3. mountSkillTriggerUi(composerEl, npcWrapEl, themeCfg, charId, onSkillCast)
-   *     - Floating pill bar (#agy-chibi-skill-bar) next to Chibi on top of Composer:
-   *       "⚔️ Hơi Thở ▾" (4-Form selector + 🔊/🔇 SFX toggle) & "⚡ Xuất Chiêu" (1-click combo cast).
-   *     - Integrated "⚔️ Các Thức" pill & expandable 4-Form drawer inside #agy-shinobu-npc-wrap.
+   *     - Integrated "⚔️ Các Thức" pill & expandable 4-Form drawer inside #agy-shinobu-npc-wrap
+   *       (direct Chibi click casts sequential Breathing Forms without floating bar clutter).
    *  4. teardown()
    *     - Cleanly removes all injected DOM nodes, styles, observers, timers, and RAF loops.
    */
@@ -44,7 +43,7 @@
   }
 
   /* ==========================================================================
-   * CHARACTER & AURA MODE RESOLUTION + 56 BREATHING FORMS FALLBACK CATALOG
+   * CHARACTER & AURA MODE RESOLUTION + 60 BREATHING FORMS FALLBACK CATALOG
    * ========================================================================== */
 
   const CHAR_META = {
@@ -184,9 +183,9 @@
       rgb2: '253, 224, 71'
     },
     moon: {
-      charId: 'moon',
+      charId: 'obanai',
       auraMode: 'moon',
-      styleTitle: 'Nguyệt Ảnh Hô Hấp • 月の呼吸',
+      styleTitle: 'Hơi Thở Của Rắn (Nguyệt Ảnh) • 蛇の呼吸',
       primary: '#a855f7',
       secondary: '#38bdf8',
       rgb1: '168, 85, 247',
@@ -294,7 +293,7 @@
     obanai: [
       { form: 'Thức I', name: 'Ủy Xà Trảm', kanji: '壱ノ型 委蛇斬り', color: '#a855f7', quote: 'Hơi thở của Rắn — Thức thứ Nhất: Ủy Xà Trảm! Đường kiếm lượn sóng luồn qua mọi khe hở phòng ngự! 🐍⚔️' },
       { form: 'Thức II', name: 'Hiệp Đầu Độc Nha', kanji: '弐ノ型 狭頭の毒牙', color: '#34d399', quote: 'Thức thứ Hai: Hiệp Đầu Độc Nha! Vòng ra sau chớp nhoáng tung cú đớp chí mạng chuẩn xác! 🐍✨' },
-      { form: 'Thức III', name: 'Nhiễu Xà Lặc', kanji: '参ノ型 塒締め', color: '#c084fc', quote: 'Hơi thở của Rắn — Thức thứ Ba: Nhiễu Xà Lặc! Vòng xoáy kiếm tím–lục siết chặt không lối thoát! 🐍💜' },
+      { form: 'Thức III', name: 'Nhiễu Xà Chắt Thắt', kanji: '参ノ型 塒締め', color: '#c084fc', quote: 'Hơi thở của Rắn — Thức thứ Ba: Nhiễu Xà Chắt Thắt! Vòng xoáy kiếm tím–lục siết chặt không lối thoát! 🐍💜' },
       { form: 'Thức V', name: 'Uyển Uyển Trường Xà', kanji: '伍ノ型 蜿蜿長蛇', color: '#6ee7b7', quote: 'Kaburamaru, lên thôi! Thức thứ Năm: Uyển Uyển Trường Xà — Bạch Xà uốn lượn quét sạch mục tiêu! 🐍⚡' }
     ],
     sanemi: [
@@ -338,14 +337,9 @@
       { form: 'Lục Thức', name: 'Chước Cốt Viêm Dương', kanji: '日の呼吸 灼骨炎陽', color: '#f97316', quote: 'Hách Đao rực đỏ thiêu rụi mọi tà chướng trong chớp mắt — Chước Cốt Viêm Dương! 🔥☀️' },
       { form: 'Thập Nhất', name: 'Nhật Vựng Chi Long', kanji: '日暈の龍・頭舞い', color: '#fde047', quote: 'Thái Dương Chi Long uốn lượn khai sáng vạn vật!! 🐉☀️' },
       { form: 'Bí Kỹ', name: 'Thập Tam Thức Khởi Nguyên', kanji: '日の呼吸 拾参ノ型', color: '#facc15', quote: 'Mười hai thức nối liền thành vòng Thái Dương vĩnh hằng — Thập Tam Thức!! ☀️⚡' }
-    ],
-    moon: [
-      { form: 'Thức I', name: 'Ám Nguyệt • Tiêu Chi Cung', kanji: '壱ノ型 闇月・宵の宮', color: '#a855f7', quote: 'Nguyệt Chi Hô Hấp — Thức thứ Nhất: Ám Nguyệt • Tiêu Chi Cung! Lưỡi trăng khuyết rút kiếm trảm đứt màn đêm! 🌙⚔️' },
-      { form: 'Thức II', name: 'Châu Hoa Lộng Nguyệt', kanji: '弐ノ型 珠華ノ弄月', color: '#c084fc', quote: 'Thức thứ Hai: Châu Hoa Lộng Nguyệt! Muôn vàn mảnh trăng lưỡi liềm tím–lam xoay lốc! 🌙✨' },
-      { form: 'Thức VI', name: 'Thường Dạ Cô Nguyệt • Vô Gian', kanji: '陸ノ型 常夜孤月・無間', color: '#38bdf8', quote: 'Thức thứ Sáu: Thường Dạ Cô Nguyệt • Vô Gian! Bão trăng khuyết chém dồn dập xuyên không gian! 🌌🗡️' },
-      { form: 'Thức XVI', name: 'Nguyệt Hồng • Phiến Đạo Nguyệt', kanji: '拾陸ノ型 月虹・片割れ月', color: '#e879f9', quote: 'Tuyệt kỹ tối thượng — Nguyệt Hồng • Phiến Đạo Nguyệt!! Cầu vồng ánh trăng giáng thẳng từ bầu trời đêm! 🌙⚡' }
     ]
   };
+  FALLBACK_SKILLS.moon = FALLBACK_SKILLS.obanai;
 
   const EXPLICIT_HERO_KEYS = [
     'yoriichi',
@@ -435,28 +429,29 @@
   }
 
   function resolveSkillsForChar(charId, meta) {
-    const fallbackList = FALLBACK_SKILLS[charId] || FALLBACK_SKILLS.shinobu;
+    const canonicalCharId = (CHAR_META[charId] && CHAR_META[charId].charId) || charId;
+    const fallbackList = FALLBACK_SKILLS[canonicalCharId] || FALLBACK_SKILLS.shinobu;
     const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
     let rawList = null;
 
     if (ext) {
       try {
         if (typeof ext.getSkillsForCharacter === 'function') {
-          rawList = ext.getSkillsForCharacter(charId);
+          rawList = ext.getSkillsForCharacter(canonicalCharId);
         } else if (typeof ext.getSkills === 'function') {
-          rawList = ext.getSkills(charId);
+          rawList = ext.getSkills(canonicalCharId);
         } else if (typeof ext.getCharacterSkills === 'function') {
-          rawList = ext.getCharacterSkills(charId);
+          rawList = ext.getCharacterSkills(canonicalCharId);
         } else if (typeof ext.listSkills === 'function') {
-          rawList = ext.listSkills(charId);
-        } else if (ext.SKILLS_DB && Array.isArray(ext.SKILLS_DB[charId])) {
-          rawList = ext.SKILLS_DB[charId];
-        } else if (ext.skills && Array.isArray(ext.skills[charId])) {
-          rawList = ext.skills[charId];
-        } else if (ext.SKILLS && Array.isArray(ext.SKILLS[charId])) {
-          rawList = ext.SKILLS[charId];
-        } else if (ext.characters && ext.characters[charId] && Array.isArray(ext.characters[charId].skills)) {
-          rawList = ext.characters[charId].skills;
+          rawList = ext.listSkills(canonicalCharId);
+        } else if (ext.SKILLS_DB && Array.isArray(ext.SKILLS_DB[canonicalCharId])) {
+          rawList = ext.SKILLS_DB[canonicalCharId];
+        } else if (ext.skills && Array.isArray(ext.skills[canonicalCharId])) {
+          rawList = ext.skills[canonicalCharId];
+        } else if (ext.SKILLS && Array.isArray(ext.SKILLS[canonicalCharId])) {
+          rawList = ext.SKILLS[canonicalCharId];
+        } else if (ext.characters && ext.characters[canonicalCharId] && Array.isArray(ext.characters[canonicalCharId].skills)) {
+          rawList = ext.characters[canonicalCharId].skills;
         }
       } catch (_) {
         rawList = null;
@@ -467,7 +462,7 @@
       return fallbackList.map((item, idx) => ({
         ...item,
         index: idx,
-        charId,
+        charId: canonicalCharId,
         formNumber: item.form,
         nameVi: `${item.form}: ${item.name}`,
         displayName: item.name,
@@ -488,7 +483,7 @@
       return {
         ...obj,
         index: idx,
-        charId,
+        charId: canonicalCharId,
         form: formTag,
         formNumber: formTag,
         name: cleanName,
@@ -551,12 +546,22 @@
 
   let fallbackAudioCtx = null;
   let fallbackSuspendTimer = 0;
+  function canActivateFallbackAudio() {
+    if (typeof window !== 'undefined' && window.__AGY_AUDIO_UNLOCKED__) return true;
+    if (typeof navigator !== 'undefined' && navigator && navigator.userActivation) {
+      return Boolean(navigator.userActivation.hasBeenActive || navigator.userActivation.isActive);
+    }
+    return false;
+  }
+
   function playFallbackKatanaWhoosh() {
-    if (isSfxMuted() || typeof window === 'undefined') return;
+    if (isSfxMuted() || typeof window === 'undefined' || !canActivateFallbackAudio()) return false;
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtor) return;
+    if (!AudioCtor) return false;
     try {
-      if (!fallbackAudioCtx) fallbackAudioCtx = new AudioCtor();
+      if (!fallbackAudioCtx || fallbackAudioCtx.state === 'closed') {
+        fallbackAudioCtx = new AudioCtor();
+      }
       if (fallbackAudioCtx.state !== 'running' && fallbackAudioCtx.state !== 'closed' && typeof fallbackAudioCtx.resume === 'function') {
         fallbackAudioCtx.resume().catch(() => {});
       }
@@ -587,7 +592,7 @@
   }
 
   /* ==========================================================================
-   * 14 MINI CANVAS ELEMENTAL BREATHING DRAWERS (162x84, ZERO-GC, 60FPS)
+   * 16 MINI CANVAS ELEMENTAL BREATHING DRAWERS (162x84, ZERO-GC, 60FPS)
    * ========================================================================== */
 
   function frac(idx, a, b) {
@@ -1667,6 +1672,8 @@
     bubbleObserver: null,
     bubbleSyncRaf: 0,
     attackTimer: 0,
+    surgeTimer: 0,
+    focusSyncTimer: 0,
 
     // Skill UI state
     uiComposer: null,
@@ -1831,6 +1838,14 @@
       clearTimeout(state.attackTimer);
       state.attackTimer = 0;
     }
+    if (state.surgeTimer) {
+      clearTimeout(state.surgeTimer);
+      state.surgeTimer = 0;
+    }
+    if (state.focusSyncTimer) {
+      clearTimeout(state.focusSyncTimer);
+      state.focusSyncTimer = 0;
+    }
     if (state.bubbleObserver) {
       state.bubbleObserver.disconnect();
       state.bubbleObserver = null;
@@ -1916,11 +1931,11 @@
     canvas.width = Math.round(AURA_W * dpr);
     canvas.height = Math.round(AURA_H * dpr);
     canvas.style.cssText = 'width: 162px; height: 84px; display: block; pointer-events: none;';
-    host.appendChild(canvas);
-    composer.appendChild(host);
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) return host;
+    if (!ctx) return null;
+    host.appendChild(canvas);
+    composer.appendChild(host);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     state.auraComposer = composer;
@@ -1934,7 +1949,13 @@
     state.auraScene = createChibiAuraScene(meta.auraMode, meta);
 
     const onVis = () => resumeOrPauseAura();
-    const onFocusArbiterSync = () => setTimeout(resumeOrPauseAura, 0);
+    const onFocusArbiterSync = () => {
+      clearTimeout(state.focusSyncTimer);
+      state.focusSyncTimer = setTimeout(() => {
+        state.focusSyncTimer = 0;
+        resumeOrPauseAura();
+      }, 0);
+    };
     const onResizeDpr = () => {
       syncAuraCanvasDpr();
       if (isMotionPaused()) drawStaticAuraFrame();
@@ -1968,7 +1989,7 @@
     const onDocClickCapture = (ev) => {
       const t = ev.target;
       if (t && t.closest && t.closest('[data-npc-act="motion"]')) {
-        setTimeout(resumeOrPauseAura, 0);
+        onFocusArbiterSync();
       }
     };
     document.addEventListener('click', onDocClickCapture, true);
@@ -2018,6 +2039,7 @@
       composer.dataset.chibiAttack = '1';
       clearTimeout(state.attackTimer);
       state.attackTimer = setTimeout(() => {
+        state.attackTimer = 0;
         delete composer.dataset.chibiAttack;
       }, 860);
     }
@@ -2029,7 +2051,9 @@
     if (state.auraHost) {
       state.auraHost.style.setProperty('--agy-aura-surge', atkColor1);
       state.auraHost.dataset.auraSurge = '1';
-      setTimeout(() => {
+      clearTimeout(state.surgeTimer);
+      state.surgeTimer = setTimeout(() => {
+        state.surgeTimer = 0;
         if (state.auraHost && (typeof performance !== 'undefined' ? performance.now() : Date.now()) >= state.auraSurgeUntil) {
           delete state.auraHost.dataset.auraSurge;
         }
@@ -2308,6 +2332,20 @@
 
     if (uiMatches) {
       state.uiNpcWrap = npcWrap;
+      state.uiMeta = meta;
+      if (npcWrap) {
+        const drawer = npcWrap.querySelector('.agy-npc-skills-drawer');
+        if (drawer) {
+          drawer.style.setProperty('--skill-primary', meta.primary);
+          drawer.style.setProperty('--skill-secondary', meta.secondary);
+          const drawerTitle = drawer.querySelector('.agy-skill-menu-title');
+          if (drawerTitle) drawerTitle.textContent = meta.styleTitle;
+          if (state.npcDrawerOpen) {
+            const oldList = drawer.querySelector('.agy-skill-list');
+            if (oldList) oldList.replaceWith(buildSkillItemsDom(skills, (idx) => executeSkillCast(idx)));
+          }
+        }
+      }
       refreshAllSfxButtons();
       return null;
     }
@@ -2370,7 +2408,9 @@
 
         npcSkillPill.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          const freshSkills = resolveSkillsForChar(meta.charId, meta);
+          const activeCharId = state.uiCharId || meta.charId;
+          const activeMeta = state.uiMeta || meta;
+          const freshSkills = resolveSkillsForChar(activeCharId, activeMeta);
           state.uiSkills = freshSkills;
           const oldList = drawer.querySelector('.agy-skill-list');
           if (oldList) oldList.replaceWith(buildSkillItemsDom(freshSkills, (idx) => executeSkillCast(idx)));
@@ -2403,7 +2443,9 @@
     }
     state.lastFinisherAt = now;
 
-    const requestedHero = typeof opts.charId === 'string' ? opts.charId.trim().toLowerCase() : '';
+    const requestedHeroRaw = typeof opts.charId === 'string' ? opts.charId.trim().toLowerCase() : '';
+    const mappedReqHero = MODE_TO_CHAR[requestedHeroRaw] || requestedHeroRaw;
+    const requestedHero = (CHAR_META[mappedReqHero] && CHAR_META[mappedReqHero].charId) || requestedHeroRaw;
     const hostHero = state.uiCharId || state.auraCharId || '';
     const useYoriichi =
       requestedHero === 'yoriichi' ||

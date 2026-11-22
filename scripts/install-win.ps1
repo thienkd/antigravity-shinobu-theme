@@ -43,7 +43,7 @@ if (-not $PayloadBuilt) {
     if ($PyCmd) {
         Write-Host "[install-win] Node build failed, falling back to Python builder..."
         try {
-            & $PyCmd.Source $BuildPy
+            & $PyCmd.Source -B $BuildPy
             if (($LASTEXITCODE -eq 0) -and (Test-Path -LiteralPath $PayloadJs)) {
                 $PayloadBuilt = $true
             }

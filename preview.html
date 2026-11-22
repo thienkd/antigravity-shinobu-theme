@@ -345,6 +345,17 @@
       display: block;
       margin-bottom: -8px;
     }
+    .svg-showcase-empty {
+      display: none;
+      margin: auto;
+      padding: 14px 20px;
+      border-radius: 12px;
+      border: 1px dashed rgba(148, 163, 184, 0.35);
+      background: rgba(15, 23, 42, 0.55);
+      color: #cbd5e1;
+      font-size: 13px;
+      text-align: center;
+    }
 
     /* Composer Shared */
     .composer-host {
@@ -445,16 +456,16 @@
           <button type="button" class="nav-icon-btn">←</button>
           <button type="button" class="nav-icon-btn">→</button>
           <button type="button" class="nav-icon-btn">🔍</button>
-          <span data-testid="breadcrumb-segment" id="top-breadcrumb" style="margin-left:8px; font-weight:500;">Antigravity Custom Theme v2.0 — Live Preview</span>
+          <span data-testid="breadcrumb-segment" id="top-breadcrumb" style="margin-left:8px; font-weight:500;">Antigravity Custom Theme v2.0 — Xem trước trực tiếp</span>
         </div>
         <div class="toolbar-right">
-          <button type="button" class="mode-switch-pill active" id="btn-view-welcome">1. Welcome</button>
+          <button type="button" class="mode-switch-pill active" id="btn-view-welcome">1. Màn hình chào</button>
           <button type="button" class="mode-switch-pill" id="btn-view-chat">2. Hội thoại &amp; SVG</button>
           <span class="toolbar-sep" aria-hidden="true"></span>
           <button type="button" class="quick-v2-pill" id="btn-demo-squad" title="Triệu tập 5 Đại Trụ hiệp chiến &amp; Nung đỏ Hách Đao">⚔️ Thử Quân Đoàn Cửu Trụ</button>
           <button type="button" class="quick-v2-pill" id="btn-demo-trailer" title="Diễn tự động Trailer điện ảnh 15s (Alt+Shift+C)">🎬 Trailer 15s</button>
           <button type="button" class="quick-v2-pill" id="btn-demo-shield" title="Bật/Tắt Khiên Che Mật dự án (Alt+Shift+P)">🛡️ Khiên Che Mật</button>
-          <button type="button" class="mode-switch-pill" id="btn-open-studio">🎨 Custom Theme Studio</button>
+          <button type="button" class="mode-switch-pill" id="btn-open-studio">🎨 Xưởng Giao Diện</button>
         </div>
       </div>
     </div>
@@ -463,31 +474,31 @@
     <div class="agy-main-split" data-testid="sidebar-split">
       <!-- Left Sidebar -->
       <aside class="bg-sidebar" data-sidebar="true">
-        <button type="button" class="agy-button-custom border border-border" id="sidebar-new-conv">+ New Conversation</button>
-        <button type="button" class="sidebar-nav-row group/headerbtn"><span>🕒</span><span>Automations</span></button>
+        <button type="button" class="agy-button-custom border border-border" id="sidebar-new-conv">+ Cuộc trò chuyện mới</button>
+        <button type="button" class="sidebar-nav-row group/headerbtn"><span>🕒</span><span>Tự động hóa</span></button>
         <button type="button" class="sidebar-nav-row group/headerbtn"><span>🧰</span><span>Customizations</span></button>
 
         <div class="sidebar-section-label">
-          <span>Projects</span>
+          <span>Dự án</span>
           <span>▾</span>
         </div>
         <div class="sidebar-conv-list overflow-y-auto">
-          <div style="padding: 4px 10px; font-size: 12px; color: #e2e8f0; font-weight: 600;">📁 workspace</div>
+          <div style="padding: 4px 10px; font-size: 12px; color: #e2e8f0; font-weight: 600;">📁 Không gian làm việc</div>
           <a class="conv-item" id="conv-link-npc">
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Thêm NPC Chibi Vào Hội Thoại</span>
-            <span class="conv-time">1m</span>
+            <span class="conv-time">1p</span>
           </a>
           <a class="conv-item">
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Anime Live Wallpaper Theme</span>
-            <span class="conv-time">1h</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Hình Nền Động Anime 4K</span>
+            <span class="conv-time">1g</span>
           </a>
           <a class="conv-item">
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Shinobu Wisteria Custom UI</span>
-            <span class="conv-time">2d</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Giao diện Trùng Trụ Shinobu Tùy Chỉnh</span>
+            <span class="conv-time">2n</span>
           </a>
         </div>
         <button type="button" class="sidebar-nav-row" id="sidebar-settings-btn" style="margin-top:auto;">
-          <span>⚙️</span><span>Settings</span>
+          <span>⚙️</span><span>Cài đặt</span>
         </button>
       </aside>
 
@@ -497,24 +508,24 @@
         <div id="welcome-view">
           <div style="height: 20px;"></div>
           <div class="welcome-hero">
-            <h1 id="welcome-heading">Welcome back! Where should we pick up?</h1>
+            <h1 id="welcome-heading">Chào mừng trở lại! Hôm nay chúng ta triển khai gì nào?</h1>
           </div>
 
           <div class="composer-host" id="composer-slot-welcome">
             <div class="surface-composer" id="shared-composer">
               <div class="composer-top-strip" id="composer-project-strip">
                 <button type="button" class="composer-pill-btn" data-testid="project-selector-trigger">📁 antigravity-studio ▾</button>
-                <button type="button" class="composer-pill-btn" aria-label="Select Environment">💻 Local Checkout ▾</button>
+                <button type="button" class="composer-pill-btn" aria-label="Select Environment">💻 Môi trường cục bộ ▾</button>
               </div>
               <div class="surface-composer-card">
-                <textarea class="composer-textarea" rows="1" id="main-prompt-input" placeholder="Ask anything, @ to mention, / for actions"></textarea>
+                <textarea class="composer-textarea" rows="1" id="main-prompt-input" placeholder="Hỏi bất cứ điều gì, @ để nhắc tới, / để mở lệnh nhanh"></textarea>
                 <div class="composer-bottom-bar">
                   <div class="composer-bottom-left">
                     <span>＋</span>
-                    <span>Gemini 4 Carbon (Medium) ▾</span>
+                    <span>Gemini 4 Carbon (Trung bình) ▾</span>
                   </div>
                   <div class="composer-bottom-right">
-                    <span>🛡️ Turbo ▾</span>
+                    <span>🛡️ Tăng tốc ▾</span>
                     <span>🎤</span>
                     <button type="button" class="send-circle" id="main-send-btn" title="Gửi thử tin nhắn">↑</button>
                   </div>
@@ -537,7 +548,7 @@
               </div>
 
               <div data-testid="agent-response">
-                <div style="font-size:12px; color:#a78bfa; margin-bottom:6px;">Worked for 4m ▸</div>
+                <div style="font-size:12px; color:#a78bfa; margin-bottom:6px;">Đã xử lý trong 4 phút ▸</div>
                 <p style="margin:0 0 8px 0; line-height:1.55;">
                   Đã thêm <strong>NPC Chibi Shinobu Kocho</strong> (<span class="code-chip">shinobu_ornament.svg</span>) ngồi tựa hai bàn tay lên góc phải viền khung hội thoại (<span class="code-chip">stickerW: 135</span>, <span class="code-chip">stickerH: 66</span>, <span class="code-chip">stickerTop: -58</span>, <span class="code-chip">stickerRight: 10</span>) và bật hệ thống tương tác &amp; chat 2 chiều!
                 </p>
@@ -567,8 +578,9 @@
               skills &rsaquo; antigravity-custom-theme &rsaquo; themes &rsaquo; assets &rsaquo; <strong style="color:#f8fafc;" id="showcase-breadcrumb-file">shinobu_ornament.svg</strong>
             </div>
             <div class="svg-showcase">
-              <span class="svg-showcase-hint" id="showcase-hint-label">Bản xem trước cận cảnh Vector &amp; Chibi Animation (180×88)</span>
-              <img id="showcase-svg-img" src="./themes/assets/shinobu_ornament.svg" alt="Chibi Shinobu Kocho Ornament SVG" />
+              <span class="svg-showcase-hint" id="showcase-hint-label">Bản xem trước cận cảnh Vector &amp; Chibi (180×88)</span>
+              <div id="showcase-empty-note" class="svg-showcase-empty">Chế độ tối giản — Không sử dụng Ornament SVG</div>
+              <img id="showcase-svg-img" src="./themes/assets/shinobu_ornament.svg" alt="Họa tiết Chibi Shinobu Kocho SVG" />
             </div>
           </div>
         </div>
@@ -592,8 +604,7 @@
           'width: calc(100% - 32px)',
           'padding: 14px 20px',
           'border-radius: 14px',
-          'background: rgba(18, 12, 36, 0.88)',
-          'backdrop-filter: blur(14px)',
+          'background: rgba(14, 10, 30, 0.96)',
           'border: 1px solid rgba(250, 204, 21, 0.55)',
           'box-shadow: 0 16px 40px rgba(0, 0, 0, 0.72), 0 0 24px rgba(192, 132, 252, 0.25)',
           'color: #f8fafc',
@@ -640,15 +651,224 @@
       const showcaseTabPill = document.getElementById('showcase-tab-pill');
       const showcaseBreadcrumbFile = document.getElementById('showcase-breadcrumb-file');
       const showcaseHintLabel = document.getElementById('showcase-hint-label');
+      const showcaseEmptyNote = document.getElementById('showcase-empty-note');
       const showcaseImg = document.getElementById('showcase-svg-img');
 
       let currentMode = 'welcome';
+
+      function isSafePreviewImageUrl(u) {
+        if (typeof u !== 'string') return false;
+        const t = u.trim();
+        if (!t || /["'()\\\r\n\0<>`{}]/.test(t)) return false;
+        if (/^(?:\.\/)?(?:themes\/)?assets\/[A-Za-z0-9._~/-]+(?:\?v=[A-Za-z0-9_~-]+)?$/i.test(t)) {
+          return !t.includes('..');
+        }
+        if (/^https?:\/\/127\.0\.0\.1:\d+\/assets\/[A-Za-z0-9._~/-]+(?:\?v=[A-Za-z0-9_~-]+)?$/i.test(t)) {
+          return !t.includes('..');
+        }
+        if (/^data:image\/(?:png|jpeg|jpg|webp|gif|svg\+xml)(?:;charset=[A-Za-z0-9_-]+|;utf8)?(?:;base64)?,[A-Za-z0-9+/=%.,_~-]+$/i.test(t)) {
+          if (/^data:image\/svg\+xml/i.test(t)) {
+            const sec = window.__AGY_SEC__;
+            if (sec && typeof sec.sanitizeCssUrl === 'function') {
+              return Boolean(sec.sanitizeCssUrl(t));
+            }
+            // Defense-in-depth khi thiếu __AGY_SEC__ (tối đa 2 vòng giải mã + kiểm tra compact & thẻ/CSS/SMIL)
+            try {
+              const commaIdx = t.indexOf(',');
+              const header = t.slice(0, commaIdx + 1);
+              const body = t.slice(commaIdx + 1);
+              let decoded = '';
+              if (/;base64,/i.test(header)) {
+                const bin = atob(body.replace(/\s+/g, ''));
+                try {
+                  const pct = Array.from(bin).map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+                  decoded = decodeURIComponent(pct);
+                } catch (_) {
+                  decoded = bin;
+                }
+              } else {
+                decoded = decodeURIComponent(body);
+                if (/%[0-9a-f]{2}/i.test(decoded)) {
+                  try { decoded = decodeURIComponent(decoded); } catch (_) {}
+                }
+              }
+              const decodeEnt = (rawStr) => {
+                let cur = String(rawStr || '');
+                for (let pass = 0; pass < 2; pass++) {
+                  const next = cur
+                    .replace(/&#x([0-9a-f]+);?/gi, (_, h) => {
+                      const cp = parseInt(h, 16);
+                      return Number.isFinite(cp) && cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : '';
+                    })
+                    .replace(/&#([0-9]+);?/g, (_, d) => {
+                      const cp = parseInt(d, 10);
+                      return Number.isFinite(cp) && cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : '';
+                    })
+                    .replace(/&(lt|gt|quot|apos|amp|colon|tab|newline);/gi, (_, name) => ({
+                      lt: '<', gt: '>', quot: '"', apos: "'", amp: '&', colon: ':', tab: '\t', newline: '\n'
+                    }[name.toLowerCase()] || ''));
+                  if (next === cur) break;
+                  cur = next;
+                }
+                return cur;
+              };
+              const stripSafeXmlComments = (xmlStr) => {
+                let out = '';
+                let i = 0;
+                let inTag = false;
+                let inQuote = '';
+                const len = xmlStr.length;
+                while (i < len) {
+                  if (!inTag) {
+                    if (xmlStr.startsWith('<!--', i)) {
+                      const endIdx = xmlStr.indexOf('-->', i + 4);
+                      if (endIdx === -1) return null;
+                      i = endIdx + 3;
+                      continue;
+                    }
+                    if (xmlStr.startsWith('<![CDATA[', i) || xmlStr.startsWith('<?', i)) {
+                      const isPi = xmlStr.startsWith('<?', i);
+                      const endToken = isPi ? '?>' : ']]>';
+                      const endIdx = xmlStr.indexOf(endToken, i + (isPi ? 2 : 9));
+                      if (endIdx === -1) return null;
+                      out += xmlStr.slice(i, endIdx + endToken.length);
+                      i = endIdx + endToken.length;
+                      continue;
+                    }
+                    if (xmlStr[i] === '<') {
+                      const styleOpenMatch = xmlStr.slice(i).match(/^<\s*(?:[^\s:<>"'/=]+:)?style\b/i);
+                      if (styleOpenMatch) {
+                        let gt = -1;
+                        let sq = '';
+                        for (let j = i + styleOpenMatch[0].length; j < len; j++) {
+                          const ch = xmlStr[j];
+                          if (ch === '<') { gt = -1; break; }
+                          if (sq) { if (ch === sq) sq = ''; continue; }
+                          if (ch === '"' || ch === "'") sq = ch;
+                          else if (ch === '>') { gt = j; break; }
+                        }
+                        if (gt === -1) return null;
+                        const tagRaw = xmlStr.slice(i, gt + 1);
+                        out += tagRaw;
+                        i = gt + 1;
+                        if (!/\/\s*>$/.test(tagRaw)) {
+                          const nameMatch = tagRaw.slice(1).match(/^\s*([^\s<>"'/=]+)/);
+                          if (!nameMatch) return null;
+                          const closeRe = new RegExp('<\\/\\s*' + nameMatch[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*>', 'i');
+                          const rest = xmlStr.slice(i);
+                          const cm = closeRe.exec(rest);
+                          if (!cm) return null;
+                          const styleInner = rest.slice(0, cm.index);
+                          if (/<!--|-->/.test(styleInner)) return null;
+                          out += rest.slice(0, cm.index + cm[0].length);
+                          i += cm.index + cm[0].length;
+                        }
+                        continue;
+                      }
+                      inTag = true;
+                      out += '<';
+                      i++;
+                      continue;
+                    }
+                    out += xmlStr[i];
+                    i++;
+                  } else {
+                    const ch = xmlStr[i];
+                    if (inQuote) {
+                      if (ch === inQuote) inQuote = '';
+                      out += ch;
+                      i++;
+                    } else {
+                      if (ch === '"' || ch === "'") {
+                        inQuote = ch;
+                        out += ch;
+                        i++;
+                      } else if (ch === '<') {
+                        return null;
+                      } else if (ch === '>') {
+                        inTag = false;
+                        out += ch;
+                        i++;
+                      } else {
+                        out += ch;
+                        i++;
+                      }
+                    }
+                  }
+                }
+                return (inTag || inQuote) ? null : out;
+              };
+              const entDecoded = decodeEnt(decoded);
+              const checks = entDecoded === decoded ? [decoded] : [decoded, entDecoded];
+              const isSafeFragment = (val) => /^#[A-Za-z_][A-Za-z0-9_.:-]*$/.test(String(val || '').replace(/[\s\x00-\x1f\x7f]+/g, ''));
+              for (const rawS of checks) {
+                const s = stripSafeXmlComments(rawS);
+                if (s === null) return false;
+                const compact = s.replace(/[\s\x00-\x1f\x7f]+/g, '');
+                if (/<!--|-->|\/\*|\*\/|[\\\0]/.test(s)) return false;
+                if (/<!(?:DOCTYPE|ENTITY|ELEMENT|ATTLIST|\[CDATA\[)/i.test(s) || /<!(?:DOCTYPE|ENTITY|ELEMENT|ATTLIST|\[CDATA\[)/i.test(compact)) {
+                  return false;
+                }
+                if (/<\?(?!xml(?:\s|$))/i.test(s)) return false;
+                if (/<\s*(?:[^\s:<>"'/=]+:)?(?:script|foreignobject|iframe|object|embed|audio|video|canvas|set|animate(?:motion|transform|color)?|handler|listener|link|meta|base)\b/i.test(s)) {
+                  return false;
+                }
+                if (/(?:^|[\s/"'])(?:[^\s:<>"'/=]+:)?(?:on[a-z0-9_-]+|attributename|formaction|action|poster|background|srcdoc)\s*=/i.test(s.replace(/[\x00-\x1f\x7f]+/g, ' '))) {
+                  return false;
+                }
+                if (
+                  /@import|@charset|@namespace|expression\s*\(|(?:-\w+-)?image-set\s*\(|cross-fade\s*\(|(?:-\w+-)?element\s*\(|\bimage\s*\(|behavior\s*:|-moz-binding/i.test(s) ||
+                  /@import|@charset|@namespace|expression\(|(?:-\w+-)?image-set\(|cross-fade\(|(?:-\w+-)?element\(|\bimage\(|behavior:|-moz-binding/i.test(compact)
+                ) {
+                  return false;
+                }
+                if (/javascript:|vbscript:|data:text\/html|data:image\/svg\+xml/i.test(compact)) {
+                  return false;
+                }
+                const urlMatches = s.matchAll(/url\s*\(([^)]*)\)/gi);
+                for (const um of urlMatches) {
+                  let inner = String(um[1] || '').trim();
+                  if ((inner.startsWith('"') && inner.endsWith('"')) || (inner.startsWith("'") && inner.endsWith("'"))) {
+                    inner = inner.slice(1, -1).trim();
+                  }
+                  if (!isSafeFragment(inner)) return false;
+                }
+                if (/url\s*\(/i.test(s.replace(/url\s*\(([^)]*)\)/gi, ''))) return false;
+                const refTags = s.matchAll(/<\s*(?:[^\s:<>"'/=]+:)?([^\s:<>"'/=!?][^\s:<>"'/=]*)((?:[\s/](?:[^>"']|"[^"]*"|'[^']*')*)?)/gi);
+                for (const tm of refTags) {
+                  const tagName = tm[1].toLowerCase();
+                  const attrs = tm[2] || '';
+                  if (!attrs) continue;
+                  const hrefMatches = attrs.matchAll(/(?:^|[\s/"'])(?:[^\s:<>"'/=]+:)?(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi);
+                  for (const hm of hrefMatches) {
+                    const hrefVal = String(hm[1] !== undefined ? hm[1] : (hm[2] !== undefined ? hm[2] : (hm[3] || ''))).trim();
+                    const hrefCompact = hrefVal.replace(/[\s\x00-\x1f\x7f]+/g, '');
+                    if (tagName === 'image' || tagName === 'feimage') {
+                      if (!isSafeFragment(hrefCompact) && !/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(hrefCompact)) {
+                        return false;
+                      }
+                    } else if (!isSafeFragment(hrefCompact)) {
+                      return false;
+                    }
+                  }
+                }
+              }
+              if (!/<\s*(?:[^\s:<>"'/=]+:)?svg\b/i.test(decoded)) return false;
+            } catch (_) {
+              return false;
+            }
+          }
+          return true;
+        }
+        return false;
+      }
 
       function extractCssRuleUrl(cssText, selectorPattern) {
         if (!cssText) return '';
         const re = new RegExp(selectorPattern + '\\s*\\{[^}]*?background-image:\\s*url\\(["\']?([^"\')]+)["\']?\\)', 'i');
         const m = cssText.match(re);
-        return (m && m[1]) ? m[1].trim() : '';
+        const candidate = (m && m[1]) ? m[1].trim() : '';
+        return isSafePreviewImageUrl(candidate) ? candidate : '';
       }
 
       function getActiveThemeLabel() {
@@ -663,7 +883,13 @@
           const saved = localStorage.getItem('agy_theme_v3');
           if (saved) return saved;
         } catch (_) {}
-        return 'Shinobu Wisteria';
+        if (core && typeof core.getThemeKeys === 'function') {
+          try {
+            const keys = core.getThemeKeys();
+            if (Array.isArray(keys) && keys[0]) return keys[0];
+          } catch (_) {}
+        }
+        return '👑 Gia Đình Chúa Công (Ubuyashiki)';
       }
 
       function syncDynamicOrnamentShowcase() {
@@ -675,7 +901,27 @@
         const bubbleSticker = extractCssRuleUrl(cssText, '\\.agy-user-bubble-frame::before');
         const cornerSvg = extractCssRuleUrl(cssText, '\\.surface-composer::after');
 
-        const chosenUrl = composerSticker || bubbleSticker || cornerSvg || './themes/assets/shinobu_ornament.svg';
+        const hasActiveEngineStyle = Boolean(styleEl);
+        const rawChosen = composerSticker || bubbleSticker || cornerSvg;
+        if (hasActiveEngineStyle && !rawChosen) {
+          if (showcaseImg) {
+            showcaseImg.style.display = 'none';
+            showcaseImg.removeAttribute('src');
+            showcaseImg.alt = themeName + ' — Không sử dụng Ornament SVG';
+          }
+          if (showcaseEmptyNote) showcaseEmptyNote.style.display = 'block';
+          if (showcaseTabPill) showcaseTabPill.textContent = '✨ Tối giản (Không Ornament)';
+          if (showcaseBreadcrumbFile) showcaseBreadcrumbFile.textContent = 'không-ornament';
+          if (showcaseHintLabel) {
+            showcaseHintLabel.textContent = themeName + ' — Chế độ tối giản không dùng Ornament SVG';
+          }
+          if (currentMode === 'welcome' && breadcrumb) {
+            breadcrumb.textContent = themeName + ' — Xem trước trực tiếp v2.0';
+          }
+          return;
+        }
+
+        const chosenUrl = rawChosen || './themes/assets/shinobu_ornament.svg';
         const isCornerOnly = !composerSticker && !bubbleSticker && Boolean(cornerSvg);
 
         let assetFile = 'theme_ornament.svg';
@@ -692,10 +938,12 @@
           assetFile = parts[parts.length - 1] || 'shinobu_ornament.svg';
         }
 
-        if (showcaseImg && showcaseImg.getAttribute('src') !== chosenUrl) {
-          showcaseImg.setAttribute('src', chosenUrl);
-        }
+        if (showcaseEmptyNote) showcaseEmptyNote.style.display = 'none';
         if (showcaseImg) {
+          showcaseImg.style.display = 'block';
+          if (showcaseImg.getAttribute('src') !== chosenUrl) {
+            showcaseImg.setAttribute('src', chosenUrl);
+          }
           showcaseImg.alt = themeName + ' — ' + assetFile;
           if (isCornerOnly) {
             showcaseImg.style.width = 'min(52%, 220px)';
@@ -713,11 +961,11 @@
         }
         if (showcaseHintLabel) {
           showcaseHintLabel.textContent = isCornerOnly
-            ? (themeName + ' — Hoa văn Góc Khung (Corner Filigree SVG)')
-            : (themeName + ' — Vector & Chibi Ornament Showcase');
+            ? (themeName + ' — Hoa văn Góc Khung SVG')
+            : (themeName + ' — Trưng bày Vector & Chibi Ornament');
         }
         if (currentMode === 'welcome' && breadcrumb) {
-          breadcrumb.textContent = themeName + ' — Live Preview v2.0';
+          breadcrumb.textContent = themeName + ' — Xem trước trực tiếp v2.0';
         }
       }
 
@@ -729,7 +977,9 @@
         if (nextMode === 'chat') {
           welcomeView.style.display = 'none';
           chatView.style.display = 'flex';
-          projStrip.style.display = 'none';
+          if (projStrip && projStrip.parentElement === composer) {
+            projStrip.remove();
+          }
           if (composer.parentElement !== slotChat) {
             slotChat.appendChild(composer);
           }
@@ -737,21 +987,36 @@
           btnChat.classList.add('active');
           convLink.classList.add('active');
           breadcrumb.textContent = 'antigravity-studio / Khai Mở Vũ Điệu Hỏa Thần';
+          if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => {
+              if (chatList) chatList.scrollTop = chatList.scrollHeight;
+            });
+          } else if (chatList) {
+            chatList.scrollTop = chatList.scrollHeight;
+          }
         } else {
           chatView.style.display = 'none';
           welcomeView.style.display = 'flex';
-          projStrip.style.display = 'flex';
+          if (projStrip && projStrip.parentElement !== composer) {
+            composer.insertBefore(projStrip, composer.firstChild);
+          }
+          if (projStrip) projStrip.style.display = 'flex';
           if (composer.parentElement !== slotWelcome) {
             slotWelcome.appendChild(composer);
           }
           btnChat.classList.remove('active');
           btnWelcome.classList.add('active');
           convLink.classList.remove('active');
-          breadcrumb.textContent = getActiveThemeLabel() + ' — Live Preview v2.0';
+          breadcrumb.textContent = getActiveThemeLabel() + ' — Xem trước trực tiếp v2.0';
         }
 
         if (!skipReapply && modeChanged && window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__) {
-          window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__();
+          window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__({}, { skipSaveDisk: true });
+        }
+        if (modeChanged && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof Event === 'function') {
+          setTimeout(() => {
+            try { window.dispatchEvent(new Event('resize')); } catch (_) {}
+          }, 0);
         }
         syncDynamicOrnamentShowcase();
       }
@@ -771,16 +1036,37 @@
 
       // Quick v2.0 Experience Toolbar Handlers
       let squadHeatResetTimer = 0;
+      let demoWorking = false;
+      let demoWorkTimer = 0;
+      let demoMidHeatTimer = 0;
+      let demoCoolTimer = 0;
+      let demoPendingRespEl = null;
+      let demoTurnSeq = 1;
+      let demoSlashSeq = 0;
+      let demoStepIdx = 2;
+      let demoCtxTokens = 14800;
+
       if (btnSquad) {
         btnSquad.addEventListener('click', () => {
           if (window.__AGY_SQUAD_RAID__ && typeof window.__AGY_SQUAD_RAID__.simulateRaid === 'function') {
-            window.__AGY_SQUAD_RAID__.simulateRaid({ count: 5, durationMs: 6200 });
+            window.__AGY_SQUAD_RAID__.simulateRaid({
+              count: 5,
+              durationMs: 6200,
+              subagents: [
+                { cid: 'sim-preview-h1', isSim: true, typeName: 'research', role: 'Trùng Trụ kiểm toán bảo mật', lastTool: 'Quét CWE-79', stepCount: 3 },
+                { cid: 'sim-preview-h2', isSim: true, typeName: 'implementer', role: 'Viêm Trụ tối ưu hiệu năng', lastTool: 'Rèn bảng màu OKLCH', stepCount: 4 },
+                { cid: 'sim-preview-h3', isSim: true, typeName: 'reviewer', role: 'Thủy Trụ kiểm tra vòng đời', lastTool: 'Xác minh DOM', stepCount: 2 },
+                { cid: 'sim-preview-h4', isSim: true, typeName: 'qa', role: 'Lôi Trụ chạy kiểm thử nhanh', lastTool: 'Kiểm tra Parity', stepCount: 5 },
+                { cid: 'sim-preview-h5', isSim: true, typeName: 'architect', role: 'Hà Trụ đồng bộ đa cửa sổ', lastTool: 'Cân bằng GPU', stepCount: 3 }
+              ]
+            });
           }
           if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
             clearTimeout(squadHeatResetTimer);
             window.__AGY_TOKEN_HUD__.setBladeBonusHeat(96);
             squadHeatResetTimer = setTimeout(() => {
-              if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
+              squadHeatResetTimer = 0;
+              if (!demoWorking && window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
                 window.__AGY_TOKEN_HUD__.setBladeBonusHeat(0);
               }
             }, 6400);
@@ -824,19 +1110,66 @@
       }
 
       // Observe <head> & <html> so theme changes & Privacy Shield toggles sync immediately
+      let headObs = null;
+      let rootObs = null;
       if (typeof MutationObserver !== 'undefined') {
-        const headObs = new MutationObserver(() => syncDynamicOrnamentShowcase());
+        headObs = new MutationObserver(() => syncDynamicOrnamentShowcase());
         if (document.head) {
           headObs.observe(document.head, { childList: true, subtree: true, characterData: true });
         }
-        const rootObs = new MutationObserver(() => syncHeaderQuickStates());
+        rootObs = new MutationObserver(() => syncHeaderQuickStates());
         rootObs.observe(document.documentElement, {
           attributes: true,
           attributeFilter: ['data-agy-privacy-shield']
         });
       }
+      let quickSyncTimer = 0;
+      const startQuickSyncInterval = () => {
+        if (quickSyncTimer || document.hidden) return;
+        quickSyncTimer = setInterval(syncHeaderQuickStates, 800);
+      };
+      const stopQuickSyncInterval = () => {
+        if (quickSyncTimer) {
+          clearInterval(quickSyncTimer);
+          quickSyncTimer = 0;
+        }
+      };
+      const onVisibilityChange = () => {
+        if (document.hidden) {
+          stopQuickSyncInterval();
+        } else {
+          syncHeaderQuickStates();
+          startQuickSyncInterval();
+        }
+      };
+      const cleanupPreviewLifecycle = () => {
+        stopQuickSyncInterval();
+        clearTimeout(squadHeatResetTimer);
+        clearTimeout(demoWorkTimer);
+        clearTimeout(demoMidHeatTimer);
+        clearTimeout(demoCoolTimer);
+        squadHeatResetTimer = 0;
+        demoWorkTimer = 0;
+        demoMidHeatTimer = 0;
+        demoCoolTimer = 0;
+        if (headObs) {
+          try { headObs.disconnect(); } catch (_) {}
+          headObs = null;
+        }
+        if (rootObs) {
+          try { rootObs.disconnect(); } catch (_) {}
+          rootObs = null;
+        }
+        window.removeEventListener('storage', syncDynamicOrnamentShowcase);
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+        window.removeEventListener('pagehide', cleanupPreviewLifecycle);
+        window.removeEventListener('beforeunload', cleanupPreviewLifecycle);
+      };
       window.addEventListener('storage', syncDynamicOrnamentShowcase);
-      setInterval(syncHeaderQuickStates, 800);
+      document.addEventListener('visibilitychange', onVisibilityChange);
+      window.addEventListener('pagehide', cleanupPreviewLifecycle);
+      window.addEventListener('beforeunload', cleanupPreviewLifecycle);
+      startQuickSyncInterval();
       syncDynamicOrnamentShowcase();
       syncHeaderQuickStates();
 
@@ -844,15 +1177,6 @@
       const promptInput = document.getElementById('main-prompt-input');
       const sendBtn = document.getElementById('main-send-btn');
       const chatList = document.getElementById('demo-chat-list');
-
-      let demoWorking = false;
-      let demoWorkTimer = 0;
-      let demoMidHeatTimer = 0;
-      let demoCoolTimer = 0;
-      let demoPendingRespEl = null;
-      let demoTurnSeq = 1;
-      let demoStepIdx = 2;
-      let demoCtxTokens = 14800;
 
       function emitDemoTelemetry(isWorkingNow, finishedNow) {
         if (finishedNow) {
@@ -862,10 +1186,13 @@
         demoStepIdx += 1;
         const snap = {
           ok: true,
+          cid: 'preview-local',
+          modelName: 'Gemini 4 Carbon (Preview)',
           isWorking: Boolean(isWorkingNow),
           turnFinishedSeq: demoTurnSeq,
-          slashSeq: 0,
-          contextUsed: demoCtxTokens,
+          slashSeq: demoSlashSeq,
+          contextTokens: demoCtxTokens,
+          inputTokens: demoCtxTokens,
           turnTokens: isWorkingNow ? 96 : 390,
           totalOutputTokens: demoTurnSeq * 390,
           turnCount: demoTurnSeq,
@@ -897,7 +1224,7 @@
           demoPendingRespEl.textContent = '';
           const meta = document.createElement('div');
           meta.style.cssText = 'font-size:12px; color:#a78bfa; margin-bottom:6px;';
-          meta.textContent = aborted ? 'Đã dừng suy luận ▸' : 'Worked for 1.4s • Hách Đao hoàn tất ▸';
+          meta.textContent = aborted ? 'Đã dừng suy luận ▸' : 'Đã xử lý trong 1.4s • Hách Đao hoàn tất ▸';
 
           const p = document.createElement('p');
           p.style.cssText = 'margin:0; line-height:1.55; color:#f1f5f9;';
@@ -957,7 +1284,7 @@
         if (currentMode !== 'chat') {
           setMode('chat', false);
         } else if (window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__) {
-          window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__();
+          window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__({}, { skipSaveDisk: true });
         }
         chatList.scrollTop = chatList.scrollHeight;
 
@@ -967,7 +1294,7 @@
         sendBtn.setAttribute('data-testid', 'input-cancel-button');
         sendBtn.setAttribute('aria-label', 'Stop execution');
         sendBtn.textContent = '■';
-        sendBtn.title = 'Dừng thực thi (Stop execution)';
+        sendBtn.title = 'Dừng thực thi';
 
         emitDemoTelemetry(true, false);
         if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {

@@ -10,9 +10,10 @@
 
   const SEC = (typeof __AGY_SEC__ === 'object' && __AGY_SEC__) ? __AGY_SEC__ : {
     escapeHtml: (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
+    isDangerousKey: (k) => ['__proto__', 'constructor', 'prototype', 'toString', 'valueOf', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable', 'toLocaleString', '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__'].includes(String(k || '').trim()),
     stripProtoKeys: (o) => o,
     sanitizeCssUrl: (u) => (typeof u === 'string' && !/["'()\\;\r\n\0<>`{}]/.test(u) ? u.trim() : ''),
-    sanitizeCssValue: (v, fb = '') => (typeof v === 'string' && !/[;{}<>\\`\r\n\0]/.test(v) ? v.trim() : fb),
+    sanitizeCssValue: (v, fb = '') => (typeof v === 'number' && Number.isFinite(v) ? String(v) : (typeof v === 'string' && v.trim() && v.trim().length <= 260 && !/["';{}<>\\`\x00-\x1f\x7f]|\/\*|\*\/|@import|@charset|@namespace|expression\s*\(|url\s*\(|image-set\s*\(|javascript:|vbscript:|behavior\s*:|-moz-binding/i.test(v.trim()) ? v.trim() : fb)),
     sanitizeSvgMarkup: (s) => (typeof s === 'string' && !/<script|<foreignobject|\bon[a-z]+\s*=/i.test(s) ? s.trim() : ''),
     sanitizeThemeDefinition: (t) => t,
     resolveAssetUrl: (u) => (typeof u === 'string' ? u.trim() : ''),
@@ -26,23 +27,56 @@
   const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
   const ALLOWED_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
+  const DANGEROUS_THEME_NAMES = new Set([
+    '__proto__', 'constructor', 'prototype',
+    'toString', 'valueOf', 'hasOwnProperty', 'isPrototypeOf',
+    'propertyIsEnumerable', 'toLocaleString',
+    '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__'
+  ]);
+
+  function isSafeThemeName(name) {
+    if (typeof name !== 'string') return false;
+    const trimmed = name.trim();
+    if (!trimmed || DANGEROUS_THEME_NAMES.has(trimmed)) return false;
+    if (typeof SEC.isDangerousKey === 'function' && SEC.isDangerousKey(trimmed)) return false;
+    return true;
+  }
+
+  function finiteNumOr(val, fallback) {
+    if (val === undefined || val === null || val === '' || typeof val === 'boolean') return fallback;
+    const n = Number(val);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function hasOwn(obj, key) {
+    return Boolean(obj && Object.prototype.hasOwnProperty.call(obj, key));
+  }
+
+  function isDangerousSettingKey(key) {
+    if (typeof key !== 'string') return true;
+    const trimmed = key.trim();
+    if (!trimmed || DANGEROUS_THEME_NAMES.has(trimmed)) return true;
+    if (typeof SEC.isDangerousKey === 'function' && SEC.isDangerousKey(trimmed)) return true;
+    return false;
+  }
+
   const FX_MODE_OPTIONS = [
-    { value: 'sun', label: '☀️ Nhật Chi Hô Hấp (Sun)' },
-    { value: 'moon', label: '🌙 Nguyệt Tử Linh (Moon)' },
-    { value: 'flame', label: '🔥 Viêm Nhiệt Lưu (Flame)' },
-    { value: 'thunder', label: '⚡ Lôi Điện Thiểm (Thunder)' },
-    { value: 'water', label: '🌊 Tĩnh Thủy Lưu (Water)' },
-    { value: 'mist', label: '🌫️ Hà Vân Vô Cực (Mist)' },
-    { value: 'wisteria', label: '🦋 Tử Đằng Nguyệt Dạ (Wisteria)' },
-    { value: 'royal_wisteria', label: '👑 Dinh Thự Hoàng Kim (Royal)' },
-    { value: 'wind', label: '🌪️ Cuồng Phong Trảm (Wind)' },
-    { value: 'sound', label: '🎵 Kim Tuyến Hào Nhoáng (Sound)' },
-    { value: 'love', label: '🌸 Anh Đào Luyến Khúc (Love)' },
-    { value: 'serpent', label: '🐍 U Xà Tinh Thể (Serpent)' },
-    { value: 'stone', label: '📿 Nham Thạch Minh Đăng (Stone)' },
-    { value: 'nezuko', label: '🎋 Huyết Quỷ Hoa Lửa (Nezuko)' },
-    { value: 'sun_water', label: '🎴 Hỏa Thần & Thủy Lưu (Dual)' },
-    { value: 'beast', label: '🐗 Sơn Lâm Dã Thú (Beast)' }
+    { value: 'sun', label: '☀️ Nhật Chi Hô Hấp' },
+    { value: 'moon', label: '🌙 Nguyệt Tử Linh' },
+    { value: 'flame', label: '🔥 Viêm Nhiệt Lưu' },
+    { value: 'thunder', label: '⚡ Lôi Điện Thiểm' },
+    { value: 'water', label: '🌊 Tĩnh Thủy Lưu' },
+    { value: 'mist', label: '🌫️ Hà Vân Vô Cực' },
+    { value: 'wisteria', label: '🦋 Tử Đằng Nguyệt Dạ' },
+    { value: 'royal_wisteria', label: '👑 Dinh Thự Hoàng Kim' },
+    { value: 'wind', label: '🌪️ Cuồng Phong Trảm' },
+    { value: 'sound', label: '🎵 Kim Tuyến Hào Nhoáng' },
+    { value: 'love', label: '🌸 Anh Đào Luyến Khúc' },
+    { value: 'serpent', label: '🐍 U Xà Tinh Thể' },
+    { value: 'stone', label: '📿 Nham Thạch Minh Đăng' },
+    { value: 'nezuko', label: '🎋 Huyết Quỷ Hoa Lửa' },
+    { value: 'sun_water', label: '🎴 Hỏa Thần & Thủy Lưu' },
+    { value: 'beast', label: '🐗 Sơn Lâm Dã Thú' }
   ];
 
   function strictPercentEncodeSvg(str) {
@@ -211,7 +245,7 @@
     },
     {
       id: 'shadow_monarch',
-      label: '🌌 Đế Vương Bóng Tối — Shadow Monarch',
+      label: '🌌 Đế Vương Bóng Tối — Ảnh Quân Vương',
       shortLabel: '🌌 Đế Vương Bóng Tối',
       tagLabel: 'Đế Vương Bóng Tối (Anh)',
       group: 'multiverse',
@@ -225,7 +259,7 @@
     },
     {
       id: 'six_eyes',
-      label: '♾️ Lục Nhãn Vô Hạ Hạn — Six Eyes',
+      label: '♾️ Lục Nhãn Vô Hạ Hạn — Vô Cực',
       shortLabel: '♾️ Lục Nhãn Vô Hạ Hạn',
       tagLabel: 'Chủ Nhân Lục Nhãn (Anh)',
       group: 'multiverse',
@@ -239,7 +273,7 @@
     },
     {
       id: 'great_sage',
-      label: '🔥 Tề Thiên Đại Thánh — Great Sage',
+      label: '🔥 Tề Thiên Đại Thánh — Hỏa Nhãn',
       shortLabel: '🔥 Tề Thiên Đại Thánh',
       tagLabel: 'Tề Thiên Đại Thánh (Anh)',
       group: 'multiverse',
@@ -264,7 +298,7 @@
     { id: 'tanjiro', label: '🎴 Hỏa Thần — Tanjiro Kamado', shortLabel: '🎴 Tanjiro', tagLabel: 'Kiếm Sĩ Tanjiro', group: 'kny', skillId: 'sun_water', ringColor: '#fb923c', glowColor: 'rgba(45, 212, 191, 0.5)' },
     { id: 'nezuko', label: '🎋 Huyết Quỷ — Nezuko Kamado', shortLabel: '🎋 Nezuko', tagLabel: 'Huyết Quỷ Nezuko', group: 'kny', skillId: 'nezuko', ringColor: '#fb7185', glowColor: 'rgba(244, 114, 182, 0.5)' },
     { id: 'zenitsu', label: '⚡ Lôi Minh — Zenitsu Agatsuma', shortLabel: '⚡ Zenitsu', tagLabel: 'Kiếm Sĩ Zenitsu', group: 'kny', skillId: 'thunder', ringColor: '#facc15', glowColor: 'rgba(250, 204, 21, 0.55)' },
-    { id: 'inosuke', label: '🐗 Dã Thú — Inosuke Hashibira', shortLabel: '🐗 Inosuke', tagLabel: ' Chúa Sơn Lâm Inosuke', group: 'kny', skillId: 'beast', ringColor: '#60a5fa', glowColor: 'rgba(96, 165, 250, 0.5)' }
+    { id: 'inosuke', label: '🐗 Dã Thú — Inosuke Hashibira', shortLabel: '🐗 Inosuke', tagLabel: 'Chúa Sơn Lâm Inosuke', group: 'kny', skillId: 'beast', ringColor: '#60a5fa', glowColor: 'rgba(96, 165, 250, 0.5)' }
   ];
 
   const PERSONA_MAP = Object.create(null);
@@ -289,15 +323,15 @@
   });
 
   function hasPersona(personaId) {
-    return Boolean(typeof personaId === 'string' && personaId.trim() && PERSONA_MAP[personaId.trim()]);
+    return Boolean(typeof personaId === 'string' && personaId.trim() && hasOwn(PERSONA_MAP, personaId.trim()));
   }
 
   function getPersona(personaId) {
     const key = typeof personaId === 'string' ? personaId.trim() : 'yoriichi';
-    return PERSONA_MAP[key] || PERSONA_MAP.yoriichi;
+    return (key && hasOwn(PERSONA_MAP, key)) ? PERSONA_MAP[key] : PERSONA_MAP.yoriichi;
   }
 
-  const FX_COMPANION_SPECS = {
+  const FX_COMPANION_SPECS = Object.assign(Object.create(null), {
     sun: {
       charId: 'yoriichi',
       badgeLabel: '☀️ Hỏa Thần',
@@ -586,12 +620,30 @@
       act2: ['Thức thứ Bảy: Cảm Quan Không Gian quét sạch toàn bộ ngóc ngách codebase!! 🌐✨'],
       act3: ['Nạp đầy Tempura giòn rụm vào là sức chiến đấu lại tăng vọt 200%!! 🍤🔥']
     }
-  };
+  });
+
+  function isSafeFxKey(fxKey) {
+    if (typeof fxKey !== 'string') return false;
+    const trimmed = fxKey.trim().toLowerCase();
+    if (!trimmed || isDangerousSettingKey(trimmed)) return false;
+    const mapped = trimmed === 'wisteria_royal' ? 'royal_wisteria' : trimmed;
+    return hasOwn(FX_COMPANION_SPECS, mapped);
+  }
+
+  function normalizeSafeFxMode(fxMode, fallbackFx) {
+    const fb = isSafeFxKey(fallbackFx) ? String(fallbackFx).trim().toLowerCase() : 'sun';
+    if (typeof fxMode !== 'string') return fb;
+    const cleaned = fxMode.trim().toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!cleaned || !isSafeFxKey(cleaned)) return fb;
+    return cleaned;
+  }
 
   function resolveCompanionForFxMode(fxMode) {
     const cleanFx = String(fxMode || 'sun').trim().toLowerCase();
     const mappedKey = cleanFx === 'wisteria_royal' ? 'royal_wisteria' : cleanFx;
-    const spec = FX_COMPANION_SPECS[mappedKey] || FX_COMPANION_SPECS.sun;
+    const spec = (!isDangerousSettingKey(mappedKey) && hasOwn(FX_COMPANION_SPECS, mappedKey))
+      ? FX_COMPANION_SPECS[mappedKey]
+      : FX_COMPANION_SPECS.sun;
     const charPersona = getPersona(spec.charId);
     return {
       charId: spec.charId,
@@ -622,7 +674,9 @@
 
   function applyCompanionForFxMode(themeDef, fxMode) {
     if (!themeDef || typeof themeDef !== 'object') return themeDef;
-    const cleanFx = String(fxMode || themeDef.fxMode || 'sun').replace(/[^a-zA-Z0-9_-]/g, '') || 'sun';
+    const hasExplicitFx = fxMode !== undefined && fxMode !== null && String(fxMode).trim() !== '';
+    const candidateFx = hasExplicitFx ? String(fxMode) : String(themeDef.fxMode || 'sun');
+    const cleanFx = normalizeSafeFxMode(candidateFx, 'sun');
     const comp = resolveCompanionForFxMode(cleanFx);
     themeDef.fxMode = cleanFx;
     themeDef.cornerSvg = comp.cornerSvg;
@@ -840,15 +894,16 @@
     const pillBorder = rgbaStr(primaryRgb, 0.32);
 
     const defaultFx = isAchromatic ? 'mist' : suggestFxModeFromHue(h1);
-    const fxMode = String(safeOpts.fxMode || defaultFx).replace(/[^a-zA-Z0-9_-]/g, '') || defaultFx;
+    const hasExplicitOptFx = safeOpts.fxMode !== undefined && safeOpts.fxMode !== null && String(safeOpts.fxMode).trim() !== '';
+    const fxMode = hasExplicitOptFx ? normalizeSafeFxMode(String(safeOpts.fxMode), 'sun') : defaultFx;
     const wpUrl = safeOpts.wallpaper ? SEC.sanitizeCssUrl(safeOpts.wallpaper) : '';
     const persona = getPersona(safeOpts.personaId || 'yoriichi');
     const companion = resolveCompanionForFxMode(fxMode);
 
     return {
       concept: String(safeOpts.concept || (isAchromatic
-        ? 'OKLCH Monochrome Silver-Slate • WCAG AA'
-        : `OKLCH Forged Universe • WCAG AA (${Math.round(h1)}° / ${Math.round(h2)}°)`)).slice(0, 140),
+        ? 'Đơn Sắc Ngân Thiết OKLCH • Chuẩn WCAG AA'
+        : `Vũ Trụ Rèn OKLCH • Chuẩn WCAG AA (${Math.round(h1)}° / ${Math.round(h2)}°)`)).slice(0, 140),
       // Core 14 OKLCH WCAG-AA Variables
       primary: primaryHex,
       accent: accentHex,
@@ -1113,7 +1168,7 @@
             const suggestedFx = stats.achromatic
               ? (stats.fxMode || 'mist')
               : suggestFxModeFromHue(stats.h1);
-            const baseName = String(file.name || 'Custom 4K').replace(/\.[^.]+$/, '').slice(0, 36).trim() || 'Forged Universe';
+            const baseName = String(file.name || 'Ảnh 4K Tùy Chọn').replace(/\.[^.]+$/, '').slice(0, 36).trim() || 'Vũ Trụ Rèn OKLCH';
             const themeDef = buildOklchThemeDefinition({
               h1: stats.h1,
               c1: stats.c1,
@@ -1125,8 +1180,8 @@
               personaId: activePersonaId,
               wallpaper: wpDataUrl,
               concept: stats.achromatic
-                ? 'OKLCH 64×64 Monochrome Silver-Slate • WCAG AA'
-                : `OKLCH 64×64 Forged • WCAG AA ${stats.avgL > 0.5 ? 'Bright-Balanced' : 'Deep-Focus'}`
+                ? 'Đơn Sắc Ngân Thiết 64×64 OKLCH • Chuẩn WCAG AA'
+                : `Rèn Màu 64×64 OKLCH • Chuẩn WCAG AA (${stats.avgL > 0.5 ? 'Cân Bằng Sáng' : 'Tập Trung Sâu'})`
             });
             resolve({
               suggestedName: `⚒️ ${baseName}`,
@@ -1152,7 +1207,7 @@
   const MULTIVERSE_PRESETS = [
     {
       id: 'shadow_monarch',
-      name: '🌌 Đế Vương Bóng Tối (Shadow Monarch)',
+      name: '🌌 Đế Vương Bóng Tối',
       shortLabel: '🌌 Đế Vương Bóng Tối',
       personaId: 'shadow_monarch',
       fxMode: 'moon',
@@ -1166,28 +1221,42 @@
           fxMode: 'moon',
           personaId: 'shadow_monarch',
           wallpaper: makeMultiverseBackdropUri('shadow_monarch'),
-          concept: 'Shadow Monarch Abyssal Violet & Necro-Azure • OKLCH WCAG AA'
+          concept: 'Tím Thẳm Vực Sâu & Lam Ảnh Linh • OKLCH Chuẩn WCAG AA'
         });
         def.sticker = MULTIVERSE_CRESTS.shadow_monarch.ornament;
         def.cornerSvg = MULTIVERSE_CRESTS.shadow_monarch.corner;
         def.actionSticker = '';
         def.npc = {
           badgeLabel: '🌌 Quân Đoàn Bóng Tối',
-          title: 'Đế Vương Bóng Tối • Shadow Sovereign',
+          title: 'Đế Vương Bóng Tối • Chúa Tể Hắc Ám',
           placeholder: 'Ra lệnh cho Quân Đoàn Bóng Tối...',
           pills: [
-            { key: 'act1', label: '🗡️ Trỗi Dậy (Arise)' },
+            { key: 'act1', label: '🗡️ Trỗi Dậy' },
             { key: 'act2', label: '🌌 Lãnh Địa Đế Vương' },
             { key: 'act3', label: '💠 Hồi Phục Mana' }
           ],
           dialogs: {
             welcome: [
-              'Bóng tối tĩnh lặng đã bao phủ toàn bộ không gian code. Chỉ cần ngài ra lệnh: "Arise!" 🌌',
-              'Quân đoàn kỵ sĩ bóng đêm đang canh gác từng dòng logic cho ngài, không một bug nào thoát khỏi tầm mắt! 🗡️💙'
+              'Bóng tối tĩnh lặng đã bao phủ toàn bộ không gian code. Chỉ cần ngài ra lệnh: "Trỗi dậy!" 🌌',
+              'Quân đoàn kỵ sĩ bóng đêm đang canh gác từng dòng logic cho ngài, không một lỗi nào thoát khỏi tầm mắt! 🗡️💙'
             ],
-            act1: ['"Arise!" — Mọi tiến trình và subagent đồng loạt thức tỉnh với hiệu suất cực đại! 🌌⚡'],
+            act1: ['"Trỗi dậy!" — Mọi tiến trình và tác tử phụ đồng loạt thức tỉnh với hiệu suất cực đại! 🌌⚡'],
             act2: ['Lãnh Địa Đế Vương kích hoạt: Độ tương phản OKLCH sắc lẹm giúp ngài nhìn thấu mọi kiến trúc phức tạp! 💜'],
-            act3: ['Bình tĩnh điều hòa hơi thở và uống một ngụm nước mát để hồi đầy thanh Mana nhé, Thống Soái! 🧪✨']
+            act3: ['Bình tĩnh điều hòa hơi thở và uống một ngụm nước mát để hồi đầy thanh năng lượng nhé, Thống Soái! 🧪✨'],
+            typing: ['Ý chí của Thống Soái đang định hình mệnh lệnh mới — quân đoàn sẵn sàng thực thi! 🌌'],
+            sent: ['Mệnh lệnh đã được phát đi! Quân đoàn bóng đêm đang xử lý tốc độ tối đa! 🗡️✨'],
+            remind: ['Thống Soái tập trung lâu rồi, nhớ chớp mắt nghỉ vài giây giữ thị lực sắc bén nhé! 💠']
+          },
+          replies: {
+            greet: 'Thần xin kính chào Thống Soái! Quân đoàn bóng tối đã vào vị trí sẵn sàng nhận lệnh của ngài! 🌌',
+            tired: 'Ngài đã chinh chiến quá lâu rồi. Hãy ngả lưng nghỉ vài phút để hồi đầy thanh năng lượng nhé! 💠',
+            bug: 'Mọi lỗi ẩn nấp trong bóng tối đều không thoát khỏi mắt thần — hãy gửi dấu vết lỗi để quân đoàn truy diệt! 🗡️',
+            praise: 'Đó là vinh dự của Quân đoàn Bóng tối khi được phò tá Thống Soái! 🌌✨',
+            hungry: 'Ngay cả Đế Vương cũng cần tiếp tế năng lượng! Hãy dùng bữa ấm bụng rồi chiến tiếp nhé! 🍱',
+            sleepy: 'Đêm đã khuya rồi, hãy lưu công việc lại và nghỉ ngơi để giữ tinh thần minh mẫn ngày mai! 🌙',
+            deadline: 'Thời khắc quyết định! Tập trung toàn bộ quân đoàn vào hạng mục cốt lõi, chắc chắn về đích kịp lúc! ⚡',
+            thanks: 'Luôn sẵn sàng phục tùng mọi mệnh lệnh của Thống Soái! 🌌💙',
+            fallback: 'Đã rõ chỉ thị "{input}"! Quân đoàn bóng đêm đang dõi theo và hỗ trợ ngài hết mình! 🗡️🌌'
           }
         };
         return def;
@@ -1195,7 +1264,7 @@
     },
     {
       id: 'six_eyes',
-      name: '♾️ Vô Lượng Không Xứ (Six Eyes Domain)',
+      name: '♾️ Vô Lượng Không Xứ',
       shortLabel: '♾️ Vô Lượng Không Xứ',
       personaId: 'six_eyes',
       fxMode: 'mist',
@@ -1209,28 +1278,42 @@
           fxMode: 'mist',
           personaId: 'six_eyes',
           wallpaper: makeMultiverseBackdropUri('six_eyes'),
-          concept: 'Six Eyes Celestial Cyan & Hollow Purple Infinity • OKLCH WCAG AA'
+          concept: 'Lam Thiên Hà & Tử Hư Vô Hạ Hạn • OKLCH Chuẩn WCAG AA'
         });
         def.sticker = MULTIVERSE_CRESTS.six_eyes.ornament;
         def.cornerSvg = MULTIVERSE_CRESTS.six_eyes.corner;
         def.actionSticker = '';
         def.npc = {
           badgeLabel: '♾️ Lục Nhãn',
-          title: 'Lục Nhãn Vô Hạ Hạn • Six Eyes Domain',
+          title: 'Lục Nhãn Vô Hạ Hạn • Lãnh Địa Vô Cực',
           placeholder: 'Khai triển Lãnh Địa cùng Lục Nhãn...',
           pills: [
             { key: 'act1', label: '♾️ Vô Hạ Hạn' },
             { key: 'act2', label: '🟣 Tử Hư Thức' },
-            { key: 'act3', label: '👁️ Lục Nhãn Quét Bug' }
+            { key: 'act3', label: '👁️ Lục Nhãn Quét Lỗi' }
           ],
           dialogs: {
             welcome: [
               'Đừng lo, giữa trời và đất này ngài đang nắm giữ không gian code sắc nét nhất! ♾️💙',
               'Lục Nhãn đã phân tích xong luồng dữ liệu — mọi tác vụ thừa đều bị chặn ngoài Vô Hạ Hạn! ✨'
             ],
-            act1: ['Thuật thức Vô Hạ Hạn giữ khoảng cách tuyệt đối giữa sự xao nhãng và trạng thái Deep Flow của ngài! ♾️'],
+            act1: ['Thuật thức Vô Hạ Hạn giữ khoảng cách tuyệt đối giữa sự xao nhãng và trạng thái Tập Trung Sâu của ngài! ♾️'],
             act2: ['Giao thoa Thương & Hách — Tử Hư Thức quét sạch toàn bộ nợ kỹ thuật cản đường! 🟣⚡'],
-            act3: ['Dù có Lục Nhãn thì làm việc lâu cũng cần thả lỏng đôi mắt 20 giây đó nha! 😎✨']
+            act3: ['Dù có Lục Nhãn thì làm việc lâu cũng cần thả lỏng đôi mắt 20 giây đó nha! 😎✨'],
+            typing: ['Lục Nhãn đang theo dõi từng ký tự ngài gõ với độ phân giải vô hạn! ♾️'],
+            sent: ['Thông điệp đã xuyên qua không gian Vô Hạ Hạn! Chờ phản hồi ngay nhé! 🟣'],
+            remind: ['Thả lỏng ánh nhìn 20 giây để Lục Nhãn luôn giữ độ nét tuyệt đối nào! 👁️✨']
+          },
+          replies: {
+            greet: 'Xin chào! Lục Nhãn đang mở toàn phần — hôm nay chúng ta triển khai bài toán nào đây? ♾️💙',
+            tired: 'Khai triển Lãnh Địa liên tục tốn nhiều chú lực lắm đó, nghỉ ngơi uống ngụm nước mát vài phút nhé! 🍵',
+            bug: 'Lỗi nhỏ ấy không thoát nổi tầm quét Lục Nhãn đâu — đưa log vào đây để mình bẻ gãy nó ngay! 🟣⚡',
+            praise: 'Tất nhiên rồi, vì mình là kẻ mạnh nhất mà~ Haha, cứ tự tin viết code tiếp nhé! 😎✨',
+            hungry: 'Nạp chút đồ ngọt hoặc bữa ngon đi nào, não bộ chạy mượt hơn nhiều đấy! 🍡',
+            sleepy: 'Quá khuya rồi đấy, giữ gìn đôi mắt và giấc ngủ để mai bứt phá tiếp nha! 🌙',
+            deadline: 'Thuật thức Hư Thức sẵn sàng dọn sạch đường băng — ưu tiên việc trọng tâm và chạy thôi! ♾️⚡',
+            thanks: 'Không có gì đâu! Đồng hành cùng người giỏi như bạn thú vị lắm! 💙✨',
+            fallback: 'Nghe rõ "{input}" rồi nhé! Lục Nhãn đã khóa mục tiêu và tiếp sức cho bạn! ♾️🟣'
           }
         };
         return def;
@@ -1238,7 +1321,7 @@
     },
     {
       id: 'great_sage',
-      name: '🔥 Hắc Thần Đại Thánh (Golden Sage)',
+      name: '🔥 Hắc Thần Đại Thánh',
       shortLabel: '🔥 Hắc Thần Đại Thánh',
       personaId: 'great_sage',
       fxMode: 'sun',
@@ -1252,28 +1335,42 @@
           fxMode: 'sun',
           personaId: 'great_sage',
           wallpaper: makeMultiverseBackdropUri('great_sage'),
-          concept: 'Obsidian Gold & Fiery Golden Eyes • OKLCH WCAG AA'
+          concept: 'Hoàng Kim Hắc Diệu & Hỏa Nhãn Kim Tinh • OKLCH Chuẩn WCAG AA'
         });
         def.sticker = MULTIVERSE_CRESTS.great_sage.ornament;
         def.cornerSvg = MULTIVERSE_CRESTS.great_sage.corner;
         def.actionSticker = '';
         def.npc = {
           badgeLabel: '🔥 Đại Thánh',
-          title: 'Tề Thiên Đại Thánh • Destined Great Sage',
+          title: 'Tề Thiên Đại Thánh • Thiên Mệnh Nhân',
           placeholder: 'Đàm đạo cùng Đại Thánh...',
           pills: [
             { key: 'act1', label: '🔥 Hỏa Nhãn Kim Tinh' },
-            { key: 'act2', label: '棍 Định Hải Thần Châm' },
+            { key: 'act2', label: '✨ Định Hải Thần Châm' },
             { key: 'act3', label: '☁️ Cân Đẩu Vân' }
           ],
           dialogs: {
             welcome: [
-              'Hỏa Nhãn Kim Tinh đã bật sáng! Yêu ma hay bug ẩn hình kiểu gì cũng hiện nguyên hình dưới gậy Như Ý! 🔥💛',
+              'Hỏa Nhãn Kim Tinh đã bật sáng! Yêu ma hay lỗi ẩn hình kiểu gì cũng hiện nguyên hình dưới gậy Như Ý! 🔥💛',
               'Đường Thiên Mệnh do chính tay ngài viết nên từng dòng code — cứ vung thiết bảng tiến tới! ⚡'
             ],
-            act1: ['Đôi mắt rèn trong lò bát quái nhìn xuyên thấu mọi race-condition và memory leak! 🔥👁️'],
+            act1: ['Đôi mắt rèn trong lò bát quái nhìn xuyên thấu mọi xung đột luồng và rò rỉ bộ nhớ! 🔥👁️'],
             act2: ['Định Hải Thần Châm trấn giữ kiến trúc vững như bàn thạch trước mọi tải trọng! 💛'],
-            act3: ['Nghỉ tay thưởng thức trái đào tiên và hớp trà nóng trước khi lộn một vòng Cân Đẩu Vân vạn dặm nhé! 🍑🍵']
+            act3: ['Nghỉ tay thưởng thức trái đào tiên và hớp trà nóng trước khi lộn một vòng Cân Đẩu Vân vạn dặm nhé! 🍑🍵'],
+            typing: ['Chí tôn đang soạn bí kíp gì thế? Hỏa Nhãn Kim Tinh đang dõi theo đây! 🔥'],
+            sent: ['Gậy Như Ý đã xuất chiêu — chờ hồi âm ngay trong chớp mắt! ⚡💛'],
+            remind: ['Ngồi luyện công lâu rồi, vươn vai hít sâu một hơi giữ chính khí nhé! 🍑']
+          },
+          replies: {
+            greet: 'Ha ha! Thiên Mệnh Nhân đã tới! Hôm nay muốn quét sạch cửa ải nào đây? 🔥💛',
+            tired: 'Ngay cả Tề Thiên Đại Thánh cũng cần nghỉ chân dưới tán đào tiên! Thư giãn vài phút đi nhé! 🍑🍵',
+            bug: 'Lũ lỗi vặt vãnh ấy dám múa rìu qua mắt Đại Thánh sao? Gửi log ra đây xem nó trốn đi đâu! 🔥⚔️',
+            praise: 'Ha ha! Danh hiệu Tề Thiên Đại Thánh đâu phải hữu danh vô thực! Cứ vững bước tiến lên! 💛✨',
+            hungry: 'Đói bụng thì làm sao vung nổi Định Hải Thần Châm nặng vạn cân? Mau đi ăn no đã! 🍜',
+            sleepy: 'Đêm khuya sương lạnh rồi, thu thiết bảng về nghỉ ngơi mai tái chiến! 🌙',
+            deadline: 'Bảy mươi hai phép thần thông dồn lực vào trọng tâm — chớp mắt là vượt qua cửa ải này ngay! ⚡🔥',
+            thanks: 'Khách sáo làm gì! Có Đại Thánh hộ giá thì vạn sự hanh thông! 💛☁️',
+            fallback: 'Nghe rõ "{input}" rồi! Cứ vung gậy Như Ý thẳng tiến, Đại Thánh sát cánh cùng bạn! 🔥💛'
           }
         };
         return def;
@@ -1362,16 +1459,19 @@
     base.isOrnament = pre.isOrnament !== false;
     base.isChibiNpc = pre.isChibiNpc !== false;
     base.liveWallpaperFx = pre.liveWallpaperFx !== false;
-    base.stickerW = clamp(Number(pre.stickerW) || 140, 24, 220);
-    base.stickerH = clamp(Number(pre.stickerH) || 64, 18, 120);
-    base.stickerTop = clamp(Number(pre.stickerTop) || -56, -96, 16);
-    base.stickerRight = clamp(Number(pre.stickerRight) || 10, 0, 48);
+    const hasSticker = Boolean(base.sticker);
+    const defaultStickerW = (base.isOrnament !== false || hasSticker) ? 140 : 0;
+    const defaultStickerH = (base.isOrnament !== false || hasSticker) ? 64 : 0;
+    base.stickerW = clamp(finiteNumOr(pre.stickerW, defaultStickerW), 0, 220);
+    base.stickerH = clamp(finiteNumOr(pre.stickerH, defaultStickerH), 0, 120);
+    base.stickerTop = clamp(finiteNumOr(pre.stickerTop, -56), -96, 16);
+    base.stickerRight = clamp(finiteNumOr(pre.stickerRight, 10), 0, 48);
 
     const fallbackPersona = getPersona('yoriichi');
     const fallbackCompanion = resolveCompanionForFxMode(base.fxMode || 'sun');
-    if (!base.cornerSvg) base.cornerSvg = fallbackCompanion.cornerSvg || fallbackPersona.userCornerSvg;
+    if (!base.cornerSvg && base.isOrnament !== false) base.cornerSvg = fallbackCompanion.cornerSvg || fallbackPersona.userCornerSvg;
     if (!base.userCornerSvg) base.userCornerSvg = fallbackPersona.userCornerSvg;
-    if (!base.sticker) base.sticker = fallbackCompanion.sticker || fallbackPersona.userSticker;
+    if (!base.sticker && base.isOrnament !== false) base.sticker = fallbackCompanion.sticker || fallbackPersona.userSticker;
     if (!base.userSticker) base.userSticker = fallbackPersona.userSticker;
     if (!base.userAvatar) base.userAvatar = fallbackPersona.userAvatar;
     if (!base.npc) base.npc = fallbackCompanion.npc;
@@ -1411,13 +1511,13 @@
   function loadPersistedThemes() {
     try {
       const raw = localStorage.getItem(STORAGE_FORGED_THEMES);
-      if (!raw) return {};
+      if (!raw) return Object.create(null);
       const parsed = SEC.stripProtoKeys(JSON.parse(raw));
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-      const cleanMap = {};
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return Object.create(null);
+      const cleanMap = Object.create(null);
       for (const [k, v] of Object.entries(parsed)) {
         const safeName = String(k || '').trim().slice(0, 68);
-        if (!safeName) continue;
+        if (!isSafeThemeName(safeName)) continue;
         const safeDef = sanitizeFullThemeRecord(v);
         if (safeDef) {
           safeDef.isForged = true;
@@ -1426,13 +1526,13 @@
       }
       return cleanMap;
     } catch (_) {
-      return {};
+      return Object.create(null);
     }
   }
 
   function savePersistedTheme(name, themeDef) {
-    const safeName = String(name || '').trim().slice(0, 68);
-    if (!safeName) return null;
+    const safeName = typeof name === 'string' ? name.trim().slice(0, 68) : '';
+    if (!isSafeThemeName(safeName)) return null;
     const safeDef = sanitizeFullThemeRecord(themeDef);
     if (!safeDef) return null;
     safeDef.isForged = true;
@@ -1441,7 +1541,7 @@
     if (typeof localStorage !== 'undefined') {
       const current = loadPersistedThemes();
       // Refresh LRU insertion order so safeName is newest
-      if (safeName in current) delete current[safeName];
+      if (hasOwn(current, safeName)) delete current[safeName];
       current[safeName] = safeDef;
       pruneHeavyForgedLru(current, safeName, MAX_HEAVY_FORGED_THEMES);
 
@@ -1452,7 +1552,7 @@
           savedOk = true;
         } catch (err) {
           const removable = Object.keys(current).find((k) => k !== safeName);
-          if (removable && (isQuotaExceededError(err) || err)) {
+          if (removable && isQuotaExceededError(err)) {
             delete current[removable];
             continue;
           }
@@ -1469,7 +1569,7 @@
 
     // 1. Pre-register all 3 built-in Multiverse Presets so they are always available on startup
     for (const preset of MULTIVERSE_PRESETS) {
-      if (!themesRegistry[preset.name]) {
+      if (isSafeThemeName(preset.name) && !hasOwn(themesRegistry, preset.name)) {
         const built = sanitizeFullThemeRecord(preset.build());
         if (built) {
           built.isForged = true;
@@ -1485,19 +1585,20 @@
     // 2. Hydrate persisted forged themes from localStorage
     const persisted = loadPersistedThemes();
     for (const [name, def] of Object.entries(persisted)) {
+      if (!isSafeThemeName(name)) continue;
       themesRegistry[name] = def;
       if (Array.isArray(themeKeysArray) && !themeKeysArray.includes(name)) {
         themeKeysArray.push(name);
       }
     }
 
-    // 3. Hydrate activeForgedTheme from daemon's theme_config.json when opening a window on a new origin/port
+    // 3. Hydrate activeForgedTheme & activeForgedBubbleTheme from daemon's theme_config.json when opening a window on a new origin/port
     try {
       const initCfg = typeof SEC.getInitialConfig === 'function' ? SEC.getInitialConfig() : null;
       const activeForged = initCfg && initCfg.activeForgedTheme;
       if (activeForged && typeof activeForged === 'object' && !Array.isArray(activeForged)) {
         const forgedName = String(activeForged.name || initCfg.themeName || '').trim().slice(0, 68);
-        if (forgedName) {
+        if (isSafeThemeName(forgedName)) {
           const cleanActive = sanitizeFullThemeRecord(activeForged);
           if (cleanActive) {
             cleanActive.isForged = true;
@@ -1508,12 +1609,27 @@
           }
         }
       }
+      const activeForgedBubble = initCfg && initCfg.activeForgedBubbleTheme;
+      if (activeForgedBubble && typeof activeForgedBubble === 'object' && !Array.isArray(activeForgedBubble)) {
+        const forgedBubbleName = String(activeForgedBubble.name || initCfg.bubbleName || '').trim().slice(0, 68);
+        if (isSafeThemeName(forgedBubbleName)) {
+          const cleanBubble = sanitizeFullThemeRecord(activeForgedBubble);
+          if (cleanBubble) {
+            cleanBubble.isForged = true;
+            themesRegistry[forgedBubbleName] = cleanBubble;
+            if (Array.isArray(themeKeysArray) && !themeKeysArray.includes(forgedBubbleName)) {
+              themeKeysArray.push(forgedBubbleName);
+            }
+          }
+        }
+      }
     } catch (_) {}
   }
 
   function registerThemeIntoRegistry(themesRegistry, themeKeysArray, name, rawDef) {
+    if (!isSafeThemeName(name)) return null;
     const saved = savePersistedTheme(name, rawDef);
-    if (!saved) return null;
+    if (!saved || !isSafeThemeName(saved.name)) return null;
     if (themesRegistry && typeof themesRegistry === 'object') {
       themesRegistry[saved.name] = saved.theme;
     }
@@ -1524,18 +1640,26 @@
   }
 
   function buildAgyThemePackage(name, themeDef, stateSnapshot) {
-    const safeName = String(name || 'Forged Theme').trim().slice(0, 68);
+    const safeName = (typeof name === 'string' ? name.trim().slice(0, 68) : String(name || '').trim().slice(0, 68)) || 'Giao Diện Đã Rèn';
     const cleanDef = sanitizeFullThemeRecord(themeDef) || {};
     const st = stateSnapshot || {};
+    const rawPersona = typeof st.masterPersona === 'string' ? st.masterPersona.trim() : '';
+    const safePersona = (rawPersona && !isDangerousSettingKey(rawPersona) && hasOwn(PERSONA_MAP, rawPersona))
+      ? rawPersona
+      : 'yoriichi';
+    const rawInputStyle = typeof st.inputStyle === 'string' ? st.inputStyle.trim() : '';
+    const safeInputStyle = (rawInputStyle && !isDangerousSettingKey(rawInputStyle))
+      ? rawInputStyle
+      : 'sync';
     return {
       schema: 'agytheme/2.0',
       exportedAt: new Date().toISOString(),
       name: safeName,
-      masterPersona: typeof st.masterPersona === 'string' ? st.masterPersona : 'yoriichi',
+      masterPersona: safePersona,
       settings: {
-        dimming: clamp(Number(st.dimming) || cleanDef.defaultDimming || 28, 15, 92),
-        glassBlur: clamp(Number(st.glassBlur) || 3, 0, 16),
-        inputStyle: typeof st.inputStyle === 'string' ? st.inputStyle : 'sync',
+        dimming: clamp(finiteNumOr(st.dimming, finiteNumOr(cleanDef.defaultDimming, 28)), 15, 92),
+        glassBlur: clamp(finiteNumOr(st.glassBlur, 3), 0, 16),
+        inputStyle: safeInputStyle,
         transparentWorld: st.transparentWorld !== false
       },
       theme: cleanDef
@@ -1568,21 +1692,31 @@
     if (clean.schema && clean.schema !== 'agytheme/2.0' && clean.schema !== 'agytheme/1.0') {
       throw new Error('Phiên bản schema .agytheme không được hỗ trợ.');
     }
-    const rawTheme = clean.theme && typeof clean.theme === 'object' ? clean.theme : clean;
-    const rawName = String(clean.name || clean.themeName || '⚒️ Imported AgyTheme').trim().slice(0, 68);
+    if (clean.theme !== undefined && (!clean.theme || typeof clean.theme !== 'object' || Array.isArray(clean.theme))) {
+      throw new Error('Định nghĩa theme trong gói .agytheme không hợp lệ.');
+    }
+    const rawTheme = clean.theme !== undefined ? clean.theme : clean;
+    const rawName = String(clean.name || clean.themeName || '⚒️ Giao Diện Nhập Khẩu').trim().slice(0, 68);
+    if (!isSafeThemeName(rawName)) {
+      throw new Error('Tên giao diện không hợp lệ vì lý do bảo mật.');
+    }
     const registered = registerThemeIntoRegistry(themesRegistry, themeKeysArray, rawName, rawTheme);
     if (!registered) {
       throw new Error('Không thể xác thực bảo mật định nghĩa Theme trong gói .agytheme.');
     }
     const settings = (clean.settings && typeof clean.settings === 'object') ? clean.settings : {};
+    const rawPersona = typeof clean.masterPersona === 'string' ? clean.masterPersona.trim() : '';
+    const safePersona = (rawPersona && !isDangerousSettingKey(rawPersona) && hasOwn(PERSONA_MAP, rawPersona)) ? rawPersona : undefined;
+    const rawInputStyle = typeof settings.inputStyle === 'string' ? settings.inputStyle.trim() : '';
+    const safeInputStyle = (rawInputStyle && !isDangerousSettingKey(rawInputStyle)) ? rawInputStyle : undefined;
     return {
       name: registered.name,
       theme: registered.theme,
-      masterPersona: PERSONA_MAP[clean.masterPersona] ? clean.masterPersona : undefined,
+      masterPersona: safePersona,
       settings: {
-        dimming: typeof settings.dimming === 'number' ? clamp(Math.round(settings.dimming), 15, 92) : registered.theme.defaultDimming,
-        glassBlur: typeof settings.glassBlur === 'number' ? clamp(Math.round(settings.glassBlur), 0, 16) : undefined,
-        inputStyle: typeof settings.inputStyle === 'string' ? settings.inputStyle : undefined,
+        dimming: typeof settings.dimming === 'number' && Number.isFinite(settings.dimming) ? clamp(Math.round(settings.dimming), 15, 92) : registered.theme.defaultDimming,
+        glassBlur: typeof settings.glassBlur === 'number' && Number.isFinite(settings.glassBlur) ? clamp(Math.round(settings.glassBlur), 0, 16) : undefined,
+        inputStyle: safeInputStyle,
         transparentWorld: typeof settings.transparentWorld === 'boolean' ? settings.transparentWorld : undefined
       }
     };

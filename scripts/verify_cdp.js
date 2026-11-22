@@ -32,10 +32,28 @@ function isPidAlive(pid) {
     }
 }
 
+function getEffectiveHomedir() {
+    if (process.platform === 'win32') {
+        return process.env.USERPROFILE || process.env.HOME || os.homedir();
+    }
+    return process.env.HOME || os.homedir();
+}
+
 function resolveLiveDaemonPid() {
-    const home = os.homedir();
+    if (process.env.AGY_DAEMON_PID_FILE) {
+        const explicitPath = path.resolve(process.env.AGY_DAEMON_PID_FILE);
+        if (!fs.existsSync(explicitPath)) return null;
+        try {
+            const pid = parseInt(fs.readFileSync(explicitPath, 'utf8').replace(/^\uFEFF/, '').trim(), 10);
+            if (pid > 0 && isVerifiedDaemonProcess(pid)) {
+                return { pid, source: explicitPath };
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    const home = getEffectiveHomedir();
     const pidFileCandidates = [
-        process.env.AGY_DAEMON_PID_FILE,
         PID_FILE,
         path.join(home, '.gemini', 'config', 'skills', 'antigravity-custom-theme', 'daemon.pid'),
         path.join(home, '.gemini', 'antigravity', 'skills', 'antigravity-custom-theme', 'daemon.pid'),
@@ -169,8 +187,9 @@ function isVerifiedDaemonProcess(pid) {
 }
 
 function resolvePortFile() {
+    if (process.env.AGY_DEVTOOLS_PORT_FILE) return process.env.AGY_DEVTOOLS_PORT_FILE;
     if (process.env.AGY_PORT_FILE) return process.env.AGY_PORT_FILE;
-    const home = os.homedir();
+    const home = getEffectiveHomedir();
     let candidates;
     if (process.platform === 'win32') {
         const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
@@ -358,6 +377,7 @@ const INSPECT_EXPR = `(() => {
     );
     const cinemaBtnPresent = Boolean(document.querySelector('.agy-cinema-mask-btn'));
     const kaguraBtnPresent = Boolean(document.querySelector('.agy-kagura-bell-btn'));
+    const hudBarPresent = Boolean(document.getElementById('agy-token-context-bar'));
     const cinemaDirectorAlive = Boolean(
         typeof window.__AGY_CINEMA_DIRECTOR__?.openPanel === 'function' &&
         document.getElementById('antigravity-kny-cinema-director-style')
@@ -366,16 +386,138 @@ const INSPECT_EXPR = `(() => {
         typeof window.__AGY_BIO_AUDIO__?.openPopover === 'function' &&
         document.getElementById('antigravity-kny-bio-audio-style')
     );
+    const coreState =
+        window.__AGY_THEME_CORE__ && typeof window.__AGY_THEME_CORE__.getState === 'function'
+            ? window.__AGY_THEME_CORE__.getState()
+            : null;
+    const wpEnabled =
+        coreState && typeof coreState.wpEnabled === 'boolean'
+            ? coreState.wpEnabled
+            : localStorage.getItem('agy_wp_enabled_v1') !== 'false';
+    const shellHoleActive = shellEl ? shellEl.getAttribute('data-agy-hole-active') : null;
+    const shellDirectBg = shellEl ? getComputedStyle(shellEl).backgroundImage : 'none';
+    const shellAfterBg = shellEl ? getComputedStyle(shellEl, '::after').backgroundImage : 'none';
+    const shellDirectBgPresent = Boolean(shellEl && shellDirectBg && shellDirectBg !== 'none');
+    const shellAfterBgPresent = Boolean(shellEl && shellAfterBg && shellAfterBg !== 'none');
+    const shellBgImagePresent = shellHoleActive === '1' ? shellAfterBgPresent : shellDirectBgPresent;
+
+    const userBubbleFrames = Array.from(document.querySelectorAll('.agy-user-bubble-frame'));
+    const userMessageCount = document.querySelectorAll('[data-testid="user-message"], .agy-user-bubble-frame').length;
+    const isWelcomeView =
+        userMessageCount === 0 &&
+        (/^\\/(launchpad|projects|workspace|manager)?(\\/|$)/i.test(location.pathname || '') ||
+            Boolean(document.querySelector('[data-launchpad]')));
+
+    const composerEl =
+        document.querySelector('.surface-composer, [data-testid="composer"]') ||
+        (!isWelcomeView ? document.querySelector('div.relative.flex.flex-col.rounded-lg.border') : null);
+    const composerPresent = Boolean(composerEl);
+
+    const moduleChecks = {
+        sec: Boolean(
+            window.__AGY_SEC__ &&
+            typeof window.__AGY_SEC__.sanitizeCssUrl === 'function' &&
+            typeof window.__AGY_SEC__.getAssetBase === 'function' &&
+            typeof window.__AGY_SEC__.getAuthToken === 'undefined'
+        ),
+        themeCore: Boolean(
+            window.__AGY_THEME_CORE__ &&
+            typeof window.__AGY_THEME_CORE__.applyTheme === 'function' &&
+            typeof window.__AGY_THEME_CORE__.getState === 'function'
+        ),
+        themeForge: Boolean(
+            window.__AGY_THEME_FORGE__ &&
+            typeof window.__AGY_THEME_FORGE__.getPersona === 'function' &&
+            typeof window.__AGY_THEME_FORGE__.buildOklchThemeDefinition === 'function'
+        ),
+        fxModes: Boolean(
+            typeof window.__AGY_KNY_FX_DRAWERS__ === 'function' &&
+            Array.isArray(window.__AGY_KNY_FX_DRAWERS__.modes) &&
+            window.__AGY_KNY_FX_DRAWERS__.modes.length >= 16
+        ),
+        chibiAura: Boolean(
+            window.__AGY_KNY_CHIBI_AURA__ &&
+            typeof window.__AGY_KNY_CHIBI_AURA__.mountChibiAura === 'function'
+        ),
+        breathingSkills: Boolean(
+            window.__AGY_KNY_SKILLS__ &&
+            typeof window.__AGY_KNY_SKILLS__.castSkill === 'function'
+        ),
+        semanticIcons: Boolean(
+            window.__AGY_KNY_ICONS__ &&
+            typeof window.__AGY_KNY_ICONS__.getFuncSvg === 'function'
+        ),
+        squadRaid: Boolean(
+            window.__AGY_SQUAD_RAID__ &&
+            typeof window.__AGY_SQUAD_RAID__.mount === 'function' &&
+            typeof window.__AGY_SQUAD_RAID__.sync === 'function'
+        ),
+        tokenHud: Boolean(
+            window.__AGY_TOKEN_HUD__ &&
+            typeof window.__AGY_TOKEN_HUD__.mountTokenHud === 'function' &&
+            typeof window.__AGY_TOKEN_HUD__.ingestTelemetrySnapshot === 'function'
+        ),
+        cinemaDirector: cinemaDirectorAlive,
+        bioAudio: bioAudioAlive,
+    };
+    const tokenHudStyleAlive = Boolean(document.getElementById('antigravity-kny-token-hud-style'));
+
+    const chibiSkillBarPresent = Boolean(document.getElementById('agy-chibi-skill-bar'));
+    const userBubbleFrameCount = userBubbleFrames.length;
+    let userBubbleEmptyChildCount = 0;
+    let userBubbleMissingGuardCount = 0;
+    for (const frame of userBubbleFrames) {
+        for (const child of Array.from(frame.children)) {
+            let isEmpty = false;
+            try {
+                isEmpty = typeof child.matches === 'function'
+                    ? child.matches(':empty')
+                    : (child.children.length === 0 && child.childNodes.length === 0);
+            } catch (_) {
+                isEmpty = child.children.length === 0 && child.childNodes.length === 0;
+            }
+            if (isEmpty) {
+                userBubbleEmptyChildCount++;
+            }
+            if (child.classList.contains('agy-chibi-hitbox') || child.classList.contains('agy-user-chibi-aura-wave')) {
+                if (!child.querySelector('i[aria-hidden="true"]')) {
+                    userBubbleMissingGuardCount++;
+                }
+            }
+        }
+    }
+
+    const masterPersona = (coreState && coreState.masterPersona) || localStorage.getItem('agy_master_persona_v1') || 'yoriichi';
+    const crestBtn = document.querySelector('.agy-yoriichi-crest-btn');
+    const crestTitle = crestBtn ? (crestBtn.getAttribute('title') || crestBtn.getAttribute('aria-label') || '') : '';
+    const firstHitbox = document.querySelector('.agy-user-bubble-frame > .agy-chibi-hitbox');
+    const hitboxTitle = firstHitbox ? (firstHitbox.getAttribute('title') || '') : '';
+    const msgHit = document.querySelector('.agy-yoriichi-msg-hit');
+    const msgHitTitle = msgHit ? (msgHit.getAttribute('title') || '') : '';
+    const yoriichiRe = /Yoriichi|H\\u1ecfa Th\\u1ea7n/i;
+    let yoriichiIdentityValid = true;
+    if (masterPersona === 'yoriichi') {
+        if (crestBtn && !yoriichiRe.test(crestTitle)) yoriichiIdentityValid = false;
+        if (firstHitbox && !yoriichiRe.test(hitboxTitle)) yoriichiIdentityValid = false;
+        if (msgHit && !yoriichiRe.test(msgHitTitle)) yoriichiIdentityValid = false;
+    } else if (window.__AGY_THEME_FORGE__ && typeof window.__AGY_THEME_FORGE__.hasPersona === 'function') {
+        yoriichiIdentityValid = Boolean(window.__AGY_THEME_FORGE__.hasPersona(masterPersona));
+    }
+
     return {
         isAntigravityDom: true,
         url: location.pathname,
+        isWelcomeView,
         viewport: { width: window.innerWidth, height: window.innerHeight },
         themeActive: Boolean(styleEl),
         activeTheme: localStorage.getItem('agy_theme_v3') || null,
+        wpEnabled,
         shellFound: Boolean(shellEl),
-        shellBgImagePresent: shellEl ? getComputedStyle(shellEl).backgroundImage !== 'none' : false,
+        shellDirectBgPresent,
+        shellAfterBgPresent,
+        shellBgImagePresent,
         hasBrowserHole: document.body.dataset.hasBrowserHole || null,
-        shellHoleActive: shellEl ? shellEl.getAttribute('data-agy-hole-active') : null,
+        shellHoleActive,
         mainGridFound: Boolean(mainGrid),
         projectPillBg: projPill ? getComputedStyle(projPill).backgroundColor : null,
         envPillBg: envPill ? getComputedStyle(envPill).backgroundColor : null,
@@ -384,11 +526,20 @@ const INSPECT_EXPR = `(() => {
         hasLiveBlurRule,
         leakedWindowToken,
         settingsTriggerPresent: Boolean(document.getElementById('agy-custom-theme-sidebar-btn')),
-        composerPresent: Boolean(document.querySelector('div.relative.flex.flex-col.rounded-lg.border')),
+        composerPresent,
+        hudBarPresent,
         cinemaBtnPresent,
         kaguraBtnPresent,
         cinemaDirectorAlive,
         bioAudioAlive,
+        tokenHudStyleAlive,
+        moduleChecks,
+        chibiSkillBarPresent,
+        userBubbleFrameCount,
+        userBubbleEmptyChildCount,
+        userBubbleMissingGuardCount,
+        masterPersona,
+        yoriichiIdentityValid,
     };
 })()`;
 
@@ -450,14 +601,57 @@ async function main() {
         console.error('[verify-cdp] FAIL: Ephemeral boot/auth token leaked onto global window object.');
         process.exit(1);
     }
-    if (themedPages.some((r) => r.cinemaBtnPresent && r.kaguraBtnPresent && (!r.cinemaDirectorAlive || !r.bioAudioAlive))) {
+    if (themedPages.some((r) => r.cinemaBtnPresent !== r.kaguraBtnPresent)) {
         console.error(
-            '[verify-cdp] FAIL: HUD utility buttons (.agy-cinema-mask-btn / .agy-kagura-bell-btn) present, but __AGY_CINEMA_DIRECTOR__ or __AGY_BIO_AUDIO__ (or their styles) died after injection!'
+            '[verify-cdp] FAIL: Asymmetric HUD utility buttons (.agy-cinema-mask-btn vs .agy-kagura-bell-btn) on themed page.'
         );
         process.exit(1);
     }
+    if (themedPages.some((r) => (r.composerPresent || r.hudBarPresent) && (!r.cinemaBtnPresent || !r.kaguraBtnPresent))) {
+        console.error(
+            '[verify-cdp] FAIL: Composer or HUD bar is present, but .agy-cinema-mask-btn / .agy-kagura-bell-btn is missing.'
+        );
+        process.exit(1);
+    }
+    if (themedPages.some((r) => !r.cinemaDirectorAlive || !r.bioAudioAlive)) {
+        console.error(
+            '[verify-cdp] FAIL: __AGY_CINEMA_DIRECTOR__ or __AGY_BIO_AUDIO__ (or their styles) died after injection!'
+        );
+        process.exit(1);
+    }
+    for (const r of themedPages) {
+        const deadModules = Object.entries(r.moduleChecks || {})
+            .filter(([, ok]) => !ok)
+            .map(([name]) => name);
+        if (deadModules.length > 0) {
+            console.error(`[verify-cdp] FAIL: Dead module(s) on target ${r.id}: ${deadModules.join(', ')}`);
+            process.exit(1);
+        }
+        if (r.hudBarPresent && !r.tokenHudStyleAlive) {
+            console.error(`[verify-cdp] FAIL: HUD bar present on target ${r.id}, but #antigravity-kny-token-hud-style is missing.`);
+            process.exit(1);
+        }
+        if (r.shellFound && r.shellHoleActive === '1' && r.wpEnabled !== false && !r.shellAfterBgPresent) {
+            console.error(`[verify-cdp] FAIL: Split Browser Cutout active on target ${r.id}, but .agy-shell::after backgroundImage is missing.`);
+            process.exit(1);
+        }
+        if (r.chibiSkillBarPresent) {
+            console.error(`[verify-cdp] FAIL: Obsolete #agy-chibi-skill-bar detected on target ${r.id}.`);
+            process.exit(1);
+        }
+        if (r.userBubbleEmptyChildCount > 0 || r.userBubbleMissingGuardCount > 0) {
+            console.error(
+                `[verify-cdp] FAIL: R3 user-bubble guard violation on target ${r.id} (empty=${r.userBubbleEmptyChildCount}, missingGuard=${r.userBubbleMissingGuardCount}).`
+            );
+            process.exit(1);
+        }
+        if (!r.yoriichiIdentityValid) {
+            console.error(`[verify-cdp] FAIL: Default master persona / Yoriichi identity check failed on target ${r.id} (persona=${r.masterPersona}).`);
+            process.exit(1);
+        }
+    }
     console.log(
-        `[verify-cdp] PASS: ${themedPages.length}/${results.length} verified page(s) themed (daemon PID ${liveDaemon.pid} via ${liveDaemon.source}) with zero live blur, zero token leak, and live Cinema/BioAudio modules.`
+        `[verify-cdp] PASS: ${themedPages.length}/${results.length} verified page(s) themed (daemon PID ${liveDaemon.pid} via ${liveDaemon.source}) with zero live blur, zero token leak, all 11 modules alive, and R3 invariants intact.`
     );
 }
 

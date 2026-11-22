@@ -56,7 +56,7 @@ find_node() {
     node_bin="$(command -v node)"
     full_ver="$("$node_bin" -p "process.versions.node")"
     major="${full_ver%%.*}"
-    if [ "$major" -lt 22 ]; then
+    if ! [[ "$major" =~ ^[0-9]+$ ]] || [ "$major" -lt 22 ]; then
         echo "[install-unix] Error: Node.js >= 22 is required (found v$full_ver at $node_bin)." >&2
         echo "[install-unix] Upgrade via: nvm install 22  (or on macOS: brew install node)" >&2
         exit 1
@@ -72,9 +72,16 @@ ensure_payload() {
         return 0
     fi
     if command -v python3 >/dev/null 2>&1 && [ -f "$BUILD_PY" ]; then
-        echo "[install-unix] Node build failed; falling back to python3 scripts/build_payload.py..."
-        if python3 "$BUILD_PY"; then
+        echo "[install-unix] Node build failed; falling back to python3 -B scripts/build_payload.py..."
+        if python3 -B "$BUILD_PY"; then
             return 0
+        fi
+    elif command -v python >/dev/null 2>&1 && [ -f "$BUILD_PY" ]; then
+        if python -c 'import sys; raise SystemExit(0 if sys.version_info[0] >= 3 else 1)' 2>/dev/null; then
+            echo "[install-unix] Node build failed; falling back to python -B scripts/build_payload.py..."
+            if python -B "$BUILD_PY"; then
+                return 0
+            fi
         fi
     fi
     echo "[install-unix] Error: Failed to build dist/theme_payload.js." >&2
@@ -84,18 +91,20 @@ ensure_payload() {
 is_theme_daemon_pid() {
     local p="$1"
     if [ -r "/proc/$p/cmdline" ]; then
-        tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q "theme_daemon.js"
+        tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -Fq "theme_daemon.js"
         return $?
     fi
-    ps -ww -p "$p" -o command= 2>/dev/null | grep -q "theme_daemon.js"
+    ps -ww -p "$p" -o command= 2>/dev/null | grep -Fq "theme_daemon.js"
 }
 
 stop_existing_pid() {
+    local handled_pid=""
     if [ -f "$PID_FILE" ]; then
         local old_pid
         old_pid="$(tr -d '[:space:]' < "$PID_FILE" 2>/dev/null || true)"
         if [[ "$old_pid" =~ ^[0-9]+$ ]] && kill -0 "$old_pid" 2>/dev/null; then
             if is_theme_daemon_pid "$old_pid"; then
+                handled_pid="$old_pid"
                 echo "[install-unix] Stopping existing daemon (PID $old_pid)..."
                 kill "$old_pid" 2>/dev/null || true
                 local i=0
@@ -106,6 +115,34 @@ stop_existing_pid() {
             fi
         fi
         rm -f "$PID_FILE"
+    fi
+
+    # Sweep orphan theme_daemon.js processes belonging to this exact repo path if daemon.pid was lost
+    if command -v ps >/dev/null 2>&1; then
+        local orphan_line orphan_pid orphan_cmd
+        while IFS= read -r orphan_line; do
+            orphan_line="${orphan_line#"${orphan_line%%[![:space:]]*}"}"
+            [ -n "$orphan_line" ] || continue
+            orphan_pid="${orphan_line%%[[:space:]]*}"
+            orphan_cmd="${orphan_line#"$orphan_pid"}"
+            [[ "$orphan_pid" =~ ^[0-9]+$ ]] || continue
+            [ "$orphan_pid" -eq "$$" ] && continue
+            [ "$orphan_pid" -eq "${PPID:-0}" ] && continue
+            [ -n "$handled_pid" ] && [ "$orphan_pid" -eq "$handled_pid" ] && continue
+            case "$orphan_cmd" in
+                *"$DAEMON_JS"*)
+                    if is_theme_daemon_pid "$orphan_pid"; then
+                        echo "[install-unix] Stopping orphan daemon process (PID $orphan_pid)..."
+                        kill "$orphan_pid" 2>/dev/null || true
+                        local j=0
+                        while [ "$j" -lt 8 ] && kill -0 "$orphan_pid" 2>/dev/null; do
+                            LC_ALL=C sleep 0.1
+                            j=$((j + 1))
+                        done
+                    fi
+                    ;;
+            esac
+        done < <(ps -ax -o pid=,command= 2>/dev/null || true)
     fi
 }
 
@@ -245,10 +282,13 @@ start_nohup_daemon() {
     local bg_pid=$!
     disown 2>/dev/null || true
     local waited=0
-    while [ "$waited" -lt 5 ]; do
+    while [ "$waited" -lt 38 ]; do
         LC_ALL=C sleep 0.1
         waited=$((waited + 1))
         if [ -f "$PID_FILE" ] && kill -0 "$bg_pid" 2>/dev/null; then
+            break
+        fi
+        if ! kill -0 "$bg_pid" 2>/dev/null; then
             break
         fi
     done

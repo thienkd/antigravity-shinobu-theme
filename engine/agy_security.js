@@ -33,17 +33,435 @@ const __AGY_SEC__ = (() => {
         return String(raw == null ? '' : raw).replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch]);
     }
 
+    const DANGEROUS_KEYS = new Set([
+        '__proto__', 'constructor', 'prototype',
+        'toString', 'valueOf', 'hasOwnProperty', 'isPrototypeOf',
+        'propertyIsEnumerable', 'toLocaleString',
+        '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__'
+    ]);
+
+    function isDangerousKey(key) {
+        const s = String(key == null ? '' : key);
+        return DANGEROUS_KEYS.has(s) || DANGEROUS_KEYS.has(s.trim());
+    }
+
     function stripProtoKeys(obj, depth = 0) {
-        if (depth > 8 || !obj || typeof obj !== 'object') return obj;
+        if (!obj || typeof obj !== 'object') return obj;
+        if (depth > 8) return Array.isArray(obj) ? [] : {};
         if (Array.isArray(obj)) {
             return obj.slice(0, 200).map((item) => stripProtoKeys(item, depth + 1));
         }
         const clean = Object.create(null);
         for (const key of Object.keys(obj)) {
-            if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+            if (isDangerousKey(key)) continue;
             clean[key] = stripProtoKeys(obj[key], depth + 1);
         }
         return Object.assign({}, clean);
+    }
+
+    const B64_ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    function decodeBase64Utf8(b64Raw) {
+        const cleanB64 = String(b64Raw || '').replace(/\s+/g, '');
+        if (!cleanB64 || !/^[A-Za-z0-9+/]*={0,2}$/.test(cleanB64)) {
+            throw new Error('Invalid base64');
+        }
+        let bin = '';
+        if (typeof atob === 'function') {
+            bin = atob(cleanB64);
+        } else {
+            let bits = 0;
+            let val = 0;
+            for (let i = 0; i < cleanB64.length; i++) {
+                const ch = cleanB64[i];
+                if (ch === '=') break;
+                const idx = B64_ALPHA.indexOf(ch);
+                if (idx < 0) throw new Error('Invalid base64 char');
+                val = (val << 6) | idx;
+                bits += 6;
+                if (bits >= 8) {
+                    bits -= 8;
+                    bin += String.fromCharCode((val >> bits) & 0xff);
+                }
+            }
+        }
+        try {
+            const pct = Array.from(bin).map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+            return decodeURIComponent(pct);
+        } catch (_) {
+            return bin;
+        }
+    }
+
+    function decodeXmlEntities(str) {
+        let cur = String(str == null ? '' : str);
+        for (let pass = 0; pass < 2; pass++) {
+            const next = cur
+                .replace(/&#x([0-9a-f]+);?/gi, (_, hex) => {
+                    const cp = parseInt(hex, 16);
+                    return Number.isFinite(cp) && cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : '';
+                })
+                .replace(/&#([0-9]+);?/g, (_, dec) => {
+                    const cp = parseInt(dec, 10);
+                    return Number.isFinite(cp) && cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : '';
+                })
+                .replace(/&(lt|gt|quot|apos|amp|colon|tab|newline);/gi, (_, name) => ({
+                    lt: '<', gt: '>', quot: '"', apos: "'", amp: '&', colon: ':', tab: '\t', newline: '\n'
+                }[name.toLowerCase()] || ''));
+            if (next === cur) break;
+            cur = next;
+        }
+        return cur;
+    }
+
+    function normalizeControlAndWs(str) {
+        return decodeXmlEntities(str).replace(/[\s\x00-\x1f\x7f]+/g, '').toLowerCase();
+    }
+
+    function isSafeSvgCss(cssText, allowAtRules) {
+        const raw = String(cssText || '');
+        const decoded = decodeXmlEntities(raw);
+        const variants = raw === decoded ? [raw] : [raw, decoded];
+        for (const text of variants) {
+            if (/<!--|-->|\/\*|\*\/|[<>\\\0]|@import|@charset|@namespace|expression\s*\(|(?:-\w+-)?image-set\s*\(|cross-fade\s*\(|(?:-\w+-)?element\s*\(|\bimage\s*\(|javascript:|vbscript:|behavior\s*:|-moz-binding|\bdata:/i.test(text)) {
+                return false;
+            }
+            if (!allowAtRules && /@[a-z-]/i.test(text)) {
+                return false;
+            }
+            const urlMatches = text.matchAll(/url\s*\(([^)]*)\)/gi);
+            for (const m of urlMatches) {
+                let inner = String(m[1] || '').trim();
+                if ((inner.startsWith('"') && inner.endsWith('"')) || (inner.startsWith("'") && inner.endsWith("'"))) {
+                    inner = inner.slice(1, -1).trim();
+                }
+                const compact = inner.replace(/[\s\x00-\x1f\x7f]+/g, '');
+                if (!/^#[A-Za-z_][A-Za-z0-9_.:-]*$/.test(compact)) {
+                    return false;
+                }
+            }
+            if (/url\s*\(/i.test(text.replace(/url\s*\(([^)]*)\)/gi, ''))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function isSafeSvgUrlRef(rawVal, tagLocalName) {
+        const trimmed = String(rawVal || '').trim();
+        if (!trimmed) return false;
+        const decoded = decodeXmlEntities(trimmed).trim();
+        const compact = decoded.replace(/[\s\x00-\x1f\x7f]+/g, '');
+        if (/javascript:|vbscript:|data:text\/html|data:image\/svg\+xml/i.test(compact)) {
+            return false;
+        }
+        const isLocalFragment = /^#[A-Za-z_][A-Za-z0-9_.:-]*$/.test(compact);
+        if (tagLocalName === 'use') {
+            return isLocalFragment;
+        }
+        if (tagLocalName === 'image' || tagLocalName === 'feimage') {
+            if (isLocalFragment) return true;
+            return /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(compact);
+        }
+        return isLocalFragment;
+    }
+
+    const BLOCKED_SVG_TAGS = new Set([
+        'script', 'foreignobject', 'iframe', 'object', 'embed',
+        'audio', 'video', 'canvas', 'set', 'animate',
+        'animatemotion', 'animatetransform', 'animatecolor',
+        'handler', 'listener', 'link', 'meta', 'base'
+    ]);
+
+    const BLOCKED_SVG_ATTRS = new Set([
+        'attributename', 'formaction', 'action', 'poster', 'background', 'srcdoc'
+    ]);
+
+    function hasDangerousAttrValue(val, tagLocal, localAttr) {
+        if (localAttr === 'href' || localAttr === 'src') {
+            return !isSafeSvgUrlRef(val, tagLocal);
+        }
+        if (localAttr === 'style') {
+            return !isSafeSvgCss(val, false);
+        }
+        const compact = normalizeControlAndWs(val);
+        if (/javascript:|vbscript:|data:text\/html|data:image\/svg\+xml|expression\s*\(|behavior\s*:|-moz-binding/i.test(compact)) {
+            return true;
+        }
+        if (/url\s*\(/i.test(String(val || '')) || /url\s*\(/i.test(decodeXmlEntities(val))) {
+            if (!isSafeSvgCss(val, false)) return true;
+        }
+        return false;
+    }
+
+    function findTagCloseOutsideQuotes(str, startIdx) {
+        let inQuote = '';
+        for (let i = startIdx; i < str.length; i++) {
+            const ch = str[i];
+            if (ch === '<') return -1;
+            if (inQuote) {
+                if (ch === inQuote) inQuote = '';
+                continue;
+            }
+            if (ch === '"' || ch === "'") {
+                inQuote = ch;
+            } else if (ch === '>') {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    function stripXmlCommentsOutsideTags(str) {
+        let out = '';
+        let i = 0;
+        let inTag = false;
+        let inQuote = '';
+        const len = str.length;
+        while (i < len) {
+            if (!inTag) {
+                if (str.startsWith('<!--', i)) {
+                    const endIdx = str.indexOf('-->', i + 4);
+                    if (endIdx === -1) return null;
+                    i = endIdx + 3;
+                    continue;
+                }
+                if (str.startsWith('<![CDATA[', i) || str.startsWith('<?', i)) {
+                    const isPi = str.startsWith('<?', i);
+                    const endToken = isPi ? '?>' : ']]>';
+                    const endIdx = str.indexOf(endToken, i + (isPi ? 2 : 9));
+                    if (endIdx === -1) return null;
+                    out += str.slice(i, endIdx + endToken.length);
+                    i = endIdx + endToken.length;
+                    continue;
+                }
+                if (str[i] === '<') {
+                    const styleOpenMatch = str.slice(i).match(/^<\s*(?:[a-zA-Z0-9_-]+:)?style\b/i);
+                    if (styleOpenMatch) {
+                        const gt = findTagCloseOutsideQuotes(str, i + styleOpenMatch[0].length);
+                        if (gt === -1) return null;
+                        const tagRaw = str.slice(i, gt + 1);
+                        out += tagRaw;
+                        i = gt + 1;
+                        if (!/\/\s*>$/.test(tagRaw)) {
+                            const nameMatch = tagRaw.slice(1).match(/^\s*([a-zA-Z0-9_:-]+)/);
+                            if (!nameMatch) return null;
+                            const closeRe = new RegExp('<\\/\\s*' + nameMatch[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*>', 'i');
+                            const rest = str.slice(i);
+                            const cm = closeRe.exec(rest);
+                            if (!cm) return null;
+                            const styleInner = rest.slice(0, cm.index);
+                            if (/<!--|-->/.test(styleInner)) return null;
+                            out += rest.slice(0, cm.index + cm[0].length);
+                            i += cm.index + cm[0].length;
+                        }
+                        continue;
+                    }
+                    inTag = true;
+                    out += '<';
+                    i++;
+                    continue;
+                }
+                out += str[i];
+                i++;
+            } else {
+                const ch = str[i];
+                if (inQuote) {
+                    if (ch === inQuote) inQuote = '';
+                    out += ch;
+                    i++;
+                } else {
+                    if (ch === '"' || ch === "'") {
+                        inQuote = ch;
+                        out += ch;
+                        i++;
+                    } else if (ch === '<') {
+                        return null;
+                    } else if (ch === '>') {
+                        inTag = false;
+                        out += ch;
+                        i++;
+                    } else {
+                        out += ch;
+                        i++;
+                    }
+                }
+            }
+        }
+        if (inTag || inQuote) return null;
+        return out;
+    }
+
+    function inspectAndSanitizeSvg(svgText, rejectOnDangerous) {
+        if (typeof svgText !== 'string') return '';
+        const cleaned = svgText.replace(/^\uFEFF/, '').trim();
+        if (!cleaned || cleaned.length > 1024 * 1024) return '';
+
+        const strippedComments = stripXmlCommentsOutsideTags(cleaned);
+        if (strippedComments === null) return '';
+
+        const withoutDeclAndComments = strippedComments
+            .trim()
+            .replace(/^\s*<\?xml(?:\s+[^?]*|\s*)\?>/i, '')
+            .trim();
+        if (!withoutDeclAndComments || /<\?/i.test(withoutDeclAndComments) || /<!(?:DOCTYPE|ENTITY|ELEMENT|ATTLIST|\[CDATA\[)/i.test(withoutDeclAndComments)) {
+            return '';
+        }
+
+        if (typeof DOMParser === 'function') {
+            try {
+                const doc = new DOMParser().parseFromString(strippedComments, 'image/svg+xml');
+                if (doc.querySelector('parsererror')) return '';
+                const root = doc.documentElement;
+                if (!root) return '';
+                const rootLocal = String(root.localName || root.tagName || '').split(':').pop().toLowerCase();
+                if (rootLocal !== 'svg') return '';
+
+                // Reject or scrub ProcessingInstruction (7), Comment (8), CDATASection (4) across the whole DOM tree
+                const scrubSpecialNodes = (parentNode) => {
+                    const kids = Array.from(parentNode.childNodes || parentNode.children || []);
+                    for (const child of kids) {
+                        if (child.nodeType === 7 || child.nodeType === 4) {
+                            return false;
+                        }
+                        if (child.nodeType === 8) {
+                            if (typeof child.remove === 'function') {
+                                child.remove();
+                            } else if (typeof parentNode.removeChild === 'function') {
+                                parentNode.removeChild(child);
+                            }
+                            continue;
+                        }
+                        if (child.nodeType === 1 && !scrubSpecialNodes(child)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                };
+                if (!scrubSpecialNodes(doc)) return '';
+
+                const all = [root, ...Array.from(root.querySelectorAll('*'))];
+                for (const el of all) {
+                    const tagLocal = String(el.localName || el.tagName || '').split(':').pop().toLowerCase();
+                    if (BLOCKED_SVG_TAGS.has(tagLocal)) {
+                        if (rejectOnDangerous) return '';
+                        el.remove();
+                        continue;
+                    }
+                    if (tagLocal === 'style') {
+                        if (!isSafeSvgCss(el.textContent || '', true)) {
+                            if (rejectOnDangerous) return '';
+                            el.remove();
+                            continue;
+                        }
+                    }
+                    for (const attr of Array.from(el.attributes)) {
+                        const fullAttr = String(attr.name || '').toLowerCase();
+                        const localAttr = String(attr.localName || fullAttr.split(':').pop() || '').toLowerCase();
+                        const aVal = String(attr.value || '').trim();
+                        if (
+                            localAttr.startsWith('on') ||
+                            fullAttr.startsWith('on') ||
+                            BLOCKED_SVG_ATTRS.has(localAttr) ||
+                            localAttr === 'data'
+                        ) {
+                            if (rejectOnDangerous) return '';
+                            el.removeAttribute(attr.name);
+                            continue;
+                        }
+                        if (hasDangerousAttrValue(aVal, tagLocal, localAttr)) {
+                            if (rejectOnDangerous) return '';
+                            el.removeAttribute(attr.name);
+                        }
+                    }
+                }
+                return new XMLSerializer().serializeToString(root);
+            } catch (_) {
+                return '';
+            }
+        }
+
+        // Strict fallback parser when DOMParser is unavailable (e.g. Node VM)
+        if (!/^<\s*(?:[a-zA-Z0-9_-]+:)?svg\b/i.test(withoutDeclAndComments) || !/<\/\s*(?:[a-zA-Z0-9_-]+:)?svg\s*>$/i.test(withoutDeclAndComments)) {
+            return '';
+        }
+
+        // Reject entity-encoded hidden tags (e.g. &#x3c;script, &lt;svg:script)
+        const decodedWhole = decodeXmlEntities(withoutDeclAndComments);
+        if (decodedWhole !== withoutDeclAndComments) {
+            if (/<\s*(?:[a-zA-Z0-9_-]+:)?(?:script|foreignobject|iframe|object|embed|set|animate|animatemotion|animatetransform|animatecolor|handler|listener|link|meta|base)\b/i.test(decodedWhole)) {
+                return '';
+            }
+        }
+
+        // Scan every tag (including <style> blocks) without breaking on '>' inside quoted attributes
+        let pos = 0;
+        while (pos < withoutDeclAndComments.length) {
+            const lt = withoutDeclAndComments.indexOf('<', pos);
+            if (lt === -1) break;
+            const afterLt = withoutDeclAndComments.slice(lt + 1);
+            const headMatch = afterLt.match(/^\s*(\/?)\s*([a-zA-Z0-9_:-]+)/);
+            if (!headMatch) return '';
+            const isClosing = Boolean(headMatch[1]);
+            const rawTag = headMatch[2];
+            const tagLocal = rawTag.split(':').pop().toLowerCase();
+            if (BLOCKED_SVG_TAGS.has(tagLocal)) return '';
+
+            const attrStart = lt + 1 + headMatch[0].length;
+            const gt = findTagCloseOutsideQuotes(withoutDeclAndComments, attrStart);
+            if (gt === -1) return '';
+
+            let attrStr = withoutDeclAndComments.slice(attrStart, gt);
+            const selfClosing = /\/\s*$/.test(attrStr);
+            if (selfClosing) attrStr = attrStr.replace(/\/\s*$/, '');
+
+            if (isClosing) {
+                if (attrStr.trim() !== '') return '';
+                pos = gt + 1;
+                continue;
+            }
+
+            if (attrStr.trim()) {
+                if (/\s+on[a-z0-9_-]+\s*(?:=|\s|$)/i.test(' ' + attrStr)) return '';
+
+                const attrRe = /\s+([a-zA-Z0-9_:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
+                let lastEnd = 0;
+                let am;
+                while ((am = attrRe.exec(attrStr)) !== null) {
+                    if (attrStr.slice(lastEnd, am.index).trim() !== '') return '';
+                    lastEnd = attrRe.lastIndex;
+                    const fullAttr = am[1].toLowerCase();
+                    const localAttr = fullAttr.split(':').pop().toLowerCase();
+                    const val = am[2] !== undefined ? am[2] : (am[3] !== undefined ? am[3] : (am[4] || ''));
+                    if (
+                        localAttr.startsWith('on') ||
+                        fullAttr.startsWith('on') ||
+                        BLOCKED_SVG_ATTRS.has(localAttr) ||
+                        localAttr === 'data'
+                    ) {
+                        return '';
+                    }
+                    if (hasDangerousAttrValue(val, tagLocal, localAttr)) {
+                        return '';
+                    }
+                }
+                if (attrStr.slice(lastEnd).trim() !== '') return '';
+            }
+
+            if (tagLocal === 'style' && !selfClosing) {
+                const rest = withoutDeclAndComments.slice(gt + 1);
+                const closeRe = new RegExp('<\\/\\s*' + rawTag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*>', 'i');
+                const cm = closeRe.exec(rest);
+                if (!cm) return '';
+                const cssContent = rest.slice(0, cm.index);
+                if (!isSafeSvgCss(cssContent, true)) return '';
+                pos = gt + 1 + cm.index + cm[0].length;
+                continue;
+            }
+
+            pos = gt + 1;
+        }
+
+        return strippedComments.trim();
     }
 
     /**
@@ -65,12 +483,20 @@ const __AGY_SEC__ = (() => {
             if (/^data:image\/svg\+xml/i.test(trimmed)) {
                 try {
                     const commaIdx = trimmed.indexOf(',');
+                    const header = trimmed.slice(0, commaIdx + 1);
                     const body = trimmed.slice(commaIdx + 1);
-                    const decoded = /;base64,/i.test(trimmed.slice(0, commaIdx + 1))
-                        ? atob(body)
-                        : decodeURIComponent(body);
-                    if (/<script|<foreignobject|<iframe|<object|<embed|\bon[a-z]+\s*=|javascript:/i.test(decoded)) {
+                    const isB64 = /;base64,/i.test(header);
+                    const decoded = isB64 ? decodeBase64Utf8(body) : decodeURIComponent(body);
+                    if (!inspectAndSanitizeSvg(decoded, true)) {
                         return '';
+                    }
+                    if (!isB64 && /%[0-9a-f]{2}/i.test(decoded)) {
+                        try {
+                            const decodedTwice = decodeURIComponent(decoded);
+                            if (decodedTwice !== decoded && !inspectAndSanitizeSvg(decodedTwice, true)) {
+                                return '';
+                            }
+                        } catch (_) {}
                     }
                 } catch (_) {
                     return '';
@@ -102,9 +528,19 @@ const __AGY_SEC__ = (() => {
         if (typeof raw !== 'string') return fallback;
         const trimmed = raw.trim();
         if (!trimmed || trimmed.length > 260) return fallback;
-        if (/[;{}<>\\`\r\n\0]|\/\*|\*\/|@import|expression\s*\(|url\s*\(|javascript:/i.test(trimmed)) {
+        if (/["';{}<>\\`\x00-\x1f\x7f]|\/\*|\*\/|@import|@charset|@namespace|expression\s*\(|url\s*\(|(?:-\w+-)?image-set\s*\(|cross-fade\s*\(|(?:-\w+-)?element\s*\(|\bimage\s*\(|javascript:|vbscript:|behavior\s*:|-moz-binding/i.test(trimmed)) {
             return fallback;
         }
+        let parenDepth = 0;
+        for (let i = 0; i < trimmed.length; i++) {
+            const ch = trimmed[i];
+            if (ch === '(') parenDepth++;
+            else if (ch === ')') {
+                parenDepth--;
+                if (parenDepth < 0) return fallback;
+            }
+        }
+        if (parenDepth !== 0) return fallback;
         return trimmed;
     }
 
@@ -112,44 +548,7 @@ const __AGY_SEC__ = (() => {
      * Sanitizes raw SVG markup (for custom imported themes/stickers) using DOMParser when available.
      */
     function sanitizeSvgMarkup(svgText) {
-        if (typeof svgText !== 'string') return '';
-        const cleaned = svgText.replace(/^\uFEFF/, '').trim();
-        if (!cleaned || cleaned.length > 1024 * 1024) return '';
-        if (typeof DOMParser === 'function') {
-            try {
-                const doc = new DOMParser().parseFromString(cleaned, 'image/svg+xml');
-                if (doc.querySelector('parsererror')) return '';
-                const root = doc.documentElement;
-                if (!root || root.tagName.toLowerCase() !== 'svg') return '';
-                const blockedTags = new Set(['script', 'foreignobject', 'iframe', 'object', 'embed', 'audio', 'video', 'canvas']);
-                const all = [root, ...Array.from(root.querySelectorAll('*'))];
-                for (const el of all) {
-                    const tag = el.tagName.toLowerCase();
-                    if (blockedTags.has(tag)) {
-                        el.remove();
-                        continue;
-                    }
-                    for (const attr of Array.from(el.attributes)) {
-                        const aName = attr.name.toLowerCase();
-                        const aVal = String(attr.value || '').trim();
-                        if (aName.startsWith('on')) {
-                            el.removeAttribute(attr.name);
-                        } else if ((aName === 'href' || aName === 'xlink:href') && !aVal.startsWith('#') && !/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,/i.test(aVal)) {
-                            el.removeAttribute(attr.name);
-                        } else if (/javascript:|data:text\/html/i.test(aVal)) {
-                            el.removeAttribute(attr.name);
-                        }
-                    }
-                }
-                return new XMLSerializer().serializeToString(root);
-            } catch (_) {
-                return '';
-            }
-        }
-        if (/<script|<foreignobject|<iframe|<object|<embed|\bon[a-z]+\s*=|javascript:/i.test(cleaned)) {
-            return '';
-        }
-        return cleaned;
+        return inspectAndSanitizeSvg(svgText, false);
     }
 
     const COLOR_KEYS = [
@@ -180,12 +579,12 @@ const __AGY_SEC__ = (() => {
             };
         }
         if (rawDialogs && typeof rawDialogs === 'object') {
-            const dOut = {};
+            const dOut = Object.create(null);
             let keyCount = 0;
             for (const [dk, dv] of Object.entries(rawDialogs)) {
                 if (keyCount >= 16) break;
                 const safeKey = String(dk).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
-                if (!safeKey) continue;
+                if (!safeKey || isDangerousKey(safeKey)) continue;
                 if (Array.isArray(dv)) {
                     dOut[safeKey] = dv.slice(0, 16).map((line) => String(line || '').slice(0, 280));
                     keyCount++;
@@ -194,7 +593,7 @@ const __AGY_SEC__ = (() => {
                     keyCount++;
                 }
             }
-            return dOut;
+            return Object.assign({}, dOut);
         }
         return {};
     }
@@ -203,12 +602,12 @@ const __AGY_SEC__ = (() => {
         if (!rawReplies || typeof rawReplies !== 'object' || Array.isArray(rawReplies)) {
             return {};
         }
-        const rOut = {};
+        const rOut = Object.create(null);
         let keyCount = 0;
         for (const [rk, rv] of Object.entries(rawReplies)) {
             if (keyCount >= 24) break;
             const safeKey = String(rk).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
-            if (!safeKey) continue;
+            if (!safeKey || isDangerousKey(safeKey)) continue;
             if (Array.isArray(rv)) {
                 rOut[safeKey] = rv.slice(0, 12).map((line) => String(line || '').slice(0, 280));
                 keyCount++;
@@ -217,7 +616,7 @@ const __AGY_SEC__ = (() => {
                 keyCount++;
             }
         }
-        return rOut;
+        return Object.assign({}, rOut);
     }
 
     function sanitizeThemeDefinition(rawTheme) {
@@ -240,7 +639,10 @@ const __AGY_SEC__ = (() => {
             if (typeof src[bk] === 'boolean') out[bk] = src[bk];
         }
         if (typeof src.concept === 'string') out.concept = src.concept.slice(0, 140);
-        if (typeof src.fxMode === 'string') out.fxMode = src.fxMode.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+        if (typeof src.fxMode === 'string') {
+            const fx = src.fxMode.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+            if (fx && !isDangerousKey(fx)) out.fxMode = fx;
+        }
         if (typeof src.defaultDimming === 'number' && Number.isFinite(src.defaultDimming)) {
             const normalizedDim = (src.defaultDimming > 0 && src.defaultDimming < 1)
                 ? Math.round(src.defaultDimming * 100)
@@ -275,7 +677,7 @@ const __AGY_SEC__ = (() => {
                     ? n.pills.slice(0, 8).map((p) => ({
                         key: String((p && p.key) || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32),
                         label: String((p && p.label) || '').slice(0, 48)
-                    })).filter((p) => p.key && p.label)
+                    })).filter((p) => p.key && p.label && !isDangerousKey(p.key))
                     : [],
                 replies: sanitizeNpcReplies(n.replies)
             };
@@ -287,13 +689,21 @@ const __AGY_SEC__ = (() => {
         const src = stripProtoKeys(rawCfg);
         if (!src || typeof src !== 'object' || Array.isArray(src)) return {};
         const out = {};
-        if (typeof src.themeName === 'string') out.themeName = src.themeName.trim().slice(0, 80);
-        if (typeof src.bubbleName === 'string') out.bubbleName = src.bubbleName.trim().slice(0, 80);
+        if (typeof src.themeName === 'string') {
+            const tn = src.themeName.trim().slice(0, 80);
+            if (tn && !isDangerousKey(tn)) out.themeName = tn;
+        }
+        if (typeof src.bubbleName === 'string') {
+            const bn = src.bubbleName.trim().slice(0, 80);
+            if (bn && !isDangerousKey(bn)) out.bubbleName = bn;
+        }
         if (typeof src.inputStyle === 'string') {
-            out.inputStyle = src.inputStyle.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+            const ist = src.inputStyle.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+            if (ist && !isDangerousKey(ist)) out.inputStyle = ist;
         }
         if (typeof src.masterPersona === 'string') {
-            out.masterPersona = src.masterPersona.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) || 'yoriichi';
+            const mp = src.masterPersona.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
+            out.masterPersona = (mp && !isDangerousKey(mp)) ? mp : 'yoriichi';
         }
         if (typeof src.dimming === 'number' && Number.isFinite(src.dimming)) {
             const d = (src.dimming > 0 && src.dimming < 1) ? Math.round(src.dimming * 100) : Math.round(src.dimming);
@@ -329,9 +739,24 @@ const __AGY_SEC__ = (() => {
             const cleanForged = sanitizeThemeDefinition(src.activeForgedTheme);
             if (cleanForged) {
                 const forgedName = String(src.activeForgedTheme.name || out.themeName || '').trim().slice(0, 68);
-                if (forgedName) cleanForged.name = forgedName;
-                cleanForged.isForged = true;
-                out.activeForgedTheme = cleanForged;
+                if (!forgedName || !isDangerousKey(forgedName)) {
+                    if (forgedName) cleanForged.name = forgedName;
+                    cleanForged.isForged = true;
+                    out.activeForgedTheme = cleanForged;
+                }
+            }
+        }
+        if (src.activeForgedBubbleTheme === null) {
+            out.activeForgedBubbleTheme = null;
+        } else if (src.activeForgedBubbleTheme && typeof src.activeForgedBubbleTheme === 'object' && !Array.isArray(src.activeForgedBubbleTheme)) {
+            const cleanForgedBubble = sanitizeThemeDefinition(src.activeForgedBubbleTheme);
+            if (cleanForgedBubble) {
+                const forgedBubbleName = String(src.activeForgedBubbleTheme.name || out.bubbleName || '').trim().slice(0, 68);
+                if (forgedBubbleName && !isDangerousKey(forgedBubbleName)) {
+                    cleanForgedBubble.name = forgedBubbleName;
+                    cleanForgedBubble.isForged = true;
+                    out.activeForgedBubbleTheme = cleanForgedBubble;
+                }
             }
         }
         return out;
@@ -378,6 +803,7 @@ const __AGY_SEC__ = (() => {
         getAssetBase: () => _assetBase,
         getInitialConfig: () => (_initialConfig ? sanitizeConfigObject(_initialConfig) : null),
         isSyncFromDaemon: () => _syncFromDaemon,
+        isDangerousKey,
         escapeHtml,
         stripProtoKeys,
         sanitizeCssUrl,

@@ -19,6 +19,13 @@
     return h >>> 0;
   }
 
+  let avatarGradientSeq = 0;
+
+  function safeIconSize(size, fallback) {
+    const n = Number(size);
+    return (Number.isFinite(n) && n > 0 && n <= 512) ? Math.round(n * 100) / 100 : fallback;
+  }
+
   function escapeXml(s) {
     return String(s || '')
       .replace(/&/g, '&amp;')
@@ -78,8 +85,10 @@
   }
 
   function buildSessionAvatar(rawTitle, cid, size = 15) {
+    const sz = safeIconSize(size, 15);
     const info = parseSessionIdentity(rawTitle, cid);
-    const gid = `agy_ses_${info.uid}_${size}`;
+    avatarGradientSeq = (avatarGradientSeq + 1) >>> 0;
+    const gid = `agy_ses_${info.uid}_${sz}_${avatarGradientSeq}`;
     let innerGlyph = '';
 
     if (info.archetype === 'media') {
@@ -115,7 +124,7 @@
       `;
     }
 
-    const svg = `<svg class="agy-sem-svg agy-session-emblem" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">` +
+    const svg = `<svg class="agy-sem-svg agy-session-emblem" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">` +
       `<defs><linearGradient id="${gid}" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">` +
       `<stop offset="0%" stop-color="${info.c1}"/><stop offset="100%" stop-color="${info.c2}"/>` +
       `</linearGradient></defs>` +
@@ -151,6 +160,7 @@
   }
 
   function getElementalSvg(rawModeOrTheme, size = 14) {
+    const sz = safeIconSize(size, 14);
     const key = normalizeElementKey(rawModeOrTheme);
     let body = '';
 
@@ -297,10 +307,11 @@
         break;
     }
 
-    return `<svg class="agy-sem-svg agy-elem-svg" data-elem="${key}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${body}</svg>`;
+    return `<svg class="agy-sem-svg agy-elem-svg" data-elem="${key}" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${body}</svg>`;
   }
 
   function getFuncSvg(kind, size = 13) {
+    const sz = safeIconSize(size, 13);
     let body = '';
     switch (kind) {
       case 'breathing_forms': // Katana Tsuba guard + Technique scroll
@@ -399,7 +410,7 @@
         body = `<circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="1.8"/>`;
         break;
     }
-    return `<svg class="agy-sem-svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${body}</svg>`;
+    return `<svg class="agy-sem-svg" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${body}</svg>`;
   }
 
   const API = {

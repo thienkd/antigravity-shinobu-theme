@@ -15,19 +15,206 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
+function getEffectiveHomedir() {
+    if (process.platform === 'win32') {
+        return process.env.USERPROFILE || process.env.HOME || os.homedir();
+    }
+    return process.env.HOME || os.homedir();
+}
+
 const ROOT_DIR = path.resolve(__dirname, '..');
+const DAEMON_JS = path.join(ROOT_DIR, 'daemon', 'theme_daemon.js');
+const RESOLVED_DAEMON_JS = path.resolve(DAEMON_JS);
 const PID_FILE = path.join(ROOT_DIR, 'daemon.pid');
 const LOG_FILE = path.join(ROOT_DIR, 'daemon.log');
 const LOCK_FILE = path.join(ROOT_DIR, 'daemon.lock');
 const VBS_FILE = path.join(ROOT_DIR, 'silent-start.vbs');
 const CONFIG_FILE = process.env.AGY_CONFIG_PATH || path.join(ROOT_DIR, 'theme_config.json');
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
-const BACKUP_CONFIG_FILE = path.join(os.homedir(), '.gemini', 'antigravity', 'custom_theme_backup.json');
+const BACKUP_CONFIG_FILE =
+    process.env.AGY_BACKUP_CONFIG_PATH ||
+    path.join(getEffectiveHomedir(), '.gemini', 'antigravity', 'custom_theme_backup.json');
 
 const PURGE = process.argv.slice(2).includes('--purge');
 
+const WIN_CI_FLAGS = process.platform === 'win32' ? 'i' : '';
 const NODE_PROC_RE = /\bnode(?:js|\d+)?(?:\.exe)?\b/i;
-const DAEMON_SCRIPT_RE = /theme_daemon\.js/;
+const DAEMON_SCRIPT_RE = new RegExp('theme_daemon\\.js', WIN_CI_FLAGS);
+const DAEMON_ARG_RE = new RegExp('(?:^|[\\s"\'\\\\/])theme_daemon\\.js(?=$|[\\s"\'])', WIN_CI_FLAGS);
+const UNINSTALL_SCRIPT_TOKEN_RE = /(?:^|[\\/])uninstall\.js$/i;
+
+function normalizePathForCompare(p) {
+    const resolved = path.resolve(String(p || ''));
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+function resolveCanonicalPath(p) {
+    const resolved = path.resolve(String(p || ''));
+    try {
+        const real = fs.realpathSync(resolved);
+        return process.platform === 'win32' ? real.toLowerCase() : real;
+    } catch (_) {
+        return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    }
+}
+
+function splitCommandLineArgs(cmdLine, platform = process.platform) {
+    const args = [];
+    let cur = '';
+    let quote = '';
+    for (let i = 0; i < cmdLine.length; i++) {
+        const ch = cmdLine[i];
+        if (quote) {
+            if (ch === quote) {
+                quote = '';
+            } else {
+                cur += ch;
+            }
+        } else if (ch === '"' || (platform !== 'win32' && ch === "'")) {
+            quote = ch;
+        } else if (/\s/.test(ch)) {
+            if (cur) {
+                args.push(cur);
+                cur = '';
+            }
+        } else {
+            cur += ch;
+        }
+    }
+    if (cur) args.push(cur);
+    return args;
+}
+
+function escapeRegExp(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isUninstallScriptToken(rawTok) {
+    if (!rawTok) return false;
+    const tok = String(rawTok).trim().replace(/\//g, path.sep);
+    return UNINSTALL_SCRIPT_TOKEN_RE.test(tok);
+}
+
+const NODE_VALUE_FLAGS = new Set([
+    '-r',
+    '--require',
+    '--import',
+    '-C',
+    '--conditions',
+    '--input-type',
+    '--loader',
+    '--experimental-loader',
+    '-e',
+    '--eval',
+    '-p',
+    '--print',
+    '--env-file',
+    '--env-file-if-exists',
+    '--watch-path',
+    '--diagnostic-dir',
+    '--redirect-warnings',
+    '--title',
+    '--max-http-header-size',
+    '--heapsnapshot-near-heap-limit',
+    '--tls-cipher-list',
+    '--openssl-config',
+    '--icu-data-dir',
+    '--dns-result-order',
+    '--unhandled-rejections',
+    '--inspect-publish-uid',
+]);
+
+function extractEntryScriptToken(args) {
+    if (!Array.isArray(args) || args.length === 0) return '';
+    let idx = 0;
+    const first = String(args[0] || '');
+    if (NODE_PROC_RE.test(first)) {
+        idx = 1;
+    }
+    for (let i = idx; i < args.length; i++) {
+        const tok = String(args[i] || '');
+        if (!tok) continue;
+        if (tok === '--') {
+            return i + 1 < args.length ? String(args[i + 1] || '') : '';
+        }
+        if (tok.startsWith('-')) {
+            if (!tok.includes('=') && NODE_VALUE_FLAGS.has(tok)) {
+                i++;
+            }
+            continue;
+        }
+        return tok;
+    }
+    return '';
+}
+
+function isTargetDaemonArgs(args, procHint = '', options = {}) {
+    if (!Array.isArray(args) || args.length === 0) return false;
+    if (args.some((rawTok) => isUninstallScriptToken(rawTok))) return false;
+    const joined = `${procHint} ${args.join(' ')}`.trim();
+    if (!NODE_PROC_RE.test(joined)) return false;
+
+    const entryRaw = extractEntryScriptToken(args);
+    if (!entryRaw) return false;
+
+    const allowRelativeFromRoot = Boolean(options && options.allowRelativeFromRoot);
+    const baseDir = options && typeof options.baseDir === 'string' ? options.baseDir : '';
+    const resolveRoot = baseDir || (allowRelativeFromRoot ? ROOT_DIR : '');
+
+    const targetNorm = normalizePathForCompare(RESOLVED_DAEMON_JS);
+    const targetCanonical = resolveCanonicalPath(RESOLVED_DAEMON_JS);
+
+    const tok = String(entryRaw).replace(/\//g, path.sep);
+    const endsWithDaemon = process.platform === 'win32'
+        ? /(?:^|[\\/])theme_daemon\.js$/i.test(tok)
+        : /(?:^|[\\/])theme_daemon\.js$/.test(tok);
+    if (!endsWithDaemon) return false;
+
+    let candidatePath = '';
+    if (path.isAbsolute(tok)) {
+        candidatePath = tok;
+    } else if (resolveRoot && /[\\/]/.test(tok)) {
+        candidatePath = path.resolve(resolveRoot, tok);
+    } else {
+        return false;
+    }
+
+    if (normalizePathForCompare(candidatePath) === targetNorm) return true;
+    if (resolveCanonicalPath(candidatePath) === targetCanonical) return true;
+    return false;
+}
+
+function isTargetDaemonCommand(cmdLine, procHint = '', options = {}) {
+    if (!cmdLine || typeof cmdLine !== 'string') return false;
+    const combined = procHint ? `${procHint} ${cmdLine}` : cmdLine;
+    if (!NODE_PROC_RE.test(combined) || !DAEMON_ARG_RE.test(cmdLine)) return false;
+
+    const tokens = splitCommandLineArgs(cmdLine);
+    if (tokens.some((rawTok) => isUninstallScriptToken(rawTok))) return false;
+    if (isTargetDaemonArgs(tokens, procHint, options)) return true;
+
+    // Fallback cho trường hợp ps in đường dẫn tuyệt đối có khoảng trắng không bọc dấu nháy;
+    // không áp dụng nếu có một script .js/.cjs/.mjs khác đứng làm entry script trước đó.
+    const entryRaw = extractEntryScriptToken(tokens);
+    if (entryRaw && /\.(?:js|cjs|mjs)$/i.test(entryRaw) && !/theme_daemon\.js$/i.test(entryRaw)) {
+        return false;
+    }
+
+    const targetVariants = [RESOLVED_DAEMON_JS];
+    try {
+        const real = fs.realpathSync(RESOLVED_DAEMON_JS);
+        if (real && real !== RESOLVED_DAEMON_JS) targetVariants.push(real);
+    } catch (_) {}
+    const flags = process.platform === 'win32' ? 'i' : '';
+    for (const variant of targetVariants) {
+        const sepPattern = process.platform === 'win32'
+            ? escapeRegExp(variant).replace(/\\\\/g, '[\\\\/]')
+            : escapeRegExp(variant);
+        const exactBoundaryRe = new RegExp(`(?:^|\\s)${sepPattern}(?=$|\\s)`, flags);
+        if (exactBoundaryRe.test(cmdLine)) return true;
+    }
+    return false;
+}
 
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -43,8 +230,9 @@ function isPidAlive(pid) {
 }
 
 function resolvePortFile() {
+    if (process.env.AGY_DEVTOOLS_PORT_FILE) return process.env.AGY_DEVTOOLS_PORT_FILE;
     if (process.env.AGY_PORT_FILE) return process.env.AGY_PORT_FILE;
-    const home = os.homedir();
+    const home = getEffectiveHomedir();
     let candidates;
     if (process.platform === 'win32') {
         const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
@@ -83,7 +271,16 @@ function resolvePortFile() {
     return candidates.find((p) => fs.existsSync(p)) || candidates[0];
 }
 
-function isVerifiedDaemonProcess(pid) {
+function getLinuxProcCwd(pid) {
+    if (process.platform !== 'linux') return '';
+    try {
+        return fs.readlinkSync(`/proc/${pid}/cwd`);
+    } catch (_) {
+        return '';
+    }
+}
+
+function isVerifiedDaemonProcess(pid, options = {}) {
     if (!Number.isInteger(pid) || pid <= 0 || !isPidAlive(pid)) return false;
 
     if (process.platform === 'win32') {
@@ -94,12 +291,15 @@ function isVerifiedDaemonProcess(pid) {
                     '-NoProfile',
                     '-NonInteractive',
                     '-Command',
-                    `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" -ErrorAction Stop; if ($p) { "$($p.Name)|$($p.CommandLine)" }`,
+                    `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; $p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" -ErrorAction Stop; if ($p) { "$($p.Name)|$($p.CommandLine)" }`,
                 ],
                 { encoding: 'utf8', windowsHide: true, timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
             ).trim();
             if (!out) return false;
-            return NODE_PROC_RE.test(out) && DAEMON_SCRIPT_RE.test(out);
+            const sep = out.indexOf('|');
+            const procName = sep >= 0 ? out.slice(0, sep) : '';
+            const cmdLine = sep >= 0 ? out.slice(sep + 1) : out;
+            return isTargetDaemonCommand(cmdLine, procName, options);
         } catch (_) {
             try {
                 const wmicOut = execFileSync(
@@ -108,7 +308,11 @@ function isVerifiedDaemonProcess(pid) {
                     { encoding: 'utf8', windowsHide: true, timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] }
                 ).trim();
                 if (!wmicOut) return false;
-                return NODE_PROC_RE.test(wmicOut) && DAEMON_SCRIPT_RE.test(wmicOut);
+                const nameMatch = wmicOut.match(/^Name=(.*)$/im);
+                const cmdMatch = wmicOut.match(/^CommandLine=(.*)$/im);
+                const procName = nameMatch ? nameMatch[1].trim() : '';
+                const cmdLine = cmdMatch ? cmdMatch[1].trim() : '';
+                return isTargetDaemonCommand(cmdLine, procName, options);
             } catch (__) {
                 return false;
             }
@@ -116,12 +320,24 @@ function isVerifiedDaemonProcess(pid) {
     }
 
     if (process.platform === 'linux') {
+        const procCwd = (options && options.baseDir) || getLinuxProcCwd(pid);
+        const linuxOpts = procCwd ? { ...options, baseDir: procCwd } : options;
         try {
-            const rawCmd = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0+/g, ' ').trim();
-            if (rawCmd) {
-                return NODE_PROC_RE.test(rawCmd) && DAEMON_SCRIPT_RE.test(rawCmd);
+            const rawArgs = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
+            if (rawArgs.length > 0) {
+                return isTargetDaemonArgs(rawArgs, '', linuxOpts);
             }
         } catch (_) {}
+        try {
+            const cmdline = execFileSync('ps', ['-ww', '-p', String(pid), '-o', 'command='], {
+                encoding: 'utf8',
+                timeout: 3000,
+                stdio: ['ignore', 'pipe', 'ignore'],
+            }).trim();
+            return isTargetDaemonCommand(cmdline, '', linuxOpts);
+        } catch (_) {
+            return false;
+        }
     }
 
     try {
@@ -130,7 +346,7 @@ function isVerifiedDaemonProcess(pid) {
             timeout: 3000,
             stdio: ['ignore', 'pipe', 'ignore'],
         }).trim();
-        return NODE_PROC_RE.test(cmdline) && DAEMON_SCRIPT_RE.test(cmdline);
+        return isTargetDaemonCommand(cmdline, '', options);
     } catch (_) {
         return false;
     }
@@ -167,7 +383,7 @@ function safeUnlink(targetPath, label) {
 
 function unpatchLinuxDesktopLaunchers() {
     if (process.platform !== 'linux') return;
-    const xdgData = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
+    const xdgData = process.env.XDG_DATA_HOME || path.join(getEffectiveHomedir(), '.local', 'share');
     const appsDir = path.join(xdgData, 'applications');
     if (!fs.existsSync(appsDir)) return;
 
@@ -206,36 +422,145 @@ function unpatchLinuxDesktopLaunchers() {
     }
 }
 
-function unpatchWindowsShortcuts() {
+function unpatchWindowsShortcuts(overrideDirs = null) {
     if (process.platform !== 'win32') return;
+    const rawEnvDirs = process.env.AGY_UNINSTALL_SHORTCUT_DIRS;
+    const customDirs = Array.isArray(overrideDirs)
+        ? overrideDirs.map((d) => String(d || '').trim()).filter(Boolean)
+        : rawEnvDirs !== undefined
+          ? String(rawEnvDirs)
+                .split(path.delimiter)
+                .map((d) => d.trim())
+                .filter(Boolean)
+          : null;
+    if (customDirs && customDirs.length === 0) return;
+
     const psScript = `
-$WshShell = New-Object -ComObject WScript.Shell
-$Dirs = @(
-  [Environment]::GetFolderPath('DesktopDirectory'),
-  [Environment]::GetFolderPath('Programs'),
-  [Environment]::GetFolderPath('Startup'),
-  (Join-Path $env:APPDATA 'Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar')
-) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+if (-not ([System.Management.Automation.PSTypeName]'AgyWinShortcut.ShortcutCom').Type) {
+  Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+using System.Text;
+
+namespace AgyWinShortcut {
+    [ComImport]
+    [Guid("00021401-0000-0000-C000-000000000046")]
+    internal class ShellLink { }
+
+    [ComImport]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("000214F9-0000-0000-C000-000000000046")]
+    internal interface IShellLinkW {
+        void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszFile, int cchMaxPath, IntPtr pfd, int fFlags);
+        void GetIDList(out IntPtr ppidl);
+        void SetIDList(IntPtr pidl);
+        void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszName, int cchMaxName);
+        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string pszName);
+        void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszDir, int cchMaxPath);
+        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string pszDir);
+        void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszArgs, int cchMaxPath);
+        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string pszArgs);
+        void GetHotkey(out short pwHotkey);
+        void SetHotkey(short wHotkey);
+        void GetShowCmd(out int piShowCmd);
+        void SetShowCmd(int iShowCmd);
+        void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszIconPath, int cchIconPath, out int piIcon);
+        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string pszIconPath, int iIcon);
+        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string pszPathRel, int dwReserved);
+        void Resolve(IntPtr hwnd, int fFlags);
+        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
+    }
+
+    public static class ShortcutCom {
+        public static string[] ReadTargetAndArgs(string lnkPath) {
+            object link = null;
+            try {
+                link = new ShellLink();
+                var persist = (IPersistFile)link;
+                persist.Load(lnkPath, 0);
+                var shellLink = (IShellLinkW)link;
+                var targetSb = new StringBuilder(4096);
+                var argsSb = new StringBuilder(4096);
+                shellLink.GetPath(targetSb, targetSb.Capacity, IntPtr.Zero, 0);
+                shellLink.GetArguments(argsSb, argsSb.Capacity);
+                return new string[] { targetSb.ToString(), argsSb.ToString() };
+            } finally {
+                if (link != null && Marshal.IsComObject(link)) {
+                    Marshal.FinalReleaseComObject(link);
+                }
+            }
+        }
+
+        public static void SaveArguments(string lnkPath, string newArgs) {
+            object link = null;
+            try {
+                link = new ShellLink();
+                var persist = (IPersistFile)link;
+                persist.Load(lnkPath, 0);
+                var shellLink = (IShellLinkW)link;
+                shellLink.SetArguments(newArgs);
+                persist.Save(lnkPath, true);
+            } finally {
+                if (link != null && Marshal.IsComObject(link)) {
+                    Marshal.FinalReleaseComObject(link);
+                }
+            }
+        }
+    }
+}
+'@
+}
+$OverrideDirsRaw = $env:AGY_SHORTCUT_OVERRIDE_DIRS
+if ($OverrideDirsRaw) {
+  $Dirs = @($OverrideDirsRaw -split "\`r?\`n" | Where-Object { $_ -and (Test-Path -LiteralPath $_) })
+} else {
+  $Dirs = @(
+    [Environment]::GetFolderPath('DesktopDirectory'),
+    [Environment]::GetFolderPath('Programs'),
+    [Environment]::GetFolderPath('Startup'),
+    (Join-Path $env:APPDATA 'Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar')
+  ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+}
 foreach ($d in $Dirs) {
   Get-ChildItem -LiteralPath $d -Recurse -Filter '*.lnk' -ErrorAction SilentlyContinue | ForEach-Object {
     try {
-      $sc = $WshShell.CreateShortcut($_.FullName)
-      if ($sc.TargetPath -and ($sc.TargetPath -imatch '\\\\Antigravity\\.exe$')) {
-        if ($sc.Arguments -and ($sc.Arguments -match '--remote-debugging-port')) {
-          $sc.Arguments = (($sc.Arguments -replace '\\s*--remote-debugging-port(?:=\\S+)?', '') -replace '\\s{2,}', ' ').Trim()
-          $sc.Save()
-          Write-Output $_.FullName
+      $lnkPath = $_.FullName
+      $info = [AgyWinShortcut.ShortcutCom]::ReadTargetAndArgs($lnkPath)
+      $targetPath = $info[0]
+      $rawArgs = $info[1]
+      if ($targetPath -and ($targetPath -imatch '\\\\Antigravity\\.exe$')) {
+        if ($rawArgs -and ($rawArgs -match '--remote-debugging-port')) {
+          $newArgs = (($rawArgs -replace '\\s*--remote-debugging-port(?:=\\S+)?', '') -replace '\\s{2,}', ' ').Trim()
+          if ($newArgs -ne $rawArgs) {
+            [AgyWinShortcut.ShortcutCom]::SaveArguments($lnkPath, $newArgs)
+            Write-Output $lnkPath
+          }
         }
       }
     } catch {}
   }
 }
 `;
+    const childEnv = { ...process.env };
+    if (customDirs) {
+        childEnv.AGY_SHORTCUT_OVERRIDE_DIRS = customDirs.join('\n');
+    } else {
+        delete childEnv.AGY_SHORTCUT_OVERRIDE_DIRS;
+    }
     try {
         const out = execFileSync(
             'powershell.exe',
             ['-NoProfile', '-NonInteractive', '-Command', psScript],
-            { encoding: 'utf8', windowsHide: true, timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }
+            {
+                encoding: 'utf8',
+                env: childEnv,
+                windowsHide: true,
+                timeout: 20000,
+                stdio: ['ignore', 'pipe', 'ignore'],
+            }
         ).trim();
         if (out) {
             for (const line of out.split(/\r?\n/)) {
@@ -247,14 +572,100 @@ foreach ($d in $Dirs) {
     } catch (_) {}
 }
 
+function findOrphanDaemonPids(excludePids = new Set()) {
+    const found = new Set();
+    const selfPid = process.pid;
+    const parentPid = process.ppid;
+
+    const considerCandidate = (pid, cmdLine, procHint = '') => {
+        if (!Number.isInteger(pid) || pid <= 0) return;
+        if (pid === selfPid || pid === parentPid || excludePids.has(pid) || found.has(pid)) return;
+        const procOpts = process.platform === 'linux' ? { baseDir: getLinuxProcCwd(pid) } : {};
+        if (cmdLine && !isTargetDaemonCommand(cmdLine, procHint, procOpts)) return;
+        if (isVerifiedDaemonProcess(pid, procOpts)) {
+            found.add(pid);
+        }
+    };
+
+    if (process.platform === 'win32') {
+        try {
+            const out = execFileSync(
+                'powershell.exe',
+                [
+                    '-NoProfile',
+                    '-NonInteractive',
+                    '-Command',
+                    `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; Get-CimInstance Win32_Process -Filter "Name LIKE 'node%'" -ErrorAction SilentlyContinue | ForEach-Object { if ($_.CommandLine) { "$($_.ProcessId)|$($_.CommandLine)" } }`,
+                ],
+                { encoding: 'utf8', windowsHide: true, timeout: 8000, stdio: ['ignore', 'pipe', 'ignore'] }
+            );
+            for (const line of out.split(/\r?\n/)) {
+                const sep = line.indexOf('|');
+                if (sep <= 0) continue;
+                const pid = parseInt(line.slice(0, sep).trim(), 10);
+                const cmd = line.slice(sep + 1);
+                considerCandidate(pid, cmd, 'node.exe');
+            }
+            return Array.from(found);
+        } catch (_) {
+            try {
+                const wmicOut = execFileSync(
+                    'wmic.exe',
+                    ['process', 'where', "Name like 'node%'", 'get', 'ProcessId,CommandLine', '/FORMAT:LIST'],
+                    { encoding: 'utf8', windowsHide: true, timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
+                );
+                for (const block of wmicOut.split(/\r?\n\s*\r?\n/)) {
+                    const pidMatch = block.match(/ProcessId=(\d+)/i);
+                    const cmdMatch = block.match(/CommandLine=(.*)/i);
+                    const pid = pidMatch ? parseInt(pidMatch[1], 10) : 0;
+                    const cmd = cmdMatch ? cmdMatch[1] : block;
+                    considerCandidate(pid, cmd, 'node.exe');
+                }
+            } catch (__) {}
+            return Array.from(found);
+        }
+    }
+
+    try {
+        const psOut = execFileSync('ps', ['-ax', '-o', 'pid=,command='], {
+            encoding: 'utf8',
+            timeout: 3000,
+            stdio: ['ignore', 'pipe', 'ignore'],
+        });
+        for (const line of psOut.split(/\r?\n/)) {
+            const trimmed = line.trim();
+            if (!trimmed || !DAEMON_SCRIPT_RE.test(trimmed)) continue;
+            const m = trimmed.match(/^(\d+)\s+(.*)$/);
+            if (!m) continue;
+            considerCandidate(parseInt(m[1], 10), m[2]);
+        }
+        return Array.from(found);
+    } catch (_) {
+        try {
+            const pgrepOut = execFileSync('pgrep', ['-f', 'theme_daemon.js'], {
+                encoding: 'utf8',
+                timeout: 3000,
+                stdio: ['ignore', 'pipe', 'ignore'],
+            });
+            for (const line of pgrepOut.split(/\r?\n/)) {
+                const pid = parseInt(line.trim(), 10);
+                considerCandidate(pid, '');
+            }
+        } catch (__) {}
+        return Array.from(found);
+    }
+}
+
 async function stopDaemonAndCleanRuntimeFiles(prePid, preVerified) {
     const currentPid = readRecordedPid();
     const pid = currentPid || prePid;
-    let waitPid = 0;
+    const waitPids = [];
+    const handledPids = new Set();
 
     if (pid > 0) {
-        if (isVerifiedDaemonProcess(pid)) {
-            waitPid = pid;
+        handledPids.add(pid);
+        if (isVerifiedDaemonProcess(pid, { allowRelativeFromRoot: true })) {
+            waitPids.push(pid);
             try {
                 process.kill(pid, 'SIGTERM');
                 console.log(`[uninstall] Sent SIGTERM to verified daemon PID ${pid}.`);
@@ -262,7 +673,7 @@ async function stopDaemonAndCleanRuntimeFiles(prePid, preVerified) {
                 console.log(`[uninstall] Daemon PID ${pid} already exited.`);
             }
         } else if (pid === prePid && preVerified) {
-            waitPid = pid;
+            waitPids.push(pid);
             console.log(`[uninstall] Verified daemon PID ${pid} stopped via service manager.`);
         } else {
             console.log(`[uninstall] Skipped PID ${pid} (not an active theme_daemon.js process).`);
@@ -271,8 +682,19 @@ async function stopDaemonAndCleanRuntimeFiles(prePid, preVerified) {
         console.log('[uninstall] No active daemon.pid found.');
     }
 
-    if (waitPid > 0) {
-        await waitForPidExit(waitPid, 800, 80);
+    const orphanPids = findOrphanDaemonPids(handledPids);
+    for (const orphanPid of orphanPids) {
+        waitPids.push(orphanPid);
+        try {
+            process.kill(orphanPid, 'SIGTERM');
+            console.log(`[uninstall] Sent SIGTERM to orphan daemon PID ${orphanPid}.`);
+        } catch (_) {
+            console.log(`[uninstall] Orphan daemon PID ${orphanPid} already exited.`);
+        }
+    }
+
+    if (waitPids.length > 0) {
+        await Promise.all(waitPids.map((p) => waitForPidExit(p, 800, 80)));
     }
 
     safeUnlink(PID_FILE, 'daemon PID file');
@@ -295,7 +717,7 @@ async function stopDaemonAndCleanRuntimeFiles(prePid, preVerified) {
 
 function removeAutoStart() {
     if (process.platform === 'win32') {
-        const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+        const appData = process.env.APPDATA || path.join(getEffectiveHomedir(), 'AppData', 'Roaming');
         const lnk = path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'AntigravityCustomTheme.lnk');
         safeUnlink(lnk, 'Windows Startup shortcut');
         safeUnlink(VBS_FILE, 'VBScript launcher');
@@ -304,7 +726,7 @@ function removeAutoStart() {
 
     if (process.platform === 'darwin') {
         const label = 'io.antigravity.custom-theme';
-        const plist = path.join(os.homedir(), 'Library', 'LaunchAgents', `${label}.plist`);
+        const plist = path.join(getEffectiveHomedir(), 'Library', 'LaunchAgents', `${label}.plist`);
         const uid = typeof process.getuid === 'function' ? process.getuid() : 0;
         try {
             execFileSync('launchctl', ['bootout', `gui/${uid}/${label}`], { stdio: 'ignore' });
@@ -319,7 +741,7 @@ function removeAutoStart() {
         return;
     }
 
-    const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+    const xdg = process.env.XDG_CONFIG_HOME || path.join(getEffectiveHomedir(), '.config');
     const unitName = 'antigravity-custom-theme.service';
     const unitPath = path.join(xdg, 'systemd', 'user', unitName);
     try {
@@ -485,6 +907,10 @@ function cleanupPage(wsUrl) {
 }
 
 async function clearOpenPages() {
+    if (process.env.AGY_SKIP_CDP_CLEANUP === '1') {
+        console.log('[uninstall] CDP cleanup skipped (AGY_SKIP_CDP_CLEANUP=1).');
+        return;
+    }
     if (typeof globalThis.WebSocket !== 'function') {
         console.warn(
             `[uninstall] Warning: Node.js < 22 detected (found ${process.version}, built-in WebSocket unavailable); skipped live CDP DOM cleanup. Please reload open Antigravity windows with Cmd/Ctrl + R.`
@@ -518,7 +944,7 @@ async function clearOpenPages() {
 
 async function main() {
     const prePid = readRecordedPid();
-    const preVerified = prePid > 0 ? isVerifiedDaemonProcess(prePid) : false;
+    const preVerified = prePid > 0 ? isVerifiedDaemonProcess(prePid, { allowRelativeFromRoot: true }) : false;
     removeAutoStart();
     await stopDaemonAndCleanRuntimeFiles(prePid, preVerified);
     await clearOpenPages();

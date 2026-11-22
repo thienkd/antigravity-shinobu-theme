@@ -47,9 +47,11 @@ const MAX_BINDING_PAYLOAD_BYTES = 4 * 1024 * 1024;
 const MAX_ACTIVE_FORGED_THEME_BYTES = Math.floor(1.8 * 1024 * 1024);
 const MAX_TRACKED_CONVERSATIONS = 16;
 const MAX_TRACKED_CHILDREN = 32;
+const MAX_KNOWN_SUBAGENTS = 64;
 const MAX_ACTIVE_SUBAGENTS_TAILED = 8;
 const MAX_RECENT_COMPLETED_SUBAGENTS = 6;
 const COMPLETED_SUBAGENT_TTL_MS = 12000;
+const REVIVE_GRACE_MS = 20000;
 const SUBAGENT_IDLE_COMPLETE_MS = 2500;
 const LATEST_CID_CACHE_TTL_MS = 1500;
 const MAX_LINE_BYTES = 2 * 1024 * 1024;
@@ -168,9 +170,16 @@ function redactLog(msg) {
         }
     }
 
-    text = text.replace(/\?(?:project|tab|folder|workspace)=[^\s)"']*/gi, '?[redacted-query]');
+    text = text.replace(/([?&])(?:project|tab|folder|folderUri|workspace|workspaceUri|file|path)=[^\s&)"']*/gi, '$1[redacted-query]');
     text = text.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '[redacted-id]');
     return text;
+}
+
+function ensurePrivateFileMode(filePath) {
+    if (process.platform === 'win32') return;
+    try {
+        fs.chmodSync(filePath, 0o600);
+    } catch (_) {}
 }
 
 let logWriteCounter = LOG_STAT_INTERVAL - 1;
@@ -201,6 +210,7 @@ function rotateLogKeepingTailIfNeeded() {
         }
     }
     fs.writeFileSync(LOG_FILE, tailSlice, { mode: 0o600 });
+    ensurePrivateFileMode(LOG_FILE);
 }
 
 function log(msg) {
@@ -209,6 +219,7 @@ function log(msg) {
     try {
         rotateLogKeepingTailIfNeeded();
         fs.appendFileSync(LOG_FILE, line, { encoding: 'utf8', mode: 0o600 });
+        ensurePrivateFileMode(LOG_FILE);
     } catch (_) {}
     if (process.stdout.isTTY || process.env.AGY_DAEMON_STDOUT === '1') {
         process.stdout.write(line);
@@ -224,8 +235,91 @@ const childSubagentTrackers = new Map();
 let latestCidCache = { cid: null, expiresAt: 0 };
 
 const GIT_PUSH_CMD_RE = /\bgit(?:\s+(?:-C|-c|--git-dir|--work-tree)(?:=|\s+)(?:"[^"]*"|'[^']*'|\S+)|\s+--[a-z-]+)*\s+push\b|\bgh\s+repo\s+create\b[\s\S]*?--push\b/i;
-const OVERSIZE_GIT_PUSH_RE = /\bgit(?:\s+(?:-C|-c|--git-dir|--work-tree)(?:=|\s+)(?:\\"[^"]*\\"|"[^"]*"|'[^']*'|\S+)|\s+--[a-z-]+)*\s+push\b|\bgh\s+repo\s+create\b.{0,240}?--push\b/i;
+const DRY_RUN_FLAG_RE = /(?:^|\s)(?:--dry-run|-n)(?=\s|$)/i;
 const READ_FILE_OUTPUT_PREFIX_RE = /^\s*Created At:[^\r\n]*\r?\n(?:Completed At:[^\r\n]*\r?\n)?Showing lines\s+\d+/i;
+
+function splitShellSubCommands(raw) {
+    const parts = [];
+    let cur = '';
+    let inSingle = false;
+    let inDouble = false;
+    let escaped = false;
+    for (let i = 0; i < raw.length; i++) {
+        const ch = raw[i];
+        if (inSingle) {
+            if (ch === "'") {
+                inSingle = false;
+                cur += "'";
+            }
+            continue;
+        }
+        if (inDouble) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch === '"') {
+                inDouble = false;
+                cur += '"';
+            }
+            continue;
+        }
+        if (escaped) {
+            escaped = false;
+            cur += ch;
+            continue;
+        }
+        if (ch === '\\') {
+            escaped = true;
+            cur += ch;
+            continue;
+        }
+        if (ch === "'") {
+            inSingle = true;
+            cur += "'";
+            continue;
+        }
+        if (ch === '"') {
+            inDouble = true;
+            cur += '"';
+            continue;
+        }
+        if (ch === '\r' || ch === '\n' || ch === ';') {
+            if (cur.trim()) parts.push(cur.trim());
+            cur = '';
+            continue;
+        }
+        if ((ch === '&' || ch === '|') && raw[i + 1] === ch) {
+            if (cur.trim()) parts.push(cur.trim());
+            cur = '';
+            i++;
+            continue;
+        }
+        if (ch === '|') {
+            if (cur.trim()) parts.push(cur.trim());
+            cur = '';
+            continue;
+        }
+        cur += ch;
+    }
+    if (cur.trim()) parts.push(cur.trim());
+    return parts;
+}
+
+function isGitPushCommandLine(rawCmdLine) {
+    if (typeof rawCmdLine !== 'string' || !rawCmdLine.trim()) return false;
+    const subCmds = splitShellSubCommands(rawCmdLine);
+    for (let i = 0; i < subCmds.length; i++) {
+        const sub = subCmds[i];
+        if (DRY_RUN_FLAG_RE.test(sub)) continue;
+        if (GIT_PUSH_CMD_RE.test(sub)) return true;
+    }
+    return false;
+}
 
 function resolveBrainDir() {
     if (process.env.AGY_BRAIN_DIR) return process.env.AGY_BRAIN_DIR;
@@ -351,6 +445,7 @@ function touchLruMap(map, key, value, maxEntries) {
 function createParentTracker(cid) {
     return {
         cid,
+        rev: 0,
         initialized: false,
         byteOffset: 0,
         lastSeenSize: -1,
@@ -387,6 +482,7 @@ function createParentTracker(cid) {
         pendingSubagentQueue: [],
         subagentsMap: new Map(),
         recentCompletedSubagents: [],
+        knownSubagents: new Map(),
     };
 }
 
@@ -413,16 +509,175 @@ function resetParentTrackerState(tracker) {
     Object.assign(tracker, fresh);
 }
 
-function createOversizeScanner() {
+const OVERSIZE_SCALAR_NUM_KEYS = new Set(['step_index', 'input_tokens', 'cache_read_tokens', 'output_tokens']);
+const OVERSIZE_TC_ARG_LIMITS = Object.freeze(
+    Object.assign(Object.create(null), {
+        commandline: 2048,
+        role: 180,
+        typename: 80,
+        recipient: 80,
+        toolsummary: 180,
+        description: 180,
+    })
+);
+
+function createTinyArgsScanner() {
     return {
-        carry: '',
-        totalChars: 0,
-        lastInvokeEndOffset: -1,
+        depth: 0,
+        inString: false,
+        escaped: false,
+        unicodeRemain: 0,
+        unicodeBuf: '',
+        expectKey: true,
+        curKey: '',
+        strRole: '',
+        strBuf: '',
+        maxStrLen: 0,
+        captured: {},
+    };
+}
+
+function commitTinyArgValue(sub, rawVal) {
+    if (!sub.curKey) return;
+    const lk = sub.curKey.toLowerCase();
+    if (lk in OVERSIZE_TC_ARG_LIMITS && sub.captured[lk] === undefined) {
+        sub.captured[lk] = rawVal;
+    }
+}
+
+function feedTinyArgsChar(sub, ch) {
+    if (sub.inString) {
+        if (sub.unicodeRemain > 0) {
+            sub.unicodeBuf += ch;
+            sub.unicodeRemain--;
+            if (sub.unicodeRemain === 0) {
+                const code = parseInt(sub.unicodeBuf, 16);
+                const decoded = Number.isFinite(code) ? String.fromCharCode(code) : '';
+                sub.unicodeBuf = '';
+                if (decoded && sub.strRole !== 'skip' && sub.strBuf.length < sub.maxStrLen) {
+                    sub.strBuf += decoded;
+                }
+            }
+            return;
+        }
+        if (sub.escaped) {
+            sub.escaped = false;
+            if (ch === 'u') {
+                sub.unicodeRemain = 4;
+                sub.unicodeBuf = '';
+                return;
+            }
+            let outCh = ch;
+            if (ch === 'n') outCh = '\n';
+            else if (ch === 'r') outCh = '\r';
+            else if (ch === 't') outCh = '\t';
+            else if (ch === 'b') outCh = '\b';
+            else if (ch === 'f') outCh = '\f';
+            if (sub.strRole !== 'skip' && sub.strBuf.length < sub.maxStrLen) {
+                sub.strBuf += outCh;
+            }
+            return;
+        }
+        if (ch === '\\') {
+            sub.escaped = true;
+            return;
+        }
+        if (ch === '"') {
+            if (sub.strRole === 'key') {
+                sub.curKey = sub.strBuf;
+            } else if (sub.strRole === 'val') {
+                commitTinyArgValue(sub, sub.strBuf);
+            }
+            sub.inString = false;
+            sub.strRole = '';
+            sub.strBuf = '';
+            return;
+        }
+        if (sub.strRole !== 'skip' && sub.strBuf.length < sub.maxStrLen) {
+            sub.strBuf += ch;
+        }
+        return;
+    }
+
+    if (ch === '"') {
+        sub.inString = true;
+        sub.strBuf = '';
+        if (sub.depth === 1 && sub.expectKey) {
+            sub.strRole = 'key';
+            sub.maxStrLen = 64;
+        } else if (sub.depth === 1 && !sub.expectKey) {
+            const lk = sub.curKey.toLowerCase();
+            const lim = OVERSIZE_TC_ARG_LIMITS[lk];
+            if (lim) {
+                sub.strRole = 'val';
+                sub.maxStrLen = lim;
+            } else {
+                sub.strRole = 'skip';
+                sub.maxStrLen = 0;
+            }
+        } else {
+            sub.strRole = 'skip';
+            sub.maxStrLen = 0;
+        }
+        return;
+    }
+
+    if (ch === '{' || ch === '[') {
+        sub.depth++;
+        if (sub.depth === 1) {
+            sub.expectKey = ch === '{';
+            sub.curKey = '';
+        }
+        return;
+    }
+    if (ch === '}' || ch === ']') {
+        if (sub.depth > 0) sub.depth--;
+        return;
+    }
+    if (sub.depth === 1) {
+        if (ch === ':') sub.expectKey = false;
+        else if (ch === ',') {
+            sub.expectKey = true;
+            sub.curKey = '';
+        }
+    }
+}
+
+function createOversizeScanner(childMode = false) {
+    return {
+        childMode: Boolean(childMode),
+        depth: 0,
+        containerStack: [],
+        expectKeyStack: [],
+        curKeyStack: [],
+        inString: false,
+        escaped: false,
+        unicodeRemain: 0,
+        unicodeBuf: '',
+        strRole: '',
+        strBuf: '',
+        maxStrLen: 0,
+        tcArgTargetKey: '',
+        readingNum: false,
+        numKey: '',
+        numBuf: '',
+
+        contentHead: '',
+        contentCharsRead: 0,
+        contentLineBuf: '',
+        contentTail: '',
+        awaitingChildCidRemain: 0,
+        senderFlushCounter: 0,
+
+        curTc: null,
+        tcArgsScanner: null,
+
         isReadFileHeader: false,
         seenCommandOutputMarker: false,
         stepIndex: null,
         stepType: '',
         stepStatus: '',
+        modelName: '',
         inTok: 0,
         cacheTok: 0,
         outTok: 0,
@@ -431,91 +686,385 @@ function createOversizeScanner() {
         zeroExit: false,
         hasGitPush: false,
         invokedSubagents: [],
+        sendMessageRecipients: [],
         createdChildCid: '',
         senderCids: [],
+        lastTool: '',
     };
 }
 
-function feedOversizeChunk(scan, textChunk, isFinalChunk = false) {
-    if (!textChunk && !isFinalChunk) return;
-    const carryLen = scan.carry.length;
-    const windowBaseOffset = scan.totalChars - carryLen;
-    const windowStr = scan.carry + textChunk;
-    scan.totalChars += textChunk.length;
-    scan.carry = windowStr.slice(-320);
-
-    const idxMatch = windowStr.match(/"step_index"\s*:\s*(\d+)/);
-    if (idxMatch) scan.stepIndex = parseInt(idxMatch[1], 10);
-
-    const typeMatch = windowStr.match(/"type"\s*:\s*"([A-Z_]+)"/);
-    if (typeMatch && !scan.stepType) scan.stepType = typeMatch[1];
-
-    const statusMatch = windowStr.match(/"status"\s*:\s*"([A-Z_]+)"/);
-    if (statusMatch && !scan.stepStatus) scan.stepStatus = statusMatch[1];
-
-    const inMatch = windowStr.match(/"input_tokens"\s*:\s*(\d+)/);
-    if (inMatch) scan.inTok = parseInt(inMatch[1], 10) || scan.inTok;
-
-    const cacheMatch = windowStr.match(/"cache_read_tokens"\s*:\s*(\d+)/);
-    if (cacheMatch) scan.cacheTok = parseInt(cacheMatch[1], 10) || scan.cacheTok;
-
-    const outMatch = windowStr.match(/"output_tokens"\s*:\s*(\d+)/);
-    if (outMatch) scan.outTok = parseInt(outMatch[1], 10) || scan.outTok;
-
-    if (windowStr.includes('"tool_calls":[{') || /"tool_calls"\s*:\s*\[\s*\{/.test(windowStr)) {
-        scan.hasToolCalls = true;
+function flushContentLine(scan) {
+    const line = scan.contentLineBuf;
+    scan.contentLineBuf = '';
+    if (!line || scan.seenCommandOutputMarker || scan.isReadFileHeader) return;
+    if (/^Command output:/i.test(line)) {
+        scan.seenCommandOutputMarker = true;
+        return;
     }
+    const m = /^Command exited with code (\d+)\b/.exec(line);
+    if (m) {
+        const code = parseInt(m[1], 10);
+        if (code === 0) scan.zeroExit = true;
+        else if (code > 0) scan.nonZeroExit = true;
+    }
+}
 
-    if (!scan.isReadFileHeader && /"content"\s*:\s*"\s*Created At:[^"]*\\n(?:Completed At:[^"]*\\n)?Showing lines\s+\d+/i.test(windowStr)) {
-        scan.isReadFileHeader = true;
+function flushContentSenders(scan, finalFlush = false) {
+    if (!scan.contentTail) return;
+    const senderRe = /sender=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
+    let sm;
+    while ((sm = senderRe.exec(scan.contentTail)) !== null) {
+        const scid = sm[1].toLowerCase();
+        if (!scan.senderCids.includes(scid)) scan.senderCids.push(scid);
+    }
+    if (!finalFlush) {
+        const keepLen = scan.awaitingChildCidRemain > 0 ? 1024 : 64;
+        if (scan.contentTail.length > keepLen * 2) {
+            scan.contentTail = scan.contentTail.slice(-keepLen);
+        }
+    }
+}
+
+function feedContentDecodedChar(scan, outCh) {
+    if (scan.contentCharsRead < 512) {
+        scan.contentHead += outCh;
+        scan.contentCharsRead++;
+        if (scan.contentCharsRead === 512 && READ_FILE_OUTPUT_PREFIX_RE.test(scan.contentHead)) {
+            scan.isReadFileHeader = true;
+        }
     }
 
     if (!scan.seenCommandOutputMarker && !scan.isReadFileHeader) {
-        const preOutput = windowStr.split(/\\r?\\nCommand output:/)[0];
-        if (/(?:^|"|\\n)Command exited with code [1-9]\d*\b/.test(preOutput)) {
-            scan.nonZeroExit = true;
-        }
-        if (/(?:^|"|\\n)Command exited with code 0\b/.test(preOutput)) {
-            scan.zeroExit = true;
-        }
-        if (/\\r?\\nCommand output:/.test(windowStr)) {
-            scan.seenCommandOutputMarker = true;
+        if (outCh === '\n') {
+            flushContentLine(scan);
+        } else if (outCh !== '\r' && scan.contentLineBuf.length < 512) {
+            scan.contentLineBuf += outCh;
         }
     }
 
-    if (OVERSIZE_GIT_PUSH_RE.test(windowStr)) scan.hasGitPush = true;
+    scan.contentTail += outCh;
+    scan.senderFlushCounter++;
 
-    const invokeRe = /"name"\s*:\s*"invoke_subagent"/g;
-    let im;
-    while ((im = invokeRe.exec(windowStr)) !== null) {
-        const matchEndInWindow = im.index + im[0].length;
-        const absEnd = windowBaseOffset + matchEndInWindow;
-        if (absEnd <= scan.lastInvokeEndOffset) continue;
-        if (!isFinalChunk && windowStr.length - matchEndInWindow < 180) {
-            // Defer to next chunk so Role & TypeName trailing fields are inside windowStr
-            break;
+    if (!scan.createdChildCid) {
+        if (scan.awaitingChildCidRemain > 0) {
+            scan.awaitingChildCidRemain--;
+            if (outCh === '"' || outCh === '}' || scan.awaitingChildCidRemain === 0) {
+                const cidMatch = scan.contentTail.match(
+                    /"conversationId"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/i
+                );
+                if (cidMatch) {
+                    scan.createdChildCid = cidMatch[1].toLowerCase();
+                    scan.awaitingChildCidRemain = 0;
+                }
+            }
+        } else if (scan.contentTail.endsWith('Created the following subagent')) {
+            scan.awaitingChildCidRemain = 2048;
         }
-        scan.lastInvokeEndOffset = absEnd;
-        const around = windowStr.slice(Math.max(0, im.index - 220), Math.min(windowStr.length, matchEndInWindow + 260));
-        const roleMatch = around.match(/"(?:Role|role)"\s*:\s*"((?:\\.|[^"\\]){1,120})"/);
-        const typeNameMatch = around.match(/"(?:TypeName|typeName)"\s*:\s*"((?:\\.|[^"\\]){1,60})"/);
-        const role = roleMatch ? sanitizeDisplayLabel(roleMatch[1], 90) : 'Subagent';
-        const typeName = typeNameMatch ? sanitizeDisplayLabel(typeNameMatch[1], 40) : 'self';
+    }
+
+    if (scan.senderFlushCounter >= 1024) {
+        scan.senderFlushCounter = 0;
+        flushContentSenders(scan, false);
+    }
+}
+
+function finalizeCurrentToolCall(scan) {
+    const tc = scan.curTc;
+    scan.curTc = null;
+    if (!tc) return;
+
+    if (scan.childMode) {
+        const label = sanitizeDisplayLabel(
+            String(tc.toolSummary || tc.description || tc.role || tc.name || ''),
+            90
+        );
+        if (label) scan.lastTool = label;
+        return;
+    }
+
+    if (tc.name === 'run_command') {
+        if (tc.commandLine && isGitPushCommandLine(tc.commandLine)) {
+            scan.hasGitPush = true;
+        }
+    } else if (tc.name === 'invoke_subagent') {
+        const role = sanitizeDisplayLabel(tc.role || 'Subagent', 90) || 'Subagent';
+        const typeName = sanitizeDisplayLabel(tc.typeName || 'self', 40) || 'self';
         if (scan.invokedSubagents.length < 8) {
-            scan.invokedSubagents.push({ role: role || 'Subagent', typeName: typeName || 'self' });
+            scan.invokedSubagents.push({ role, typeName });
+        }
+    } else if (tc.name === 'send_message') {
+        const recipient = sanitizeDisplayLabel(tc.recipient || '', 64).toLowerCase();
+        if (UUID_RE.test(recipient) && scan.sendMessageRecipients.length < 16) {
+            scan.sendMessageRecipients.push(recipient);
+        }
+    }
+}
+
+function assignTcArgField(tc, keyLower, val) {
+    if (!tc) return;
+    if (keyLower === 'commandline' && !tc.commandLine) tc.commandLine = val;
+    else if (keyLower === 'role' && !tc.role) tc.role = val;
+    else if (keyLower === 'typename' && !tc.typeName) tc.typeName = val;
+    else if (keyLower === 'recipient' && !tc.recipient) tc.recipient = val;
+    else if (keyLower === 'toolsummary' && !tc.toolSummary) tc.toolSummary = val;
+    else if (keyLower === 'description' && !tc.description) tc.description = val;
+}
+
+function commitTopLevelNumber(scan) {
+    if (!scan.readingNum) return;
+    const raw = scan.numBuf;
+    const key = scan.numKey;
+    scan.readingNum = false;
+    scan.numKey = '';
+    scan.numBuf = '';
+    if (!raw || raw === '-') return;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n)) return;
+    if (key === 'step_index') scan.stepIndex = n;
+    else if (key === 'input_tokens') scan.inTok = n || scan.inTok;
+    else if (key === 'cache_read_tokens') scan.cacheTok = n || scan.cacheTok;
+    else if (key === 'output_tokens') scan.outTok = n || scan.outTok;
+}
+
+function feedOversizeChunk(scan, textChunk, isFinalChunk = false) {
+    const chunk = textChunk || '';
+    for (let i = 0; i < chunk.length; i++) {
+        const ch = chunk[i];
+
+        if (scan.inString) {
+            if (scan.unicodeRemain > 0) {
+                scan.unicodeBuf += ch;
+                scan.unicodeRemain--;
+                if (scan.unicodeRemain === 0) {
+                    const code = parseInt(scan.unicodeBuf, 16);
+                    const decoded = Number.isFinite(code) ? String.fromCharCode(code) : '';
+                    scan.unicodeBuf = '';
+                    if (decoded) {
+                        if (scan.strRole === 'content') {
+                            feedContentDecodedChar(scan, decoded);
+                        } else if (scan.strRole === 'tc_arguments' && scan.tcArgsScanner) {
+                            feedTinyArgsChar(scan.tcArgsScanner, decoded);
+                        } else if (scan.strRole !== 'skip' && scan.strBuf.length < scan.maxStrLen) {
+                            scan.strBuf += decoded;
+                        }
+                    }
+                }
+                continue;
+            }
+            if (scan.escaped) {
+                scan.escaped = false;
+                if (ch === 'u') {
+                    scan.unicodeRemain = 4;
+                    scan.unicodeBuf = '';
+                    continue;
+                }
+                let outCh = ch;
+                if (ch === 'n') outCh = '\n';
+                else if (ch === 'r') outCh = '\r';
+                else if (ch === 't') outCh = '\t';
+                else if (ch === 'b') outCh = '\b';
+                else if (ch === 'f') outCh = '\f';
+
+                if (scan.strRole === 'content') {
+                    feedContentDecodedChar(scan, outCh);
+                } else if (scan.strRole === 'tc_arguments' && scan.tcArgsScanner) {
+                    feedTinyArgsChar(scan.tcArgsScanner, outCh);
+                } else if (scan.strRole !== 'skip' && scan.strBuf.length < scan.maxStrLen) {
+                    scan.strBuf += outCh;
+                }
+                continue;
+            }
+            if (ch === '\\') {
+                scan.escaped = true;
+                continue;
+            }
+            if (ch === '"') {
+                if (scan.strRole === 'key') {
+                    scan.curKeyStack[scan.depth] = scan.strBuf;
+                } else if (scan.strRole === 'top_scalar') {
+                    const k1 = scan.curKeyStack[1];
+                    if (k1 === 'type' && !scan.stepType) scan.stepType = scan.strBuf;
+                    else if (k1 === 'status' && !scan.stepStatus) scan.stepStatus = scan.strBuf;
+                    else if (k1 === 'model' && !scan.modelName && scan.strBuf) scan.modelName = scan.strBuf;
+                } else if (scan.strRole === 'content') {
+                    if (!scan.isReadFileHeader && scan.contentHead && READ_FILE_OUTPUT_PREFIX_RE.test(scan.contentHead)) {
+                        scan.isReadFileHeader = true;
+                    }
+                    flushContentLine(scan);
+                    if (!scan.createdChildCid && scan.awaitingChildCidRemain > 0) {
+                        const cidMatch = scan.contentTail.match(
+                            /"conversationId"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/i
+                        );
+                        if (cidMatch) scan.createdChildCid = cidMatch[1].toLowerCase();
+                        scan.awaitingChildCidRemain = 0;
+                    }
+                    flushContentSenders(scan, true);
+                } else if (scan.strRole === 'tc_name') {
+                    if (scan.curTc) scan.curTc.name = scan.strBuf;
+                } else if (scan.strRole === 'tc_arg_val') {
+                    assignTcArgField(scan.curTc, scan.tcArgTargetKey, scan.strBuf);
+                } else if (scan.strRole === 'tc_arguments' && scan.tcArgsScanner) {
+                    if (scan.curTc) {
+                        for (const [k, v] of Object.entries(scan.tcArgsScanner.captured)) {
+                            assignTcArgField(scan.curTc, k, v);
+                        }
+                    }
+                    scan.tcArgsScanner = null;
+                }
+                scan.inString = false;
+                scan.strRole = '';
+                scan.strBuf = '';
+                scan.tcArgTargetKey = '';
+                continue;
+            }
+
+            if (scan.strRole === 'content') {
+                feedContentDecodedChar(scan, ch);
+            } else if (scan.strRole === 'tc_arguments' && scan.tcArgsScanner) {
+                feedTinyArgsChar(scan.tcArgsScanner, ch);
+            } else if (scan.strRole !== 'skip' && scan.strBuf.length < scan.maxStrLen) {
+                scan.strBuf += ch;
+            }
+            continue;
+        }
+
+        if (scan.readingNum) {
+            if (ch >= '0' && ch <= '9') {
+                if (scan.numBuf.length < 24) scan.numBuf += ch;
+                continue;
+            }
+            commitTopLevelNumber(scan);
+        }
+
+        if (ch === '"') {
+            scan.inString = true;
+            scan.strBuf = '';
+            const d = scan.depth;
+            if (scan.containerStack[d] === '{' && scan.expectKeyStack[d]) {
+                scan.strRole = 'key';
+                scan.maxStrLen = 96;
+            } else if (d === 1 && !scan.expectKeyStack[1]) {
+                const k1 = scan.curKeyStack[1];
+                if (k1 === 'type' || k1 === 'status') {
+                    scan.strRole = 'top_scalar';
+                    scan.maxStrLen = 64;
+                } else if (k1 === 'model' && !scan.childMode) {
+                    scan.strRole = 'top_scalar';
+                    scan.maxStrLen = 256;
+                } else if (k1 === 'content' && !scan.childMode) {
+                    scan.strRole = 'content';
+                    scan.maxStrLen = 0;
+                } else {
+                    scan.strRole = 'skip';
+                    scan.maxStrLen = 0;
+                }
+            } else if (scan.curKeyStack[1] === 'tool_calls') {
+                if (d === 3 && !scan.expectKeyStack[3]) {
+                    const k3 = scan.curKeyStack[3];
+                    if (k3 === 'name') {
+                        scan.strRole = 'tc_name';
+                        scan.maxStrLen = 96;
+                    } else if (k3 === 'arguments') {
+                        scan.strRole = 'tc_arguments';
+                        scan.tcArgsScanner = createTinyArgsScanner();
+                        scan.maxStrLen = 0;
+                    } else {
+                        scan.strRole = 'skip';
+                        scan.maxStrLen = 0;
+                    }
+                } else if (d === 4 && !scan.expectKeyStack[4] && (scan.curKeyStack[3] === 'args' || scan.curKeyStack[3] === 'arguments')) {
+                    const lk4 = String(scan.curKeyStack[4] || '').toLowerCase();
+                    const lim = OVERSIZE_TC_ARG_LIMITS[lk4];
+                    if (lim) {
+                        scan.strRole = 'tc_arg_val';
+                        scan.tcArgTargetKey = lk4;
+                        scan.maxStrLen = lim;
+                    } else {
+                        scan.strRole = 'skip';
+                        scan.maxStrLen = 0;
+                    }
+                } else {
+                    scan.strRole = 'skip';
+                    scan.maxStrLen = 0;
+                }
+            } else {
+                scan.strRole = 'skip';
+                scan.maxStrLen = 0;
+            }
+            continue;
+        }
+
+        if (ch === '{' || ch === '[') {
+            scan.depth++;
+            const d = scan.depth;
+            scan.containerStack[d] = ch;
+            scan.expectKeyStack[d] = ch === '{';
+            scan.curKeyStack[d] = '';
+            if (d === 3 && ch === '{' && scan.curKeyStack[1] === 'tool_calls' && scan.containerStack[2] === '[') {
+                scan.hasToolCalls = true;
+                scan.curTc = {
+                    name: '',
+                    commandLine: '',
+                    role: '',
+                    typeName: '',
+                    recipient: '',
+                    toolSummary: '',
+                    description: '',
+                };
+            }
+            continue;
+        }
+
+        if (ch === '}' || ch === ']') {
+            if (scan.depth === 3 && ch === '}' && scan.curTc) {
+                finalizeCurrentToolCall(scan);
+            }
+            if (scan.depth > 0) {
+                scan.containerStack[scan.depth] = '';
+                scan.expectKeyStack[scan.depth] = false;
+                scan.curKeyStack[scan.depth] = '';
+                scan.depth--;
+            }
+            continue;
+        }
+
+        const d = scan.depth;
+        if (d > 0 && scan.containerStack[d] === '{') {
+            if (ch === ':') {
+                scan.expectKeyStack[d] = false;
+                continue;
+            }
+            if (ch === ',') {
+                scan.expectKeyStack[d] = true;
+                scan.curKeyStack[d] = '';
+                continue;
+            }
+        }
+
+        if (
+            !scan.childMode &&
+            d === 1 &&
+            scan.containerStack[1] === '{' &&
+            !scan.expectKeyStack[1] &&
+            OVERSIZE_SCALAR_NUM_KEYS.has(scan.curKeyStack[1]) &&
+            ((ch >= '0' && ch <= '9') || ch === '-')
+        ) {
+            scan.readingNum = true;
+            scan.numKey = scan.curKeyStack[1];
+            scan.numBuf = ch;
         }
     }
 
-    if (!scan.createdChildCid && windowStr.includes('Created the following subagent')) {
-        const cidMatch = windowStr.match(/"conversationId"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/i);
-        if (cidMatch) scan.createdChildCid = cidMatch[1].toLowerCase();
-    }
-
-    const senderRe = /sender=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
-    let sm;
-    while ((sm = senderRe.exec(windowStr)) !== null) {
-        const scid = sm[1].toLowerCase();
-        if (!scan.senderCids.includes(scid)) scan.senderCids.push(scid);
+    if (isFinalChunk) {
+        commitTopLevelNumber(scan);
+        if (scan.curTc) finalizeCurrentToolCall(scan);
+        if (scan.strRole === 'content') {
+            if (!scan.isReadFileHeader && scan.contentHead && READ_FILE_OUTPUT_PREFIX_RE.test(scan.contentHead)) {
+                scan.isReadFileHeader = true;
+            }
+            flushContentLine(scan);
+            flushContentSenders(scan, true);
+        }
     }
 }
 
@@ -526,6 +1075,7 @@ function recordCompletedSubagent(tracker, childCid, eventTimestampMs, isLiveDelt
     const now = Date.now();
     const effectiveCompletedAt = isLiveDelta ? now : (eventTimestampMs || now);
     entry.completedAt = effectiveCompletedAt;
+    touchLruMap(tracker.knownSubagents, childCid, { ...entry }, MAX_KNOWN_SUBAGENTS);
     tracker.subagentsMap.delete(childCid);
 
     tracker.recentCompletedSubagents = tracker.recentCompletedSubagents.filter((x) => x.cid !== childCid);
@@ -541,7 +1091,6 @@ function recordCompletedSubagent(tracker, childCid, eventTimestampMs, isLiveDelt
 }
 
 function applyStepSignals(tracker, step, isLiveDelta) {
-    tracker.justSlashedBug = false;
     tracker.stepCount++;
     if (typeof step.step_index === 'number') tracker.latestStepIndex = step.step_index;
 
@@ -562,6 +1111,7 @@ function applyStepSignals(tracker, step, isLiveDelta) {
         tracker.lastStepInFlightEst = 0;
         tracker.turnSteps = 0;
         tracker.crisisState = false;
+        tracker.justSlashedBug = false;
         tracker.pendingGitPushCount = 0;
         tracker.pendingCommandQueue = [];
         tracker.pendingSubagentQueue = [];
@@ -608,7 +1158,6 @@ function applyStepSignals(tracker, step, isLiveDelta) {
 
     if (stepType === 'PLANNER_RESPONSE') {
         tracker.turnSteps++;
-        tracker.pendingSubagentQueue = [];
     }
 
     const toolCalls = Array.isArray(step.tool_calls) ? step.tool_calls : [];
@@ -629,25 +1178,41 @@ function applyStepSignals(tracker, step, isLiveDelta) {
             }
         } else if (tc.name === 'send_message') {
             const recipient = sanitizeDisplayLabel(String(args.Recipient || args.recipient || ''), 64).toLowerCase();
-            if (UUID_RE.test(recipient)) {
+            if (UUID_RE.test(recipient) && recipient !== tracker.cid) {
                 const prevCompletedIdx = tracker.recentCompletedSubagents.findIndex((s) => s.cid === recipient);
                 if (prevCompletedIdx >= 0) {
                     const revived = tracker.recentCompletedSubagents.splice(prevCompletedIdx, 1)[0];
                     revived.status = 'working';
                     revived.completedAt = 0;
                     tracker.subagentsMap.set(recipient, revived);
+                    touchLruMap(tracker.knownSubagents, recipient, { ...revived }, MAX_KNOWN_SUBAGENTS);
                 } else if (tracker.subagentsMap.has(recipient)) {
-                    tracker.subagentsMap.get(recipient).status = 'working';
+                    const existing = tracker.subagentsMap.get(recipient);
+                    existing.status = 'working';
+                    existing.completedAt = 0;
+                    touchLruMap(tracker.knownSubagents, recipient, { ...existing }, MAX_KNOWN_SUBAGENTS);
+                } else if (tracker.knownSubagents.has(recipient)) {
+                    const known = tracker.knownSubagents.get(recipient);
+                    const revived = {
+                        ...known,
+                        status: 'working',
+                        completedAt: 0,
+                    };
+                    tracker.subagentsMap.set(recipient, revived);
+                    touchLruMap(tracker.knownSubagents, recipient, { ...revived }, MAX_KNOWN_SUBAGENTS);
                 }
-                const cTrk = childSubagentTrackers.get(recipient);
-                if (cTrk) {
-                    cTrk.revivedAtMs = stepTsMs || Date.now();
-                    cTrk.lastStepStatus = 'WORKING';
+                let cTrk = childSubagentTrackers.get(recipient);
+                if (!cTrk) {
+                    cTrk = createChildTracker(recipient);
+                    touchLruMap(childSubagentTrackers, recipient, cTrk, MAX_TRACKED_CHILDREN);
                 }
+                const reviveMs = isLiveDelta ? Math.max(stepTsMs || 0, Date.now()) : (stepTsMs || Date.now());
+                cTrk.revivedAtMs = reviveMs;
+                cTrk.lastStepStatus = 'WORKING';
             }
         } else if (tc.name === 'run_command') {
             const rawCmdLine = String(args.CommandLine || args.commandLine || '');
-            const isGitPush = GIT_PUSH_CMD_RE.test(rawCmdLine);
+            const isGitPush = isGitPushCommandLine(rawCmdLine);
             const callId = typeof tc.id === 'string' ? tc.id : '';
             tracker.pendingCommandQueue.push({ id: callId, isGitPush });
             if (tracker.pendingCommandQueue.length > 32) {
@@ -672,7 +1237,7 @@ function applyStepSignals(tracker, step, isLiveDelta) {
                 startedAt: stepTsMs || Date.now(),
             };
             tracker.recentCompletedSubagents = tracker.recentCompletedSubagents.filter((x) => x.cid !== childCid);
-            tracker.subagentsMap.set(childCid, {
+            const subEntry = {
                 cid: childCid,
                 role: meta.role,
                 typeName: meta.typeName,
@@ -681,7 +1246,9 @@ function applyStepSignals(tracker, step, isLiveDelta) {
                 lastTool: meta.role,
                 startedAt: meta.startedAt || Date.now(),
                 completedAt: 0,
-            });
+            };
+            tracker.subagentsMap.set(childCid, subEntry);
+            touchLruMap(tracker.knownSubagents, childCid, { ...subEntry }, MAX_KNOWN_SUBAGENTS);
         }
     }
 
@@ -699,8 +1266,8 @@ function applyStepSignals(tracker, step, isLiveDelta) {
     const isStepError = stepStatus === 'ERROR' || stepType === 'ERROR_MESSAGE';
 
     let matchedGitPush = false;
+    const stepCallId = typeof step.tool_call_id === 'string' ? step.tool_call_id : '';
     if (cmdExitCode !== null) {
-        const stepCallId = typeof step.tool_call_id === 'string' ? step.tool_call_id : '';
         let matchedIdx = -1;
         if (stepCallId) {
             matchedIdx = tracker.pendingCommandQueue.findIndex((c) => c.id === stepCallId);
@@ -716,6 +1283,21 @@ function applyStepSignals(tracker, step, isLiveDelta) {
             tracker.pendingGitPushCount--;
         }
         if (tracker.pendingCommandQueue.length > 0 || matchedIdx >= 0) {
+            tracker.pendingGitPushCount = tracker.pendingCommandQueue.reduce(
+                (acc, item) => acc + (item.isGitPush ? 1 : 0),
+                0
+            );
+        }
+    } else if (
+        stepType === 'GENERIC' &&
+        stepCallId &&
+        (stepStatus === 'CANCELED' ||
+            stepStatus === 'ERROR' ||
+            (contentStr && !/running in background|command is running/i.test(contentStr)))
+    ) {
+        const matchedIdx = tracker.pendingCommandQueue.findIndex((c) => c.id === stepCallId);
+        if (matchedIdx >= 0) {
+            tracker.pendingCommandQueue.splice(matchedIdx, 1);
             tracker.pendingGitPushCount = tracker.pendingCommandQueue.reduce(
                 (acc, item) => acc + (item.isGitPush ? 1 : 0),
                 0
@@ -756,6 +1338,7 @@ function applyStepSignals(tracker, step, isLiveDelta) {
         tracker.crisisState = false;
         tracker.pendingGitPushCount = 0;
         tracker.pendingCommandQueue = [];
+        tracker.pendingSubagentQueue = [];
     }
 
     if (tracker.isWorking && !nextIsWorking) {
@@ -773,6 +1356,12 @@ function applyOversizeScanSignals(tracker, scan, isLiveDelta) {
             args: { Role: sub.role, TypeName: sub.typeName },
         });
     }
+    for (const rcid of scan.sendMessageRecipients) {
+        syntheticToolCalls.push({
+            name: 'send_message',
+            args: { Recipient: rcid },
+        });
+    }
     if (scan.hasGitPush) {
         syntheticToolCalls.push({
             name: 'run_command',
@@ -786,6 +1375,7 @@ function applyOversizeScanSignals(tracker, scan, isLiveDelta) {
         step_index: typeof scan.stepIndex === 'number' ? scan.stepIndex : tracker.latestStepIndex,
         type: resolvedType,
         status: scan.stepStatus || 'DONE',
+        model: scan.modelName || '',
         input_tokens: scan.inTok,
         cache_read_tokens: scan.cacheTok,
         output_tokens: scan.outTok,
@@ -833,8 +1423,13 @@ function processParentLine(tracker, rawLine, isLiveDelta) {
 function advanceParentTracker(tracker, filePath, st) {
     if (st.size < tracker.byteOffset) {
         resetParentTrackerState(tracker);
+        tracker.rev++;
     }
     if (st.size === tracker.byteOffset) {
+        if (tracker.justSlashedBug) {
+            tracker.justSlashedBug = false;
+            tracker.rev++;
+        }
         tracker.lastSeenSize = st.size;
         tracker.lastMtimeMs = st.mtimeMs;
         tracker.initialized = true;
@@ -843,6 +1438,8 @@ function advanceParentTracker(tracker, filePath, st) {
 
     const isLiveDelta = tracker.initialized;
     let fd = -1;
+    let cycleClearedSlash = false;
+    let bytesProcessed = 0;
     try {
         fd = fs.openSync(filePath, 'r');
         const buf = Buffer.allocUnsafe(Math.min(READ_CHUNK_BYTES, Math.max(1024, st.size - tracker.byteOffset)));
@@ -851,8 +1448,24 @@ function advanceParentTracker(tracker, filePath, st) {
         while (pos < st.size) {
             const toRead = Math.min(buf.length, st.size - pos);
             const bytesRead = fs.readSync(fd, buf, 0, toRead, pos);
-            if (bytesRead <= 0) break;
+            if (bytesRead <= 0) {
+                try {
+                    const curSt = fs.fstatSync(fd);
+                    if (curSt.size < tracker.byteOffset) {
+                        resetParentTrackerState(tracker);
+                        tracker.rev++;
+                        return;
+                    }
+                } catch (_) {}
+                break;
+            }
             pos += bytesRead;
+            bytesProcessed += bytesRead;
+
+            if (!cycleClearedSlash) {
+                tracker.justSlashedBug = false;
+                cycleClearedSlash = true;
+            }
 
             const decoded = tracker.decoder.write(buf.subarray(0, bytesRead));
             let cursor = 0;
@@ -901,8 +1514,19 @@ function advanceParentTracker(tracker, filePath, st) {
         tracker.lastSeenSize = st.size;
         tracker.lastMtimeMs = st.mtimeMs;
         tracker.initialized = true;
+        if (bytesProcessed > 0) {
+            tracker.rev++;
+        }
     } catch (_) {
-        // Ignore transient lock/read error while transcript flushes
+        if (fd !== -1) {
+            try {
+                const curSt = fs.fstatSync(fd);
+                if (curSt.size < tracker.byteOffset) {
+                    resetParentTrackerState(tracker);
+                    tracker.rev++;
+                }
+            } catch (__) {}
+        }
     } finally {
         if (fd !== -1) {
             try {
@@ -913,38 +1537,11 @@ function advanceParentTracker(tracker, filePath, st) {
 }
 
 function createChildOversizeScanner() {
-    return {
-        carry: '',
-        stepType: '',
-        stepStatus: '',
-        hasToolCalls: false,
-        lastTool: '',
-    };
+    return createOversizeScanner(true);
 }
 
-function feedChildOversizeChunk(scan, textChunk) {
-    if (!textChunk) return;
-    const windowStr = scan.carry + textChunk;
-    scan.carry = windowStr.slice(-320);
-
-    if (!scan.stepType) {
-        const tm = windowStr.match(/"type"\s*:\s*"([A-Z_]+)"/);
-        if (tm) scan.stepType = tm[1];
-    }
-    if (!scan.stepStatus) {
-        const sm = windowStr.match(/"status"\s*:\s*"([A-Z_]+)"/);
-        if (sm) scan.stepStatus = sm[1];
-    }
-    if (windowStr.includes('"tool_calls":[{') || /"tool_calls"\s*:\s*\[\s*\{/.test(windowStr)) {
-        scan.hasToolCalls = true;
-    }
-
-    const sumRe = /"toolSummary"\s*:\s*"((?:\\.|[^"\\]){1,120})"/g;
-    let m;
-    while ((m = sumRe.exec(windowStr)) !== null) {
-        const label = sanitizeDisplayLabel(m[1], 90);
-        if (label) scan.lastTool = label;
-    }
+function feedChildOversizeChunk(scan, textChunk, isFinalChunk = false) {
+    feedOversizeChunk(scan, textChunk, isFinalChunk);
 }
 
 function applyChildOversizeScan(childTracker, scan) {
@@ -961,7 +1558,7 @@ function processChildLine(childTracker, rawLine) {
 
     if (trimmed.length > MAX_LINE_BYTES) {
         const scan = createChildOversizeScanner();
-        feedChildOversizeChunk(scan, trimmed);
+        feedChildOversizeChunk(scan, trimmed, true);
         applyChildOversizeScan(childTracker, scan);
         return;
     }
@@ -991,7 +1588,9 @@ function processChildLine(childTracker, rawLine) {
 function isChildTrackerIdleCompleted(cTracker, mtimeMs, nowMs) {
     if (!cTracker) return false;
     if (cTracker.revivedAtMs > 0 && mtimeMs <= cTracker.revivedAtMs) {
-        return false;
+        if (nowMs - cTracker.revivedAtMs < REVIVE_GRACE_MS) {
+            return false;
+        }
     }
     if (cTracker.lastStepType === 'ERROR_MESSAGE' || cTracker.lastStepStatus === 'CANCELED') {
         return true;
@@ -1025,6 +1624,11 @@ function syncChildSubagentMetrics(parentTracker, childCid, parentEntry) {
     }
     touchLruMap(childSubagentTrackers, childCid, cTracker, MAX_TRACKED_CHILDREN);
 
+    const prevOffset = cTracker.byteOffset;
+    const prevStepCount = cTracker.stepCount;
+    const prevLastTool = cTracker.lastTool;
+    const prevLastStatus = cTracker.lastStepStatus;
+
     if (st.size < cTracker.byteOffset) {
         Object.assign(cTracker, createChildTracker(childCid));
     }
@@ -1042,7 +1646,15 @@ function syncChildSubagentMetrics(parentTracker, childCid, parentEntry) {
             while (pos < st.size) {
                 const toRead = Math.min(buf.length, st.size - pos);
                 const bytesRead = fs.readSync(fd, buf, 0, toRead, pos);
-                if (bytesRead <= 0) break;
+                if (bytesRead <= 0) {
+                    try {
+                        const curSt = fs.fstatSync(fd);
+                        if (curSt.size < cTracker.byteOffset) {
+                            Object.assign(cTracker, createChildTracker(childCid));
+                        }
+                    } catch (_) {}
+                    break;
+                }
                 pos += bytesRead;
 
                 const decoded = cTracker.decoder.write(buf.subarray(0, bytesRead));
@@ -1053,12 +1665,12 @@ function syncChildSubagentMetrics(parentTracker, childCid, parentEntry) {
                     if (nlIdx === -1) {
                         const tail = decoded.slice(cursor);
                         if (cTracker.oversizeScan) {
-                            feedChildOversizeChunk(cTracker.oversizeScan, tail);
+                            feedChildOversizeChunk(cTracker.oversizeScan, tail, false);
                         } else if (cTracker.remainder.length + tail.length > MAX_LINE_BYTES) {
                             cTracker.oversizeScan = createChildOversizeScanner();
-                            feedChildOversizeChunk(cTracker.oversizeScan, cTracker.remainder);
+                            feedChildOversizeChunk(cTracker.oversizeScan, cTracker.remainder, false);
                             cTracker.remainder = '';
-                            feedChildOversizeChunk(cTracker.oversizeScan, tail);
+                            feedChildOversizeChunk(cTracker.oversizeScan, tail, false);
                         } else {
                             cTracker.remainder += tail;
                         }
@@ -1069,14 +1681,14 @@ function syncChildSubagentMetrics(parentTracker, childCid, parentEntry) {
                     cursor = nlIdx + 1;
 
                     if (cTracker.oversizeScan) {
-                        feedChildOversizeChunk(cTracker.oversizeScan, piece);
+                        feedChildOversizeChunk(cTracker.oversizeScan, piece, true);
                         applyChildOversizeScan(cTracker, cTracker.oversizeScan);
                         cTracker.oversizeScan = null;
                     } else if (cTracker.remainder.length + piece.length > MAX_LINE_BYTES) {
                         const scan = createChildOversizeScanner();
-                        feedChildOversizeChunk(scan, cTracker.remainder);
+                        feedChildOversizeChunk(scan, cTracker.remainder, false);
                         cTracker.remainder = '';
-                        feedChildOversizeChunk(scan, piece);
+                        feedChildOversizeChunk(scan, piece, true);
                         applyChildOversizeScan(cTracker, scan);
                     } else {
                         const fullLine = cTracker.remainder + piece;
@@ -1092,6 +1704,14 @@ function syncChildSubagentMetrics(parentTracker, childCid, parentEntry) {
             cTracker.lastSeenSize = st.size;
             cTracker.lastMtimeMs = st.mtimeMs;
         } catch (_) {
+            if (fd !== -1) {
+                try {
+                    const curSt = fs.fstatSync(fd);
+                    if (curSt.size < cTracker.byteOffset) {
+                        Object.assign(cTracker, createChildTracker(childCid));
+                    }
+                } catch (__) {}
+            }
         } finally {
             if (fd !== -1) {
                 try {
@@ -1110,9 +1730,20 @@ function syncChildSubagentMetrics(parentTracker, childCid, parentEntry) {
         parentEntry.lastTool = cTracker.lastTool;
     }
 
+    if (
+        parentTracker &&
+        (cTracker.byteOffset !== prevOffset ||
+            cTracker.stepCount !== prevStepCount ||
+            cTracker.lastTool !== prevLastTool ||
+            cTracker.lastStepStatus !== prevLastStatus)
+    ) {
+        parentTracker.rev++;
+    }
+
     const now = Date.now();
     if (parentTracker && isChildTrackerIdleCompleted(cTracker, st.mtimeMs, now)) {
         recordCompletedSubagent(parentTracker, childCid, Math.floor(st.mtimeMs || now), Boolean(parentTracker.initialized));
+        parentTracker.rev++;
         return true;
     }
 
@@ -1172,9 +1803,13 @@ function getConversationSnapshot(rawCid) {
     }
 
     const now = Date.now();
+    const prevRecentLen = tracker.recentCompletedSubagents.length;
     tracker.recentCompletedSubagents = tracker.recentCompletedSubagents
         .filter((item) => now - (item.completedAt || 0) <= COMPLETED_SUBAGENT_TTL_MS)
         .slice(-MAX_RECENT_COMPLETED_SUBAGENTS);
+    if (tracker.recentCompletedSubagents.length !== prevRecentLen) {
+        tracker.rev++;
+    }
 
     const recentCompletedSubagents = tracker.recentCompletedSubagents.map((entry) => ({
         cid: entry.cid,
@@ -1233,10 +1868,14 @@ function getConversationSnapshot(rawCid) {
     };
 }
 
-function hasConversationActivity(cid) {
+function hasConversationActivity(cid, lastPushedRev = -1) {
     const tracker = conversationTrackers.get(cid);
     const parentPath = resolveSafeTranscriptPath(cid);
     if (!parentPath) return false;
+
+    if (tracker && lastPushedRev >= 0 && tracker.rev !== lastPushedRev) {
+        return true;
+    }
 
     try {
         const st = fs.statSync(parentPath);
@@ -1347,18 +1986,31 @@ function handleSseEventsRequest(req, res, rawCid, apiHeaders) {
 
     let closed = false;
     let lastJson = '';
+    let lastPushedRev = -1;
     let lastResolvedCid = isDynamic ? resolveLatestConversationId() : rawCid;
 
     const pushSnapshot = (targetCid) => {
         if (closed) return;
+        let snap;
+        let json;
         try {
-            const snap = getConversationSnapshot(targetCid || rawCid);
-            const json = JSON.stringify(snap);
-            if (json !== lastJson) {
-                lastJson = json;
-                res.write(`data: ${json}\n\n`);
+            snap = getConversationSnapshot(targetCid || rawCid);
+            const resolvedTracker = snap && snap.cid ? conversationTrackers.get(snap.cid) : null;
+            if (resolvedTracker) {
+                lastPushedRev = resolvedTracker.rev;
             }
-        } catch (_) {}
+            json = JSON.stringify(snap);
+        } catch (_) {
+            return;
+        }
+        if (json !== lastJson) {
+            lastJson = json;
+            try {
+                res.write(`data: ${json}\n\n`);
+            } catch (_) {
+                clientEntry.close();
+            }
+        }
     };
 
     pushSnapshot(lastResolvedCid || rawCid);
@@ -1367,13 +2019,14 @@ function handleSseEventsRequest(req, res, rawCid, apiHeaders) {
         if (closed) return;
         if (isDynamic) {
             const nextCid = resolveLatestConversationId();
-            if (nextCid !== lastResolvedCid || (nextCid && hasConversationActivity(nextCid))) {
+            const checkRev = nextCid === lastResolvedCid ? lastPushedRev : -1;
+            if (nextCid !== lastResolvedCid || (nextCid && hasConversationActivity(nextCid, checkRev))) {
                 lastResolvedCid = nextCid;
                 pushSnapshot(nextCid || rawCid);
             }
             return;
         }
-        if (hasConversationActivity(rawCid)) {
+        if (hasConversationActivity(rawCid, lastPushedRev)) {
             pushSnapshot(rawCid);
         }
     }, SSE_POLL_INTERVAL_MS);
@@ -1382,7 +2035,9 @@ function handleSseEventsRequest(req, res, rawCid, apiHeaders) {
         if (closed) return;
         try {
             res.write(': ping\n\n');
-        } catch (_) {}
+        } catch (_) {
+            clientEntry.close();
+        }
     }, SSE_PING_INTERVAL_MS);
 
     const clientEntry = {
@@ -1401,6 +2056,7 @@ function handleSseEventsRequest(req, res, rawCid, apiHeaders) {
 
     sseClients.push(clientEntry);
     req.on('close', () => clientEntry.close());
+    res.on('close', () => clientEntry.close());
     res.on('error', () => clientEntry.close());
 }
 
@@ -1497,6 +2153,7 @@ function startAssetServer() {
             const assetBaseHeaders = {
                 'Access-Control-Allow-Origin': '*',
                 'Cross-Origin-Resource-Policy': 'cross-origin',
+                'Vary': 'Access-Control-Request-Private-Network',
                 'X-Content-Type-Options': 'nosniff',
                 'Content-Security-Policy': ASSET_CSP,
                 'Cache-Control': 'no-cache',
@@ -1623,11 +2280,16 @@ function startAssetServer() {
  * ========================================================================== */
 
 function resolvePortFile() {
+    if (process.env.AGY_DEVTOOLS_PORT_FILE) {
+        return process.env.AGY_DEVTOOLS_PORT_FILE;
+    }
     if (process.env.AGY_PORT_FILE) {
         return process.env.AGY_PORT_FILE;
     }
 
-    const home = os.homedir();
+    const home = process.platform === 'win32'
+        ? (process.env.USERPROFILE || process.env.HOME || os.homedir())
+        : (process.env.HOME || os.homedir());
     let candidates;
     if (process.platform === 'win32') {
         const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
@@ -1692,7 +2354,7 @@ function isVerifiedDaemonProcess(pid) {
                     '-Command',
                     `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" -ErrorAction Stop; if ($p) { "$($p.Name)|$($p.CommandLine)" }`,
                 ],
-                { encoding: 'utf8', windowsHide: true, timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
+                { encoding: 'utf8', windowsHide: true, timeout: 8000, stdio: ['ignore', 'pipe', 'ignore'] }
             ).trim();
             if (!out) return false;
             return NODE_PROC_RE.test(out) && DAEMON_SCRIPT_RE.test(out);
@@ -1741,6 +2403,7 @@ function acquirePidLock() {
         }
     }
     fs.writeFileSync(PID_FILE, String(process.pid), { encoding: 'utf8', mode: 0o600 });
+    ensurePrivateFileMode(PID_FILE);
 }
 
 function removePidLock() {
@@ -1848,6 +2511,7 @@ function readConfig() {
                                 encoding: 'utf8',
                                 mode: 0o600,
                             });
+                            ensurePrivateFileMode(CONFIG_FILE);
                             log('Restored theme_config.json from immutable backup after update.');
                         } catch (_) {}
                     }
@@ -1886,9 +2550,11 @@ function saveConfig(incoming) {
         }
 
         fs.writeFileSync(CONFIG_FILE, serialized, { encoding: 'utf8', mode: 0o600 });
+        ensurePrivateFileMode(CONFIG_FILE);
         try {
             fs.mkdirSync(path.dirname(SURVIVAL_BACKUP_FILE), { recursive: true, mode: 0o700 });
             fs.writeFileSync(SURVIVAL_BACKUP_FILE, serialized, { encoding: 'utf8', mode: 0o600 });
+            ensurePrivateFileMode(SURVIVAL_BACKUP_FILE);
         } catch (_) {}
         return { changed: true, config: merged };
     } catch (err) {
@@ -1948,14 +2614,30 @@ if ($patched -gt 0) { Write-Output "Patched $patched shortcut(s)" }
             stdio: ['ignore', 'pipe', 'ignore'],
         });
         let out = '';
+        let settled = false;
+        const guardTimer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            shortcutHealRunning = false;
+            try {
+                child.kill();
+            } catch (_) {}
+            log(`[update-guard] Shortcut heal timed out after 30000ms (${reason}).`);
+        }, 30000);
         if (child.stdout) child.stdout.on('data', (c) => (out += String(c)));
         child.on('close', () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(guardTimer);
             shortcutHealRunning = false;
             if (out.trim()) {
                 log(`[update-guard] Auto-healed Antigravity shortcuts (${reason}): ${out.trim()}`);
             }
         });
         child.on('error', () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(guardTimer);
             shortcutHealRunning = false;
         });
     } catch (_) {
@@ -2108,7 +2790,14 @@ const DOM_VERIFICATION_PROBE_EXPR = `(() => {
         /Antigravity/i.test(document.title || '') ||
         /^\\/(c\\/[0-9a-f-]{36}|launchpad)/i.test(location.pathname || '')
     );
-    return { matched, readyState: document.readyState || 'complete', origin: location.origin || '' };
+    const hasBody = Boolean(document.body);
+    const payloadReady = Boolean(
+        window.__AGY_THEME_CORE__ &&
+        typeof window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__ === 'function' &&
+        window.__AGY_MODAL_OBSERVER__ &&
+        document.getElementById('antigravity-custom-theme-active')
+    );
+    return { matched, hasBody, payloadReady, readyState: document.readyState || 'complete', origin: location.origin || '' };
 })()`;
 
 function getPortInfo() {
@@ -2178,6 +2867,8 @@ function createSession(target) {
         target,
         currentUrl: String(target.url || ''),
         verified: false,
+        initialAttachDone: false,
+        navSeq: 0,
         injecting: false,
         queuedReinjectOpts: null,
         evalScriptId: null,
@@ -2222,6 +2913,7 @@ function createSession(target) {
         const maxAttempts = Number.isInteger(opts.maxAttempts) && opts.maxAttempts > 0 ? opts.maxAttempts : 2;
         const delayMs = Number.isFinite(opts.delayMs) && opts.delayMs > 0 ? opts.delayMs : 300;
         const ignoreReadyState = Boolean(opts.ignoreReadyState);
+        const requireReadyDom = Boolean(opts.requireReadyDom);
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
             const evalRes = await send('Runtime.evaluate', {
@@ -2231,11 +2923,20 @@ function createSession(target) {
             });
             const val = evalRes && evalRes.result ? evalRes.result.value : null;
             if (val && val.matched === true) {
+                if (requireReadyDom && val.readyState === 'loading' && !val.payloadReady && attempt + 1 < maxAttempts) {
+                    await new Promise((r) => setTimeout(r, delayMs));
+                    continue;
+                }
                 if (val.origin && val.origin !== 'null') {
                     recordTrustedOriginFromUrl(val.origin);
                 }
                 recordTrustedOriginFromUrl(session.currentUrl || target.url);
-                return true;
+                return {
+                    matched: true,
+                    hasBody: Boolean(val.hasBody),
+                    payloadReady: Boolean(val.payloadReady),
+                    readyState: val.readyState || 'complete',
+                };
             }
             if (attempt + 1 < maxAttempts && (ignoreReadyState || (val && val.readyState === 'loading'))) {
                 await new Promise((r) => setTimeout(r, delayMs));
@@ -2243,7 +2944,7 @@ function createSession(target) {
             }
             break;
         }
-        return false;
+        return null;
     }
 
     async function refreshNewDocumentScript() {
@@ -2281,8 +2982,8 @@ function createSession(target) {
                 if (!normalizedOpts.onlyUpdateNewDoc) {
                     if (session.queuedReinjectOpts.onlyUpdateNewDoc) {
                         session.queuedReinjectOpts = normalizedOpts;
-                    } else if (!normalizedOpts.syncFromDaemon) {
-                        session.queuedReinjectOpts.syncFromDaemon = false;
+                    } else if (normalizedOpts.syncFromDaemon) {
+                        session.queuedReinjectOpts.syncFromDaemon = true;
                     }
                 }
             }
@@ -2354,6 +3055,7 @@ function createSession(target) {
         }
 
         if (msg.method === 'Page.frameNavigated' && msg.params && msg.params.frame && !msg.params.frame.parentId) {
+            const myNavSeq = ++session.navSeq;
             const navUrl = String(msg.params.frame.url || '');
             const wasVerified = session.verified;
             session.currentUrl = navUrl;
@@ -2376,13 +3078,18 @@ function createSession(target) {
                 } catch (_) {}
                 return;
             }
+            if (!session.initialAttachDone) {
+                return;
+            }
             try {
-                const ok = await verifyDomIsAntigravity({
+                const probe = await verifyDomIsAntigravity({
                     maxAttempts: 8,
                     delayMs: 250,
                     ignoreReadyState: true,
+                    requireReadyDom: true,
                 });
-                if (!ok) {
+                if (myNavSeq !== session.navSeq || session.ws.readyState !== 1) return;
+                if (!probe) {
                     session.verified = false;
                     if (!wasVerified) {
                         rememberIgnoredTarget(target.id, navUrl);
@@ -2393,7 +3100,11 @@ function createSession(target) {
                     return;
                 }
                 session.verified = true;
-                await session.reinject({ syncFromDaemon: false });
+                if (probe.payloadReady && session.evalScriptId) {
+                    await session.reinject({ onlyUpdateNewDoc: true });
+                } else {
+                    await session.reinject({ syncFromDaemon: false });
+                }
             } catch (_) {}
         }
     });
@@ -2416,11 +3127,13 @@ function createSession(target) {
                 await send('Runtime.addBinding', { name: 'agySaveThemeConfig' });
             } catch (_) {}
 
-            await session.reinject({ initialAttach: true, syncFromDaemon: false });
             session.verified = true;
+            await session.reinject({ initialAttach: true, syncFromDaemon: false });
+            session.initialAttachDone = true;
             log(`Attached verified Antigravity target ${target.id} (${target.url})`);
         } catch (err) {
             session.verified = false;
+            session.initialAttachDone = false;
             log(`Attach error for ${target.id}: ${err.message}`);
             try {
                 ws.close();
@@ -2430,6 +3143,7 @@ function createSession(target) {
 
     const cleanup = () => {
         session.verified = false;
+        session.initialAttachDone = false;
         for (const p of pending.values()) {
             p.reject(new Error('WebSocket closed'));
         }
@@ -2489,8 +3203,12 @@ async function scanPages() {
 }
 
 let payloadWatcher = null;
+let payloadWatchRetryTimer = null;
 
 function watchPayload() {
+    clearTimeout(payloadWatchRetryTimer);
+    payloadWatchRetryTimer = null;
+    if (payloadWatcher) return;
     try {
         if (!fs.existsSync(DIST_DIR)) {
             fs.mkdirSync(DIST_DIR, { recursive: true });
@@ -2513,9 +3231,13 @@ function watchPayload() {
                 } catch (_) {}
                 payloadWatcher = null;
             }
+            clearTimeout(payloadWatchRetryTimer);
+            payloadWatchRetryTimer = setTimeout(watchPayload, 3000);
         });
     } catch (err) {
         log(`fs.watch skipped: ${err.message}`);
+        clearTimeout(payloadWatchRetryTimer);
+        payloadWatchRetryTimer = setTimeout(watchPayload, 3000);
     }
 }
 
@@ -2523,6 +3245,7 @@ function shutdown(signal) {
     log(`Shutting down on ${signal}.`);
     clearTimeout(reloadTimer);
     clearTimeout(configBroadcastTimer);
+    clearTimeout(payloadWatchRetryTimer);
     if (payloadWatcher) {
         try {
             payloadWatcher.close();

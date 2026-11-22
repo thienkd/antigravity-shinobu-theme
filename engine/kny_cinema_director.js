@@ -14,17 +14,14 @@
   const ROOT = typeof window !== 'undefined' ? window : globalThis;
 
   // Clean teardown on hot-reload if a previous instance exists (preserve active Privacy Shield without flicker)
-  const wasShieldActive = Boolean(
-    (ROOT.__AGY_CINEMA_DIRECTOR__ &&
-      typeof ROOT.__AGY_CINEMA_DIRECTOR__.isPrivacyShieldActive === 'function' &&
-      ROOT.__AGY_CINEMA_DIRECTOR__.isPrivacyShieldActive()) ||
-    (typeof document !== 'undefined' &&
-      document.documentElement &&
-      document.documentElement.dataset.agyPrivacyShield === '1')
-  );
   if (ROOT.__AGY_CINEMA_DIRECTOR__ && typeof ROOT.__AGY_CINEMA_DIRECTOR__.destroy === 'function') {
     try { ROOT.__AGY_CINEMA_DIRECTOR__.destroy({ isReinject: true }); } catch (_) {}
   }
+  const wasShieldActive = Boolean(
+    typeof document !== 'undefined' &&
+      document.documentElement &&
+      document.documentElement.dataset.agyPrivacyShield === '1'
+  );
 
   const STORAGE_THEME = 'agy_theme_v3';
   const STORAGE_BUBBLE = 'agy_bubble_v3';
@@ -80,6 +77,9 @@
     prefs: loadDirectorPrefs(),
     shieldActive: false,
     shieldScanTimer: 0,
+    shieldChunkTimer: 0,
+    shieldScanCursor: 0,
+    shieldPendingNodes: [],
     shieldObserver: null,
     shieldMutationDebounce: 0,
 
@@ -90,6 +90,7 @@
     showcaseProgressRaf: 0,
     savedSnapshot: null,
     lastRestoredSnapshot: null,
+    snapshotRestoredForRun: false,
     savedThemeName: '',
     savedBubbleName: '',
     savedShieldBeforeShowcase: false,
@@ -103,6 +104,7 @@
     playBtnEl: null,
     shieldSwitchEl: null,
     hudMountTimer: 0,
+    hudMountInitTimer: 0,
     cleanups: []
   };
 
@@ -184,7 +186,6 @@
       html[data-agy-privacy-shield="1"] #agy-custom-theme-sidebar-btn,
       html[data-agy-privacy-shield="1"] .agy-chibi-hitbox,
       html[data-agy-privacy-shield="1"] #agy-shinobu-npc-wrap,
-      html[data-agy-privacy-shield="1"] #agy-chibi-skill-bar,
       html[data-agy-privacy-shield="1"] #${HUD_BAR_ID},
       html[data-agy-privacy-shield="1"] #${SHIELD_BADGE_ID},
       html[data-agy-privacy-shield="1"] #${PANEL_ID},
@@ -448,7 +449,11 @@
         align-items: center;
         justify-content: center;
         pointer-events: none;
-        animation: agyMetsuStampImpact 1.95s cubic-bezier(0.18, 0.89, 0.32, 1.18) forwards;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        #${METSU_SEAL_ID} {
+          animation: agyMetsuStampImpact 1.95s cubic-bezier(0.18, 0.89, 0.32, 1.18) forwards;
+        }
       }
       #${METSU_SEAL_ID} .agy-metsu-frame {
         width: 158px;
@@ -490,27 +495,82 @@
    * 2. PRIVACY SHIELD CONTROLLER (Alt+Shift+P)
    * ========================================================================== */
 
-  function scanAndTagSensitiveInlineNodes() {
-    if (typeof document === 'undefined' || !state.shieldActive) return;
+  const SHIELD_IGNORE_SELECTOR = `#${PANEL_ID}, #${SHIELD_BADGE_ID}, #${HUD_BAR_ID}, #agy-custom-theme-modal-backdrop, agy-hashira-squad, agy-skill-vfx`;
+
+  function inspectAndMaskCandidate(el) {
+    if (!el || !el.dataset || el.dataset.agySensitiveMasked === '1') return;
+    if (typeof el.closest === 'function' && el.closest(SHIELD_IGNORE_SELECTOR)) {
+      return;
+    }
+    const txt = (el.textContent || '').slice(0, 600);
+    const ttl = (el.getAttribute && el.getAttribute('title')) || '';
+    if ((txt && SENSITIVE_TEXT_RE.test(txt)) || (ttl && SENSITIVE_TEXT_RE.test(ttl))) {
+      el.dataset.agySensitiveMasked = '1';
+    }
+  }
+
+  function scanAndTagSensitiveInlineNodes(sweepAllAsync = false) {
+    if (typeof document === 'undefined' || !state.shieldActive || state.destroyed) return;
     const candidates = document.querySelectorAll('code, a, .monaco-icon-label-container, [title]');
-    // Traverse backwards from bottom-most conversation messages first so newly streamed tokens are masked immediately
-    for (let i = candidates.length - 1, count = 0; i >= 0 && count < 600; i--, count++) {
-      const el = candidates[i];
-      if (!el || !el.dataset) continue;
-      if (el.closest(`#${PANEL_ID}, #${SHIELD_BADGE_ID}, #${HUD_BAR_ID}, #agy-custom-theme-modal-backdrop, agy-hashira-squad, agy-skill-vfx`)) {
-        continue;
+    const len = candidates.length;
+    if (len === 0) return;
+
+    // Pha 1: Quét ưu tiên 250 node cuối DOM (tin nhắn đang stream ở cuối hội thoại)
+    const TAIL = 250;
+    const tailStart = Math.max(0, len - TAIL);
+    for (let i = len - 1; i >= tailStart; i--) {
+      inspectAndMaskCandidate(candidates[i]);
+    }
+
+    if (tailStart === 0) {
+      state.shieldScanCursor = 0;
+      return;
+    }
+
+    // Pha 2: Quét phần đầu & giữa DOM [0 .. tailStart - 1] bằng batch cuốn chiếu + async chunk khi vừa bật Khiên
+    const BATCH = 400;
+    if (tailStart <= BATCH) {
+      for (let i = 0; i < tailStart; i++) {
+        inspectAndMaskCandidate(candidates[i]);
       }
-      const txt = (el.textContent || '').slice(0, 240);
-      const ttl = (el.getAttribute && el.getAttribute('title')) || '';
-      if ((txt && SENSITIVE_TEXT_RE.test(txt)) || (ttl && SENSITIVE_TEXT_RE.test(ttl))) {
-        el.dataset.agySensitiveMasked = '1';
-      }
+      state.shieldScanCursor = 0;
+      return;
+    }
+
+    const startIdx = state.shieldScanCursor % tailStart;
+    for (let c = 0; c < BATCH; c++) {
+      inspectAndMaskCandidate(candidates[(startIdx + c) % tailStart]);
+    }
+    state.shieldScanCursor = (startIdx + BATCH) % tailStart;
+
+    if (sweepAllAsync) {
+      clearTimeout(state.shieldChunkTimer);
+      state.shieldChunkTimer = 0;
+      let chunkPos = 0;
+      const CHUNK = 500;
+      const runChunk = () => {
+        state.shieldChunkTimer = 0;
+        if (!state.shieldActive || state.destroyed || typeof document === 'undefined') return;
+        const liveList = document.querySelectorAll('code, a, .monaco-icon-label-container, [title]');
+        const limit = Math.min(liveList.length, chunkPos + CHUNK);
+        for (let i = chunkPos; i < limit; i++) {
+          inspectAndMaskCandidate(liveList[i]);
+        }
+        chunkPos = limit;
+        if (chunkPos < liveList.length) {
+          state.shieldChunkTimer = setTimeout(runChunk, 16);
+        }
+      };
+      state.shieldChunkTimer = setTimeout(runChunk, 16);
     }
   }
 
   function disconnectShieldObserver() {
     clearTimeout(state.shieldMutationDebounce);
     state.shieldMutationDebounce = 0;
+    clearTimeout(state.shieldChunkTimer);
+    state.shieldChunkTimer = 0;
+    state.shieldPendingNodes = [];
     if (state.shieldObserver) {
       try { state.shieldObserver.disconnect(); } catch (_) {}
       state.shieldObserver = null;
@@ -520,13 +580,43 @@
   function ensureShieldObserver() {
     if (typeof MutationObserver === 'undefined' || typeof document === 'undefined' || !document.body) return;
     if (state.shieldObserver) return;
-    state.shieldObserver = new MutationObserver(() => {
+    state.shieldObserver = new MutationObserver((mutations) => {
       if (!state.shieldActive || state.destroyed) return;
+      if (Array.isArray(mutations) && state.shieldPendingNodes.length < 150) {
+        for (let i = 0; i < mutations.length; i++) {
+          const m = mutations[i];
+          if (m.target && m.target.nodeType === 1) {
+            state.shieldPendingNodes.push(m.target);
+          }
+          if (m.addedNodes && m.addedNodes.length > 0) {
+            for (let j = 0; j < m.addedNodes.length; j++) {
+              const n = m.addedNodes[j];
+              if (n && n.nodeType === 1) state.shieldPendingNodes.push(n);
+              if (state.shieldPendingNodes.length >= 150) break;
+            }
+          }
+          if (state.shieldPendingNodes.length >= 150) break;
+        }
+      }
       if (state.shieldMutationDebounce) return;
       state.shieldMutationDebounce = setTimeout(() => {
         state.shieldMutationDebounce = 0;
+        const pending = state.shieldPendingNodes.splice(0, 150);
         if (state.shieldActive && !state.destroyed) {
-          scanAndTagSensitiveInlineNodes();
+          for (let i = 0; i < pending.length; i++) {
+            const node = pending[i];
+            if (!node || !node.isConnected) continue;
+            if (typeof node.matches === 'function' && node.matches('code, a, .monaco-icon-label-container, [title]')) {
+              inspectAndMaskCandidate(node);
+            }
+            if (typeof node.querySelectorAll === 'function') {
+              const sub = node.querySelectorAll('code, a, .monaco-icon-label-container, [title]');
+              for (let k = 0; k < sub.length && k < 120; k++) {
+                inspectAndMaskCandidate(sub[k]);
+              }
+            }
+          }
+          scanAndTagSensitiveInlineNodes(false);
         }
       }, 120);
     });
@@ -567,21 +657,22 @@
       : `🛡️ KHIÊN CHE MẬT ĐANG BẬT (${SHORTCUT_SHIELD})`;
   }
 
-  function syncShieldAttributes() {
+  function syncShieldAttributes(sweepAllAsync = false) {
     if (typeof document === 'undefined' || !document.documentElement) return;
-    if (state.shieldActive) {
+    if (state.shieldActive && !state.destroyed) {
       document.documentElement.dataset.agyPrivacyShield = '1';
       if (state.prefs.strictRedact) {
         document.documentElement.dataset.agyPrivacyStrict = '1';
       } else {
         delete document.documentElement.dataset.agyPrivacyStrict;
       }
-      scanAndTagSensitiveInlineNodes();
+      scanAndTagSensitiveInlineNodes(sweepAllAsync);
       ensureShieldObserver();
       if (!state.shieldScanTimer) {
-        state.shieldScanTimer = setInterval(scanAndTagSensitiveInlineNodes, 1800);
+        state.shieldScanTimer = setInterval(() => scanAndTagSensitiveInlineNodes(false), 1800);
       }
     } else {
+      state.shieldActive = false;
       delete document.documentElement.dataset.agyPrivacyShield;
       delete document.documentElement.dataset.agyPrivacyStrict;
       disconnectShieldObserver();
@@ -597,9 +688,17 @@
   }
 
   function togglePrivacyShield(forceState) {
+    if (state.destroyed) {
+      if (forceState === false) {
+        state.shieldActive = false;
+        syncShieldAttributes(false);
+      }
+      return false;
+    }
     ensureStyles();
+    const prevActive = state.shieldActive;
     state.shieldActive = typeof forceState === 'boolean' ? forceState : !state.shieldActive;
-    syncShieldAttributes();
+    syncShieldAttributes(!prevActive && state.shieldActive);
     return state.shieldActive;
   }
 
@@ -624,6 +723,7 @@
   }
 
   function switchShowcaseThemeTransient(queryOrExactName) {
+    if (state.destroyed) return false;
     const core = ROOT.__AGY_THEME_CORE__;
     if (core && typeof core.getThemeKeys === 'function' && typeof core.applyTransientTheme === 'function') {
       try {
@@ -637,6 +737,7 @@
   }
 
   function restoreOriginalThemeSnapshot(finalizeClear = false) {
+    if (state.destroyed) return false;
     const core = ROOT.__AGY_THEME_CORE__;
     const snap = state.savedSnapshot || state.lastRestoredSnapshot;
     if (snap && typeof snap === 'object') {
@@ -672,6 +773,7 @@
    * NEVER simulates .click() on .agy-preset-card (which would wipe customWp: '' onto disk!).
    */
   function switchPresetSilently(presetName, optionalBubbleExact, extraOpts) {
+    if (state.destroyed) return false;
     const resolvedTheme = resolveMatchingThemeKey(presetName);
     if (!resolvedTheme) return false;
     const resolvedBubble = optionalBubbleExact
@@ -786,8 +888,8 @@
     updateHudButtonVisual();
     if (state.playBtnEl) {
       state.playBtnEl.textContent = state.showcaseRunning
-        ? '⏹️ Dừng Trailer & Khôi Phục Ngay (Esc)'
-        : `▶️ Diễn Trailer 15s (${SHORTCUT_CINEMA})`;
+        ? '⏹️ Dừng Trình Diễn & Khôi Phục Ngay (Esc)'
+        : `▶️ Tự Diễn Trình Chiếu 15s (${SHORTCUT_CINEMA})`;
     }
     if (!state.showcaseRunning) {
       if (state.progressFillEl) state.progressFillEl.style.width = '0%';
@@ -795,10 +897,12 @@
     }
   }
 
-  function stopShowcase(restoreOriginal = true) {
+  function stopShowcase(restoreOriginal = true, stopOpts = {}) {
     const wasRunning = state.showcaseRunning;
     state.showcaseRunning = false;
     clearShowcaseArtifacts();
+
+    const skipRestoreTheme = !restoreOriginal || state.destroyed || Boolean(stopOpts && stopOpts.skipRestoreTheme);
 
     if (wasRunning) {
       const skillsApi = ROOT.__AGY_BREATHING_SKILLS__ || ROOT.__AGY_KNY_SKILLS__;
@@ -808,16 +912,35 @@
       if (ROOT.__AGY_SQUAD_RAID__ && typeof ROOT.__AGY_SQUAD_RAID__.stopSimulation === 'function') {
         try { ROOT.__AGY_SQUAD_RAID__.stopSimulation(); } catch (_) {}
       }
-      if (ROOT.__AGY_TOKEN_HUD__ && typeof ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
+      if (
+        !state.destroyed &&
+        typeof document !== 'undefined' &&
+        document.getElementById(HUD_BAR_ID) &&
+        ROOT.__AGY_TOKEN_HUD__ &&
+        typeof ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function'
+      ) {
         try { ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat(state.savedBladeBonus); } catch (_) {}
       }
 
-      if (restoreOriginal) {
-        restoreOriginalThemeSnapshot(true);
+      if (!skipRestoreTheme) {
+        if (!state.snapshotRestoredForRun) {
+          restoreOriginalThemeSnapshot(true);
+        } else {
+          state.savedSnapshot = null;
+        }
         // When user explicitly cancels Trailer (Esc / Stop), ALWAYS restore exact pre-showcase Shield state
         togglePrivacyShield(state.savedShieldBeforeShowcase);
       }
     }
+
+    if (skipRestoreTheme) {
+      state.savedSnapshot = null;
+      state.lastRestoredSnapshot = null;
+      state.savedThemeName = '';
+      state.savedBubbleName = '';
+      state.savedBladeBonus = 0;
+    }
+    state.snapshotRestoredForRun = false;
 
     syncPanelShowcaseState();
   }
@@ -869,6 +992,7 @@
     }
 
     state.showcaseRunning = true;
+    state.snapshotRestoredForRun = false;
     state.showcaseStartMs = Date.now();
     syncPanelShowcaseState();
 
@@ -920,7 +1044,13 @@
         }
       }
 
-      if (ROOT.__AGY_TOKEN_HUD__ && typeof ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
+      if (
+        !state.destroyed &&
+        typeof document !== 'undefined' &&
+        document.getElementById(HUD_BAR_ID) &&
+        ROOT.__AGY_TOKEN_HUD__ &&
+        typeof ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function'
+      ) {
         try { ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat(100); } catch (_) {}
       }
       const redBladeApi = ROOT.__AGY_RED_BLADE__ || ROOT.__AGY_NICHIRIN_FORGE__;
@@ -964,14 +1094,28 @@
 
     // Keep state.savedSnapshot intact across 14.55s–15.0s so an Esc cancel in that window never loses customWp!
     scheduleStep(14550, () => {
-      restoreOriginalThemeSnapshot(false);
+      if (restoreOriginalThemeSnapshot(false)) {
+        state.snapshotRestoredForRun = true;
+      }
     });
 
     scheduleStep(15000, () => {
       state.showcaseRunning = false;
       clearShowcaseArtifacts();
-      restoreOriginalThemeSnapshot(true);
-      if (ROOT.__AGY_TOKEN_HUD__ && typeof ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
+      if (!state.snapshotRestoredForRun) {
+        restoreOriginalThemeSnapshot(true);
+      } else {
+        state.savedSnapshot = null;
+        state.lastRestoredSnapshot = null;
+      }
+      state.snapshotRestoredForRun = false;
+      if (
+        !state.destroyed &&
+        typeof document !== 'undefined' &&
+        document.getElementById(HUD_BAR_ID) &&
+        ROOT.__AGY_TOKEN_HUD__ &&
+        typeof ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function'
+      ) {
         try { ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat(state.savedBladeBonus); } catch (_) {}
       }
       if (!state.prefs.keepShieldAfter) {
@@ -1005,7 +1149,7 @@
     btn.dataset.running = state.showcaseRunning ? '1' : '0';
     btn.textContent = state.showcaseRunning
       ? '⏹️ Đang diễn...'
-      : (state.shieldActive ? '🛡️ Showcase' : '🎬 Showcase');
+      : (state.shieldActive ? '🛡️ Trình Diễn' : '🎬 Trình Diễn');
   }
 
   function closePanel() {
@@ -1082,7 +1226,7 @@
     const hdrLeft = document.createElement('div');
     const hdrTitle = document.createElement('div');
     hdrTitle.className = 'agy-cd-title';
-    hdrTitle.textContent = '🎬 Showcase & Khiên Che Mật';
+    hdrTitle.textContent = '🎬 Đạo Diễn Trình Diễn & Khiên Che Mật';
     const hdrSub = document.createElement('div');
     hdrSub.className = 'agy-cd-sub';
     hdrSub.textContent = 'Quay video an toàn 100% • Kịch bản tự diễn 15s';
@@ -1106,8 +1250,8 @@
     playBtn.type = 'button';
     playBtn.className = 'agy-cd-hero-btn';
     playBtn.textContent = state.showcaseRunning
-      ? '⏹️ Dừng Trailer & Khôi Phục Ngay (Esc)'
-      : `▶️ Diễn Trailer 15s (${SHORTCUT_CINEMA})`;
+      ? '⏹️ Dừng Trình Diễn & Khôi Phục Ngay (Esc)'
+      : `▶️ Tự Diễn Trình Chiếu 15s (${SHORTCUT_CINEMA})`;
     playBtn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       startShowcase();
@@ -1151,21 +1295,21 @@
 
     // Strict Redact Toggle
     const strictRow = buildToggleRow(
-      '🔒 Che Nghiêm Ngặt (Strict Redact)',
-      'Làm mờ cả khung code, terminal & chữ hội thoại',
+      '🔒 Che Nghiêm Ngặt Toàn Phần',
+      'Làm mờ cả khung mã nguồn, cửa sổ dòng lệnh & chữ hội thoại',
       state.prefs.strictRedact,
       (val) => {
         state.prefs.strictRedact = val;
         saveDirectorPrefs(state.prefs);
-        if (state.shieldActive) syncShieldAttributes();
+        if (state.shieldActive) syncShieldAttributes(false);
       }
     );
     panel.appendChild(strictRow.row);
 
     // Auto-Shield on Trailer Toggle
     const autoShieldRow = buildToggleRow(
-      '✨ Tự bật Khiên khi diễn Trailer',
-      'Bảo vệ chống lộ thông tin ngay giây đầu quay OBS',
+      '✨ Tự bật Khiên khi chạy Trình Diễn',
+      'Bảo vệ chống lộ thông tin ngay giây đầu quay màn hình',
       state.prefs.autoShield,
       (val) => {
         state.prefs.autoShield = val;
@@ -1176,7 +1320,7 @@
 
     // Keep Shield After Trailer Toggle
     const keepShieldRow = buildToggleRow(
-      '📌 Giữ Khiên Che Mật sau khi hết Trailer',
+      '📌 Giữ Khiên Che Mật sau khi hết Trình Diễn',
       'Không tự tắt Khiên sau mốc 15s (nhấn Esc vẫn khôi phục)',
       state.prefs.keepShieldAfter,
       (val) => {
@@ -1224,9 +1368,9 @@
     btn.type = 'button';
     btn.id = AUTO_HUD_BTN_ID;
     btn.dataset.agyCinemaTrigger = '1';
-    btn.title = `Đạo diễn Quay phim Trailer 15s (${SHORTCUT_CINEMA}) & Khiên Che Mật Dự Án (${SHORTCUT_SHIELD})`;
+    btn.title = `Đạo diễn Trình Diễn 15s (${SHORTCUT_CINEMA}) & Khiên Che Mật Dự Án (${SHORTCUT_SHIELD})`;
     btn.setAttribute('aria-label', btn.title);
-    btn.textContent = '🎬 Showcase';
+    btn.textContent = '🎬 Trình Diễn';
     btn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       openPanel(btn);
@@ -1245,7 +1389,10 @@
     ensureStyles();
 
     state.hudMountTimer = setInterval(ensureHudTriggerMounted, 1500);
-    setTimeout(ensureHudTriggerMounted, 280);
+    state.hudMountInitTimer = setTimeout(() => {
+      state.hudMountInitTimer = 0;
+      ensureHudTriggerMounted();
+    }, 280);
 
     const onKeyDown = (ev) => {
       if (ev.isComposing || ev.keyCode === 229) return;
@@ -1319,15 +1466,33 @@
 
   function destroy(opts) {
     const isReinject = Boolean(opts && opts.isReinject);
+    const wasRunning = state.showcaseRunning;
+    const userIntendedShield = wasRunning ? state.savedShieldBeforeShowcase : state.shieldActive;
     const keepShieldOnReinject = isReinject && (
-      state.shieldActive ||
-      Boolean(typeof document !== 'undefined' && document.documentElement && document.documentElement.dataset.agyPrivacyShield === '1')
+      (wasRunning && state.prefs && state.prefs.keepShieldAfter && state.shieldActive) ||
+      userIntendedShield ||
+      (!wasRunning && Boolean(typeof document !== 'undefined' && document.documentElement && document.documentElement.dataset.agyPrivacyShield === '1'))
     );
+    if (isReinject && wasRunning) {
+      if (
+        typeof document !== 'undefined' &&
+        document.getElementById(HUD_BAR_ID) &&
+        ROOT.__AGY_TOKEN_HUD__ &&
+        typeof ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function'
+      ) {
+        try { ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat(state.savedBladeBonus); } catch (_) {}
+      }
+      if (!state.snapshotRestoredForRun) {
+        try { restoreOriginalThemeSnapshot(true); } catch (_) {}
+      }
+    }
     state.destroyed = true;
-    stopShowcase(true);
-    if (!isReinject) {
+    stopShowcase(false, { skipRestoreTheme: true });
+    state.savedSnapshot = null;
+    state.lastRestoredSnapshot = null;
+    if (!isReinject || !keepShieldOnReinject) {
       togglePrivacyShield(false);
-    } else if (keepShieldOnReinject && typeof document !== 'undefined' && document.documentElement) {
+    } else if (typeof document !== 'undefined' && document.documentElement) {
       document.documentElement.dataset.agyPrivacyShield = '1';
       if (state.prefs && state.prefs.strictRedact) {
         document.documentElement.dataset.agyPrivacyStrict = '1';
@@ -1336,7 +1501,11 @@
     disconnectShieldObserver();
     closePanel();
     clearInterval(state.hudMountTimer);
+    state.hudMountTimer = 0;
+    clearTimeout(state.hudMountInitTimer);
+    state.hudMountInitTimer = 0;
     clearInterval(state.shieldScanTimer);
+    state.shieldScanTimer = 0;
 
     while (state.cleanups.length > 0) {
       const fn = state.cleanups.pop();

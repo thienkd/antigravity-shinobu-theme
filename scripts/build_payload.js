@@ -136,26 +136,58 @@ function resolveAssetValue(key, value, themesDir, inlineAll) {
   return `${relPosix}?v=${hash8}`;
 }
 
+function printUsage() {
+  console.log(
+    [
+      'Usage: node scripts/build_payload.js [options]',
+      '',
+      'Options:',
+      '  --themes <path>   Path to themes.json (default: themes/themes.json)',
+      '  --engine <path>   Path to engine/core.js (default: engine/core.js)',
+      '  --out <path>      Output bundle path (default: dist/theme_payload.js)',
+      '  --inline-all      Embed all assets (including 2K wallpapers) as data: URIs',
+      '  -h, --help        Show this help message and exit'
+    ].join('\n')
+  );
+}
+
 function parseArgs(argv, repoRoot) {
   const opts = {
     themesPath: path.join(repoRoot, 'themes', 'themes.json'),
     enginePath: path.join(repoRoot, 'engine', 'core.js'),
     outPath: path.join(repoRoot, 'dist', 'theme_payload.js'),
-    inlineAll: false
+    inlineAll: false,
+    help: false
+  };
+
+  const readOptionValue = (flag, inlineVal, nextIdx) => {
+    const val = inlineVal !== null ? inlineVal : argv[nextIdx];
+    if (!val || val.startsWith('--')) {
+      throw new Error(`Missing valid path value for CLI option '${flag}'.`);
+    }
+    return path.resolve(val);
   };
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--inline-all') {
+    if (arg === '-h' || arg === '--help') {
+      opts.help = true;
+    } else if (arg === '--inline-all') {
       opts.inlineAll = true;
-    } else if (arg === '--themes' && argv[i + 1] && !argv[i + 1].startsWith('--')) {
-      opts.themesPath = path.resolve(argv[++i]);
-    } else if (arg === '--engine' && argv[i + 1] && !argv[i + 1].startsWith('--')) {
-      opts.enginePath = path.resolve(argv[++i]);
-    } else if (arg === '--out' && argv[i + 1] && !argv[i + 1].startsWith('--')) {
-      opts.outPath = path.resolve(argv[++i]);
-    } else if (arg === '--themes' || arg === '--engine' || arg === '--out') {
-      throw new Error(`Missing valid path value for CLI option '${arg}'.`);
+    } else if (arg === '--themes') {
+      opts.themesPath = readOptionValue(arg, null, ++i);
+    } else if (arg.startsWith('--themes=')) {
+      opts.themesPath = readOptionValue('--themes', arg.slice('--themes='.length), i);
+    } else if (arg === '--engine') {
+      opts.enginePath = readOptionValue(arg, null, ++i);
+    } else if (arg.startsWith('--engine=')) {
+      opts.enginePath = readOptionValue('--engine', arg.slice('--engine='.length), i);
+    } else if (arg === '--out') {
+      opts.outPath = readOptionValue(arg, null, ++i);
+    } else if (arg.startsWith('--out=')) {
+      opts.outPath = readOptionValue('--out', arg.slice('--out='.length), i);
+    } else {
+      throw new Error(`Unknown or unsupported CLI argument: '${arg}'. Run with --help for usage.`);
     }
   }
   return opts;
@@ -163,7 +195,11 @@ function parseArgs(argv, repoRoot) {
 
 function main() {
   const repoRoot = path.resolve(__dirname, '..');
-  const { themesPath, enginePath, outPath, inlineAll } = parseArgs(process.argv.slice(2), repoRoot);
+  const { themesPath, enginePath, outPath, inlineAll, help } = parseArgs(process.argv.slice(2), repoRoot);
+  if (help) {
+    printUsage();
+    return;
+  }
 
   if (!fs.existsSync(themesPath) || !fs.statSync(themesPath).isFile()) {
     throw new Error(`themes.json not found: ${themesPath}`);
@@ -235,4 +271,9 @@ function main() {
   );
 }
 
-main();
+try {
+  main();
+} catch (err) {
+  console.error(`[build_payload.js] Error: ${err && err.message ? err.message : err}`);
+  process.exit(2);
+}

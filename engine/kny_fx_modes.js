@@ -843,9 +843,11 @@
       const embers = [];
       for (let i = 0; i < 32; i++) {
         const isBokeh = i < 3;
+        const life = seededFrac(i, 97, 19);
         embers.push({
           x: isBokeh ? strictMarginX(seededFrac(i, 71, 13), i % 2 === 0 ? -1 : 1, initW) : edgeWeightedFrac(seededFrac(i, 71, 13)) * initW,
-          life: seededFrac(i, 97, 19), // 0 = bottom birth, 1 = extinguished aloft
+          y: initH - life * initH * 0.68,
+          life, // 0 = bottom birth, 1 = extinguished aloft
           lifeSpeed: 0.0022 + seededFrac(i, 43, 7) * 0.0020,
           r0: isBokeh ? (12 + i * 3) : (1.2 + seededFrac(i, 59, 11) * 2.3),
           vyBase: isBokeh ? (0.45 + i * 0.08) : (0.68 + seededFrac(i, 37, 23) * 0.62),
@@ -901,7 +903,7 @@
               e.x = e.isBokeh ? strictMarginX(u, i % 2 === 0 ? -1 : 1, width) : edgeWeightedFrac(u) * width;
               e.y = height + 4 + (i % 5) * 3;
             }
-            if (typeof e.y !== 'number') {
+            if (typeof e.y !== 'number' || !Number.isFinite(e.y)) {
               e.y = height - e.life * height * 0.68;
             }
 
@@ -1337,6 +1339,19 @@
       return {
         pools: [chargeMotes],
         drawStatic,
+        onResize(_nw, _nh, sx, sy) {
+          if (!Number.isFinite(sx) || !Number.isFinite(sy)) return;
+          arcState.cx *= sx;
+          arcState.cy *= sy;
+          for (let i = 0; i < arcState.ptsX.length; i++) {
+            arcState.ptsX[i] *= sx;
+            arcState.ptsY[i] *= sy;
+          }
+          for (let i = 0; i < arcState.branchX.length; i++) {
+            arcState.branchX[i] *= sx;
+            arcState.branchY[i] *= sy;
+          }
+        },
         step(ctx, width, height, now, dt) {
           ctx.save();
           ctx.globalCompositeOperation = 'screen';
@@ -1421,9 +1436,11 @@
     sun_water(initW, initH) {
       const sunEmbers = [];
       for (let i = 0; i < 18; i++) {
+        const life = seededFrac(i, 89, 19);
         sunEmbers.push({
           x: edgeWeightedFrac(seededFrac(i, 73, 11)) * initW,
-          life: seededFrac(i, 89, 19),
+          y: initH - life * initH * 0.72,
+          life,
           lifeSpeed: 0.0019 + seededFrac(i, 41, 7) * 0.0016,
           r0: 1.0 + seededFrac(i, 59, 13) * 1.9,
           vy: 0.48 + seededFrac(i, 37, 23) * 0.42,
@@ -1492,7 +1509,7 @@
               e.x = edgeWeightedFrac(seededFrac(i + Math.floor(now * 0.001), 73, 11)) * width;
               e.y = height + 6;
             }
-            if (typeof e.y !== 'number') {
+            if (typeof e.y !== 'number' || !Number.isFinite(e.y)) {
               e.y = height - e.life * height * 0.72;
             }
             const p = clamp(e.life, 0, 1);
@@ -2562,11 +2579,16 @@
     return MODE_BUILDERS[key] ? key : 'wisteria';
   }
 
+  function sanitizeDim(v, minV, fb) {
+    const n = Number(v);
+    return (Number.isFinite(n) && n > 0) ? Math.max(minV, n) : fb;
+  }
+
   function extractDimensions(optsOrW, maybeH) {
     if (typeof optsOrW === 'number' && typeof maybeH === 'number') {
       return {
-        width: Math.max(320, optsOrW),
-        height: Math.max(240, maybeH),
+        width: Number.isFinite(optsOrW) ? Math.max(320, optsOrW) : 1280,
+        height: Number.isFinite(maybeH) ? Math.max(240, maybeH) : 720,
         ctx: null,
         autoClear: true
       };
@@ -2574,16 +2596,16 @@
     if (typeof optsOrW === 'function') {
       const dims = optsOrW() || {};
       return {
-        width: Math.max(320, Number(dims.width) || 1280),
-        height: Math.max(240, Number(dims.height) || 720),
+        width: sanitizeDim(dims.width, 320, 1280),
+        height: sanitizeDim(dims.height, 240, 720),
         ctx: null,
         autoClear: true
       };
     }
     if (optsOrW && typeof optsOrW === 'object' && !isCanvasContext(optsOrW)) {
       return {
-        width: Math.max(320, Number(optsOrW.width) || 1280),
-        height: Math.max(240, Number(optsOrW.height) || 720),
+        width: sanitizeDim(optsOrW.width, 320, 1280),
+        height: sanitizeDim(optsOrW.height, 240, 720),
         ctx: isCanvasContext(optsOrW.ctx) ? optsOrW.ctx : null,
         autoClear: optsOrW.autoClear !== false
       };
@@ -2608,8 +2630,10 @@
     }
 
     function resize(nextW, nextH) {
-      const nw = Math.max(320, Number(nextW) || curW);
-      const nh = Math.max(240, Number(nextH) || curH);
+      const rawW = Number(nextW);
+      const rawH = Number(nextH);
+      const nw = (Number.isFinite(rawW) && rawW > 0) ? Math.max(320, rawW) : curW;
+      const nh = (Number.isFinite(rawH) && rawH > 0) ? Math.max(240, rawH) : curH;
       if (nw === curW && nh === curH) return;
       const sx = nw / curW;
       const sy = nh / curH;
@@ -2696,7 +2720,7 @@
       }
       ctx.save();
       if (tw > 0.001) {
-        ctx.globalAlpha = alphaScale;
+        ctx.globalAlpha *= alphaScale;
       }
       scene.step(ctx, curW, curH, simNow, effectiveDt);
       ctx.restore();
@@ -2762,7 +2786,11 @@
 
   knyFxFactory.create = createDrawerInstance;
   knyFxFactory.modes = SUPPORTED_MODES.slice();
-  knyFxFactory.has = (mode) => Boolean(MODE_BUILDERS[String(mode || '').trim().toLowerCase()]);
+  knyFxFactory.has = (mode) => {
+    const raw = String(mode || '').trim().toLowerCase();
+    const key = MODE_ALIASES[raw] || raw;
+    return Boolean(MODE_BUILDERS[key]);
+  };
 
   for (let i = 0; i < SUPPORTED_MODES.length; i++) {
     const modeName = SUPPORTED_MODES[i];

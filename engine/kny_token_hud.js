@@ -146,6 +146,11 @@
 
     rafId: 0,
     pollTimer: 0,
+    mountEpoch: 0,
+    cidEpoch: 0,
+    yoriichiSurgeTimer: 0,
+    kaguraSyncTimer: 0,
+    cinemaSyncTimer: 0,
     fetchInFlight: false,
     cleanups: []
   };
@@ -903,6 +908,7 @@
   }
 
   function computeAndApplyBladeHeat() {
+    if (!state.barEl || !state.barEl.isConnected) return;
     let organicHeat = 0;
     if (state.hasTelemetry) {
       const turns = Math.max(0, state.serverTurnCount);
@@ -1221,18 +1227,19 @@
 
   function scheduleStreamReconnect(cid) {
     clearTimeout(state.streamReconnectTimer);
-    if (!cid || cid !== state.cid || !state.barEl) return;
+    if (!cid || cid !== state.cid || !state.barEl || !state.barEl.isConnected) return;
+    const reqEpoch = state.mountEpoch;
     const delay = Math.min(15000, 2200 * Math.pow(1.6, Math.min(4, state.streamFailCount)));
     state.streamReconnectTimer = setTimeout(() => {
       state.streamReconnectTimer = 0;
-      if (state.cid === cid && state.barEl) {
+      if (reqEpoch === state.mountEpoch && state.cid === cid && state.barEl && state.barEl.isConnected) {
         connectTelemetryStream(cid);
       }
     }, Math.round(delay));
   }
 
   async function connectTelemetryStream(cid) {
-    if (!cid) return;
+    if (!cid || !state.barEl || !state.barEl.isConnected) return;
     if (state.streamAbort && state.streamCid === cid) return;
 
     abortActiveStream();
@@ -1243,10 +1250,20 @@
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     if (!controller) return;
 
+    const reqEpoch = state.mountEpoch;
     state.streamAbort = controller;
     state.streamCid = cid;
 
     const url = base.replace(/\/?$/, '/') + `__events?cid=${encodeURIComponent(cid)}`;
+    let reader = null;
+    const cancelStreamAndReader = () => {
+      try { controller.abort(); } catch (_) {}
+      try {
+        if (reader && typeof reader.cancel === 'function') {
+          Promise.resolve(reader.cancel()).catch(() => {});
+        }
+      } catch (_) {}
+    };
 
     try {
       const res = await fetch(url, {
@@ -1255,6 +1272,16 @@
         signal: controller.signal,
         cache: 'no-store'
       });
+
+      if (reqEpoch !== state.mountEpoch || !state.barEl || !state.barEl.isConnected) {
+        cancelStreamAndReader();
+        try {
+          if (res && res.body && typeof res.body.cancel === 'function') {
+            Promise.resolve(res.body.cancel()).catch(() => {});
+          }
+        } catch (_) {}
+        return;
+      }
 
       if (!res.ok || !res.body || typeof res.body.getReader !== 'function') {
         state.streamFailCount++;
@@ -1269,13 +1296,18 @@
       state.streamFailCount = 0;
       state.fallbackBackoffMs = 1400;
 
-      const reader = res.body.getReader();
+      reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
 
       while (true) {
         const { value, done } = await reader.read();
-        if (done || controller.signal.aborted) break;
+        const invalidStreamState =
+          controller.signal.aborted || reqEpoch !== state.mountEpoch || !state.barEl || !state.barEl.isConnected;
+        if (done || invalidStreamState) {
+          if (invalidStreamState) cancelStreamAndReader();
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         if (buffer.indexOf('\r\n') !== -1) {
@@ -1302,6 +1334,10 @@
               try {
                 const snap = JSON.parse(payloadStr);
                 if (!snap || snap.ok === false) continue;
+                if (reqEpoch !== state.mountEpoch || !state.barEl || !state.barEl.isConnected) {
+                  cancelStreamAndReader();
+                  return;
+                }
                 ingestTelemetrySnapshot(snap);
               } catch (_) {}
             }
@@ -1316,10 +1352,13 @@
     } catch (_) {
       // Aborted on cid switch / teardown, or transient socket close
     } finally {
+      if (controller.signal.aborted || reqEpoch !== state.mountEpoch || !state.barEl || !state.barEl.isConnected) {
+        cancelStreamAndReader();
+      }
       if (state.streamAbort === controller) {
         state.streamAbort = null;
         state.streamConnected = false;
-        if (!controller.signal.aborted && state.cid === cid && state.barEl) {
+        if (!controller.signal.aborted && reqEpoch === state.mountEpoch && state.cid === cid && state.barEl && state.barEl.isConnected) {
           state.streamFailCount++;
           scheduleStreamReconnect(cid);
         }
@@ -1328,10 +1367,12 @@
   }
 
   async function fetchDaemonTelemetry(cid) {
-    if (!cid || state.fetchInFlight) return;
+    if (!cid || state.fetchInFlight || !state.barEl || !state.barEl.isConnected) return;
     const base = getSecureAssetBase();
     if (!base || !/^https?:\/\/127\.0\.0\.1:\d+/.test(base)) return;
 
+    const reqEpoch = state.mountEpoch;
+    const reqCidEpoch = state.cidEpoch;
     state.fetchInFlight = true;
     try {
       const url = base.replace(/\/?$/, '/') + `__telemetry?cid=${encodeURIComponent(cid)}&_t=${Date.now()}`;
@@ -1340,21 +1381,27 @@
         headers: getSecureAuthHeaders(),
         cache: 'no-store'
       });
+      if (reqEpoch !== state.mountEpoch || reqCidEpoch !== state.cidEpoch || !state.barEl || !state.barEl.isConnected) return;
       if (!res.ok) {
         state.fallbackBackoffMs = Math.min(9000, Math.round(state.fallbackBackoffMs * 1.7));
         return;
       }
       const data = await res.json();
+      if (reqEpoch !== state.mountEpoch || reqCidEpoch !== state.cidEpoch || !state.barEl || !state.barEl.isConnected) return;
       if (!data || data.ok === false) return;
       if (data.cid && state.cid && state.cid !== 'latest' && data.cid !== state.cid) return;
 
       state.fallbackBackoffMs = 1400;
       ingestTelemetrySnapshot(data);
     } catch (_) {
-      state.fallbackBackoffMs = Math.min(9000, Math.round(state.fallbackBackoffMs * 1.7));
+      if (reqEpoch === state.mountEpoch && reqCidEpoch === state.cidEpoch) {
+        state.fallbackBackoffMs = Math.min(9000, Math.round(state.fallbackBackoffMs * 1.7));
+      }
     } finally {
-      state.fetchInFlight = false;
-      state.nextFallbackAt = Date.now() + state.fallbackBackoffMs;
+      if (reqEpoch === state.mountEpoch && reqCidEpoch === state.cidEpoch) {
+        state.fetchInFlight = false;
+        state.nextFallbackAt = Date.now() + state.fallbackBackoffMs;
+      }
     }
   }
 
@@ -1539,6 +1586,8 @@
     }
 
     abortActiveStream();
+    state.cidEpoch++;
+    state.fetchInFlight = false;
     state.cid = nextCid;
     state.resolvedCid = nextCid !== 'latest' ? nextCid : '';
     state.hasTelemetry = false;
@@ -1723,7 +1772,7 @@
 
     if (state.popoverOpen) {
       if (state.detStatusBadge) {
-        const modeTxt = state.streamConnected ? 'SSE <30ms' : 'Trực tuyến';
+        const modeTxt = state.streamConnected ? 'Thời gian thực <30ms' : 'Trực tuyến';
         setTextIfChanged(state.detStatusBadge, state.isWorking ? `Đang rèn (${modeTxt})` : `Sẵn sàng (${modeTxt})`);
         if (state.isWorking) {
           if (state.detStatusBadge.dataset.working !== '1') state.detStatusBadge.dataset.working = '1';
@@ -1744,26 +1793,26 @@
         const cachePct = ctxRounded > 0 ? Math.min(100, Math.round((state.serverCacheTokens / ctxRounded) * 100)) : 0;
         setTextIfChanged(
           state.detCacheVal,
-          state.serverCacheTokens > 0 ? `${formatCompactTokens(state.serverCacheTokens)} (${cachePct}% cache)` : '—'
+          state.serverCacheTokens > 0 ? `${formatCompactTokens(state.serverCacheTokens)} (${cachePct}% bộ nhớ đệm)` : '—'
         );
       }
       if (state.detTurnVal) {
         const stepsTxt = state.serverTurnSteps > 0 ? ` • ${state.serverTurnSteps} bước` : '';
-        setTextIfChanged(state.detTurnVal, `+${formatExactInt(turnRounded)} tok${stepsTxt}`);
+        setTextIfChanged(state.detTurnVal, `+${formatExactInt(turnRounded)} token${stepsTxt}`);
       }
       computeAndApplyBladeHeat();
       if (state.detDraftVal) {
-        setTextIfChanged(state.detDraftVal, state.draftTokens > 0 ? `+${formatExactInt(state.draftTokens)} tok` : '0 tok');
+        setTextIfChanged(state.detDraftVal, state.draftTokens > 0 ? `+${formatExactInt(state.draftTokens)} token` : '0 token');
       }
       if (state.detSessionVal) {
         const tot = state.hasTelemetry
           ? state.serverTotalOutTokens
           : Math.max(turnRounded, state.serverTotalOutTokens);
-        setTextIfChanged(state.detSessionVal, `${formatExactInt(tot)} tok`);
+        setTextIfChanged(state.detSessionVal, `${formatExactInt(tot)} token`);
       }
       if (state.detModelVal) {
         const qTxt = state.quotaPct !== null ? ` (${state.quotaPct}% hạn mức)` : '';
-        const modelName = state.modelLabel || state.serverModelName || 'Antigravity Agent';
+        const modelName = state.modelLabel || state.serverModelName || 'Tác tử Antigravity';
         setTextIfChanged(state.detModelVal, modelName + qTxt);
       }
     }
@@ -1863,7 +1912,9 @@
 
     if (state.yoriichiBtnEl) {
       state.yoriichiBtnEl.dataset.surge = '1';
-      setTimeout(() => {
+      clearTimeout(state.yoriichiSurgeTimer);
+      state.yoriichiSurgeTimer = setTimeout(() => {
+        state.yoriichiSurgeTimer = 0;
         if (state.yoriichiBtnEl) delete state.yoriichiBtnEl.dataset.surge;
       }, 360);
     }
@@ -1897,7 +1948,9 @@
 
     if (state.yoriichiBtnEl) {
       state.yoriichiBtnEl.dataset.surge = '1';
-      setTimeout(() => {
+      clearTimeout(state.yoriichiSurgeTimer);
+      state.yoriichiSurgeTimer = setTimeout(() => {
+        state.yoriichiSurgeTimer = 0;
         if (state.yoriichiBtnEl) delete state.yoriichiBtnEl.dataset.surge;
       }, 420);
     }
@@ -2010,7 +2063,7 @@
     ensureStyles();
 
     const existing = document.getElementById(HUD_BAR_ID);
-    if (existing && existing.parentElement === composer && state.barEl === existing) {
+    if (existing && existing.parentElement === composer && state.barEl === existing && existing.isConnected && composer.isConnected) {
       applyThemeColors(existing, themeCfg, themeName);
       if (typeof window !== 'undefined' && window.__AGY_SQUAD_RAID__ && typeof window.__AGY_SQUAD_RAID__.mount === 'function') {
         try { window.__AGY_SQUAD_RAID__.mount(composer); } catch (_) {}
@@ -2020,6 +2073,7 @@
     }
 
     teardown();
+    state.mountEpoch++;
 
     state.composer = composer;
     const ic = getIconsApi();
@@ -2071,7 +2125,7 @@
     const turnText = document.createElement('span');
     const brushSvgInit = ic ? ic.getFuncSvg('draft_brush', 10) : '';
     turnText.innerHTML =
-      `<span class="agy-tok-turn-prefix">Lượt: </span><span class="agy-tok-num">+0</span><span> tok</span>` +
+      `<span class="agy-tok-turn-prefix">Lượt: </span><span class="agy-tok-num">+0</span><span> token</span>` +
       `<span class="agy-tok-draft-tag" style="display:none"> • ${brushSvgInit}<span class="agy-tok-draft-num">+0</span></span>`;
     const turnNumEl = turnText.querySelector('.agy-tok-num');
     const turnDraftWrapEl = turnText.querySelector('.agy-tok-draft-tag');
@@ -2108,7 +2162,7 @@
     cinemaBtn.type = 'button';
     cinemaBtn.className = 'agy-hud-util-btn agy-cinema-mask-btn';
     cinemaBtn.dataset.agyCinemaTrigger = '1';
-    cinemaBtn.title = 'Mặt nạ Cáo Urokodaki — Nhấn mở Khiên Che Mật & Đạo Diễn Cinema • Shift+Click hoặc Chuột phải để Bật/Tắt Khiên nhanh';
+    cinemaBtn.title = 'Mặt nạ Cáo Urokodaki — Nhấn mở Khiên Che Mật & Đạo Diễn Trình Diễn • Shift+Click hoặc Chuột phải để Bật/Tắt Khiên nhanh';
     cinemaBtn.setAttribute('aria-label', cinemaBtn.title);
     cinemaBtn.innerHTML = ic ? ic.getFuncSvg('cinema_mask', 13) : '🦊';
 
@@ -2149,7 +2203,7 @@
     const rows = document.createElement('div');
     rows.className = 'agy-tok-rows';
     const rCtx = createIconRow(ic ? ic.getFuncSvg('breathing_forms', 13) : '', 'Ngữ cảnh phiên:');
-    const rCache = createIconRow(ic ? ic.getFuncSvg('kv_cache', 13) : '', 'Bộ nhớ đệm (KV-Cache):');
+    const rCache = createIconRow(ic ? ic.getFuncSvg('kv_cache', 13) : '', 'Bộ nhớ đệm (KV):');
     const rTurn = createIconRow('', 'Token lượt hiện tại:');
     const rBlade = createIconRow(ic ? ic.getFuncSvg('katana_cast', 13) : '', 'Nhiệt độ Nhật Luân Đao:');
     const rDraft = createIconRow(ic ? ic.getFuncSvg('draft_brush', 13) : '', 'Đang gõ trong ô chat:');
@@ -2315,7 +2369,11 @@
           } else if (typeof bio.toggle === 'function') {
             bio.toggle();
           }
-          setTimeout(refreshUtilityButtonStates, 30);
+          clearTimeout(state.kaguraSyncTimer);
+          state.kaguraSyncTimer = setTimeout(() => {
+            state.kaguraSyncTimer = 0;
+            refreshUtilityButtonStates();
+          }, 30);
         } catch (_) {}
       }
     });
@@ -2349,7 +2407,11 @@
           else if (typeof dir.togglePanel === 'function') dir.togglePanel(cinemaBtn);
           else if (typeof dir.open === 'function') dir.open(cinemaBtn);
         } catch (_) {}
-        setTimeout(refreshUtilityButtonStates, 50);
+        clearTimeout(state.cinemaSyncTimer);
+        state.cinemaSyncTimer = setTimeout(() => {
+          state.cinemaSyncTimer = 0;
+          refreshUtilityButtonStates();
+        }, 50);
       }
     });
 
@@ -2381,7 +2443,6 @@
       if (!btn || !composer.contains(btn)) return;
       if (
         btn.closest(`#${HUD_BAR_ID}`) ||
-        btn.closest('#agy-chibi-skill-bar') ||
         btn.closest('#agy-shinobu-npc-wrap') ||
         btn.closest('agy-hashira-squad') ||
         btn.classList.contains('agy-chibi-hitbox')
@@ -2450,6 +2511,12 @@
     // Smart heartbeat: monitors cid changes, cools idle blade naturally & serves as resilient fallback if SSE drops
     // Keeps gentle background check when !document.hasFocus() so Kagura Bell still rings on Alt+Tab & offline/preview!
     state.pollTimer = setInterval(() => {
+      if (!state.barEl || !state.barEl.isConnected || (state.composer && !state.composer.isConnected)) {
+        clearInterval(state.pollTimer);
+        state.pollTimer = 0;
+        abortActiveStream();
+        return;
+      }
       refreshUtilityButtonStates();
       const sig = extractLivePageSignals(state.composer);
       state.cachedSignals = sig;
@@ -2538,6 +2605,9 @@
   }
 
   function teardown() {
+    state.mountEpoch++;
+    state.cidEpoch++;
+    state.fetchInFlight = false;
     abortActiveStream();
     if (state.composerRo) {
       try { state.composerRo.disconnect(); } catch (_) {}
@@ -2553,6 +2623,14 @@
     }
     clearTimeout(state.echoTimer);
     state.echoTimer = 0;
+    clearTimeout(state.yoriichiSurgeTimer);
+    state.yoriichiSurgeTimer = 0;
+    clearTimeout(state.kaguraSyncTimer);
+    state.kaguraSyncTimer = 0;
+    clearTimeout(state.cinemaSyncTimer);
+    state.cinemaSyncTimer = 0;
+    clearTimeout(state.streamReconnectTimer);
+    state.streamReconnectTimer = 0;
     while (state.cleanups.length > 0) {
       const fn = state.cleanups.pop();
       try { fn(); } catch (_) {}
@@ -2573,16 +2651,43 @@
       try { window.__AGY_SQUAD_RAID__.teardown(); } catch (_) {}
     }
     state.composer = null;
+    state.themeCfg = null;
     state.barEl = null;
+    state.yoriichiBtnEl = null;
+    state.ctxBtnEl = null;
+    state.ctxIconWrap = null;
+    state.ctxTextEl = null;
     state.ctxNumEl = null;
+    state.ctxFillEl = null;
+    state.turnBtnEl = null;
+    state.turnIconEl = null;
+    state.turnTextEl = null;
     state.turnNumEl = null;
     state.turnDraftWrapEl = null;
     state.turnDraftNumEl = null;
-    state.echoEl = null;
-    state.echoHdrLabelEl = null;
+    state.bladeBtnEl = null;
+    state.bladeFillRectEl = null;
+    state.bladeGlowPathEl = null;
+    state.bladeLabelEl = null;
     state.kaguraBtnEl = null;
     state.cinemaBtnEl = null;
-    state.bladeBtnEl = null;
+    state.popoverEl = null;
+    state.echoEl = null;
+    state.echoHdrLabelEl = null;
+    state.echoTextEl = null;
+    state.echoAvatarEl = null;
+    state.popSessionTitle = null;
+    state.popSessionIcon = null;
+    state.detCtxVal = null;
+    state.detCtxMeter = null;
+    state.detCacheVal = null;
+    state.detTurnIcon = null;
+    state.detTurnVal = null;
+    state.detBladeVal = null;
+    state.detDraftVal = null;
+    state.detSessionVal = null;
+    state.detModelVal = null;
+    state.detStatusBadge = null;
     state.cachedSignals = null;
     state.popoverOpen = false;
   }
@@ -2597,6 +2702,7 @@
     getBladeBonusHeat: () => state.bladeBonusHeat,
     getBladeHeat: () => state.bladeHeat,
     setBladeBonusHeat: (bonus) => {
+      if (!state.barEl || !state.barEl.isConnected) return;
       state.bladeBonusHeat = Math.max(0, Math.min(100, Number(bonus) || 0));
       state.bonusHoldUntil = Date.now() + 18000;
       computeAndApplyBladeHeat();

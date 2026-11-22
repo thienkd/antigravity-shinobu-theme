@@ -1219,8 +1219,18 @@
     }, waitMs);
   }
 
-  function getAudioContext() {
-    if (sharedAudioCtx) return sharedAudioCtx;
+  function canActivateWebAudio(opts) {
+    if (opts && opts.forceAudio === true) return true;
+    if (ROOT_SCOPE && ROOT_SCOPE.__AGY_AUDIO_UNLOCKED__) return true;
+    if (typeof navigator !== 'undefined' && navigator && navigator.userActivation) {
+      return Boolean(navigator.userActivation.hasBeenActive || navigator.userActivation.isActive);
+    }
+    return false;
+  }
+
+  function getAudioContext(opts) {
+    if (sharedAudioCtx && sharedAudioCtx.state !== 'closed') return sharedAudioCtx;
+    if (!canActivateWebAudio(opts)) return null;
     const Ctor = ROOT_SCOPE.AudioContext || ROOT_SCOPE.webkitAudioContext;
     if (typeof Ctor !== 'function') return null;
     try {
@@ -1293,9 +1303,10 @@
   function playSkillSfx(skillOrElement, options) {
     const opts = options || {};
     if (opts.soundEnabled === false || opts.muted === true || opts.sound === false || isSoundMuted()) return false;
+    if (!canActivateWebAudio(opts)) return false;
 
-    const actx = getAudioContext();
-    if (!actx) return false;
+    const actx = getAudioContext(opts);
+    if (!actx || actx.state === 'closed') return false;
 
     try {
       if (actx.state !== 'running' && actx.state !== 'closed' && typeof actx.resume === 'function') {
@@ -3397,6 +3408,22 @@
   let activeBannerTimer = 0;
   let activeHideTimer = 0;
   let activeStageCleanup = null;
+  const trackedStagePeekerEls = new Set();
+
+  function clearAllStagePeekerTimers() {
+    trackedStagePeekerEls.forEach((el) => {
+      if (!el) return;
+      if (el.__agyLandingTimer) {
+        clearTimeout(el.__agyLandingTimer);
+        el.__agyLandingTimer = 0;
+      }
+      if (el.dataset) {
+        delete el.dataset.chibiOutOnStage;
+        delete el.dataset.chibiLanding;
+      }
+    });
+    trackedStagePeekerEls.clear();
+  }
 
   function prefersReducedMotion() {
     try {
@@ -3571,7 +3598,8 @@
     return overlayHost;
   }
 
-  function stopActiveSkill() {
+  function stopActiveSkill(stopOpts) {
+    const keepLanding = Boolean(stopOpts && stopOpts.keepLanding);
     if (activeRafId) {
       cancelFrame(activeRafId);
       activeRafId = 0;
@@ -3591,7 +3619,12 @@
     if (typeof activeStageCleanup === 'function') {
       const fn = activeStageCleanup;
       activeStageCleanup = null;
-      try { fn(true); } catch (_) {}
+      if (!keepLanding) {
+        try { fn(true); } catch (_) {}
+      }
+    }
+    if (!keepLanding) {
+      clearAllStagePeekerTimers();
     }
     if (canvasEl && typeof canvasEl.getContext === 'function') {
       const ctx = canvasEl.getContext('2d');
@@ -3674,6 +3707,7 @@
         if (bannerEl && bannerEl.classList) bannerEl.classList.add('is-visible');
       });
       activeBannerTimer = setTimeout(() => {
+        activeBannerTimer = 0;
         if (bannerEl && bannerEl.classList) {
           bannerEl.classList.remove('is-visible');
           bannerEl.classList.add('is-fading');
@@ -3723,6 +3757,7 @@
         stagePeekerEls.push(opts.sourceFrameEl);
       }
       stagePeekerEls.forEach((el) => {
+        trackedStagePeekerEls.add(el);
         if (el.__agyLandingTimer) {
           clearTimeout(el.__agyLandingTimer);
           el.__agyLandingTimer = 0;
@@ -3737,7 +3772,7 @@
 
     let returnedToCorner = false;
     const triggerCornerReturn = (interrupted) => {
-      if (returnedToCorner) return;
+      if (!interrupted && returnedToCorner) return;
       returnedToCorner = true;
       stagePeekerEls.forEach((el) => {
         if (el.__agyLandingTimer) {
@@ -3747,6 +3782,7 @@
         delete el.dataset.chibiOutOnStage;
         if (interrupted) {
           delete el.dataset.chibiLanding;
+          trackedStagePeekerEls.delete(el);
           return;
         }
         void el.offsetWidth;
@@ -3754,6 +3790,9 @@
         el.__agyLandingTimer = setTimeout(() => {
           el.__agyLandingTimer = 0;
           if (el && el.dataset) delete el.dataset.chibiLanding;
+          if (!el || !el.dataset || !el.dataset.chibiOutOnStage) {
+            trackedStagePeekerEls.delete(el);
+          }
         }, 420);
       });
       if (!interrupted && typeof opts.onStageReturn === 'function') {
@@ -3792,7 +3831,7 @@
       }
 
       if (p >= 1) {
-        stopActiveSkill();
+        stopActiveSkill({ keepLanding: true });
         return;
       }
 
@@ -3835,11 +3874,18 @@
 
   function destroy() {
     stopActiveSkill();
+    clearAllStagePeekerTimers();
     Object.keys(actionSpriteCache).forEach((k) => {
       const e = actionSpriteCache[k];
-      if (e && e.timeoutId) {
-        clearTimeout(e.timeoutId);
-        e.timeoutId = 0;
+      if (e) {
+        if (e.timeoutId) {
+          clearTimeout(e.timeoutId);
+          e.timeoutId = 0;
+        }
+        if (e.img) {
+          e.img.onload = null;
+          e.img.onerror = null;
+        }
       }
       delete actionSpriteCache[k];
     });

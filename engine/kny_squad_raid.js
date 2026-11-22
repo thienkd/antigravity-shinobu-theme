@@ -161,6 +161,7 @@
     simTimers: [],
     simActive: false,
     victoryTimer: 0,
+    crowTimer: 0,
     lastSlashSeqHandled: 0
   };
 
@@ -364,7 +365,6 @@
         border-radius: 9999px;
         background: #fde047;
         box-shadow: 0 0 7px #f97316;
-        animation: agySquadBeacon 1.2s ease-in-out infinite;
       }
       @keyframes agySquadBeacon {
         0%, 100% { transform: scale(0.9); opacity: 0.75; }
@@ -401,9 +401,6 @@
         pointer-events: none;
         border-radius: 999px;
       }
-      .agy-squad-unit-wrap[data-entering="1"] .agy-shunshin-beam {
-        animation: agyShunshinBeamFlash 0.52s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      }
       @keyframes agyShunshinBeamFlash {
         0%   { opacity: 0.95; transform: translateX(-50%) scaleY(1.25); }
         55%  { opacity: 0.65; transform: translateX(-50%) scaleY(0.55); }
@@ -433,9 +430,6 @@
         box-shadow: 0 7px 18px rgba(0, 0, 0, 0.68), 0 0 18px var(--unit-color, #fde047);
       }
 
-      .agy-squad-unit-wrap[data-entering="1"] .agy-squad-unit-btn {
-        animation: agyShunshinSpringLand 0.54s cubic-bezier(0.34, 1.56, 0.64, 1);
-      }
       @keyframes agyShunshinSpringLand {
         0%   { opacity: 0; transform: translateY(-26px) scale(0.68); }
         62%  { opacity: 1; transform: translateY(3px) scale(1.08); }
@@ -451,7 +445,6 @@
         border: 1px solid var(--unit-accent, #fde047);
         opacity: 0.55;
         pointer-events: none;
-        animation: agyUnitAuraBreathe 1.65s ease-in-out infinite;
       }
       @keyframes agyUnitAuraBreathe {
         0%, 100% { transform: scale(0.98); opacity: 0.28; }
@@ -522,9 +515,6 @@
         opacity: 0;
         pointer-events: none;
       }
-      .agy-squad-unit-wrap[data-state="completed"] .agy-unit-farewell-slash {
-        animation: agyFarewellSlashArc 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      }
       @keyframes agyFarewellSlashArc {
         0%   { opacity: 1; transform: translateY(-50%) rotate(-24deg) scaleX(0.1); }
         45%  { opacity: 1; transform: translateY(-50%) rotate(-24deg) scaleX(1.35); }
@@ -562,7 +552,6 @@
       .agy-squad-unit-wrap:hover .agy-kasugai-intel,
       .agy-squad-unit-btn:focus-visible + .agy-kasugai-intel {
         display: flex;
-        animation: agyIntelFadeIn 0.15s cubic-bezier(0.22, 1, 0.36, 1);
       }
       @keyframes agyIntelFadeIn {
         from { opacity: 0; transform: translateY(4px) scale(0.97); }
@@ -641,7 +630,6 @@
         background: linear-gradient(135deg, rgba(32, 6, 10, 0.94) 0%, rgba(16, 8, 18, 0.94) 100%);
         border: 1.6px solid rgba(239, 68, 68, 0.88);
         box-shadow: 0 12px 32px rgba(0, 0, 0, 0.72), 0 0 26px rgba(239, 68, 68, 0.55), inset 0 0 12px rgba(253, 224, 71, 0.2);
-        animation: agyMetsuStampSlam 1.82s cubic-bezier(0.22, 1, 0.36, 1) forwards;
       }
       @keyframes agyMetsuStampSlam {
         0%   { opacity: 0; transform: scale(1.65) rotate(-8deg); filter: brightness(1.8); }
@@ -695,7 +683,6 @@
         z-index: 9997;
         pointer-events: none;
         filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.72));
-        animation: agyKasugaiCrowGlide 1.8s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
       }
       @keyframes agyKasugaiCrowGlide {
         0%   { opacity: 0; transform: translate(0, 14px) scale(0.75) rotate(-6deg); }
@@ -705,11 +692,40 @@
       }
       .agy-kasugai-crow-wings {
         transform-origin: 24px 20px;
-        animation: agyCrowWingFlap 0.24s ease-in-out infinite alternate;
       }
       @keyframes agyCrowWingFlap {
         from { transform: scaleY(1); }
         to   { transform: scaleY(0.56); }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .agy-squad-banner-dot {
+          animation: agySquadBeacon 1.2s ease-in-out infinite;
+        }
+        .agy-squad-unit-wrap[data-state="working"] .agy-squad-unit-btn::before {
+          animation: agyUnitAuraBreathe 1.65s ease-in-out infinite;
+        }
+        .agy-squad-unit-wrap[data-entering="1"] .agy-shunshin-beam {
+          animation: agyShunshinBeamFlash 0.52s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .agy-squad-unit-wrap[data-entering="1"] .agy-squad-unit-btn {
+          animation: agyShunshinSpringLand 0.54s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .agy-squad-unit-wrap[data-state="completed"] .agy-unit-farewell-slash {
+          animation: agyFarewellSlashArc 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .agy-squad-unit-wrap:hover .agy-kasugai-intel,
+        .agy-squad-unit-btn:focus-visible + .agy-kasugai-intel {
+          animation: agyIntelFadeIn 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .agy-metsu-stamp-card {
+          animation: agyMetsuStampSlam 1.82s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+        .agy-kasugai-crow-flyby {
+          animation: agyKasugaiCrowGlide 1.8s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+        }
+        .agy-kasugai-crow-wings {
+          animation: agyCrowWingFlap 0.24s ease-in-out infinite alternate;
+        }
       }
     `;
     document.head.appendChild(st);
@@ -717,12 +733,24 @@
 
   function ensureMounted(composerEl) {
     if (typeof document === 'undefined') return null;
-    const composer = composerEl || state.composer || resolveComposer();
-    if (!composer) return null;
+    const activeComposer = (state.composer && state.composer.isConnected) ? state.composer : null;
+    const composer = composerEl || activeComposer || resolveComposer();
+    if (!composer || !composer.isConnected) {
+      if (!activeComposer) {
+        if (state.squadEl && state.squadEl.parentElement) {
+          state.squadEl.remove();
+        }
+        state.composer = null;
+        state.squadEl = null;
+        state.headerCountEl = null;
+        state.unitsWrapEl = null;
+      }
+      return null;
+    }
 
     ensureStyles();
 
-    if (state.squadEl && state.squadEl.parentElement === composer) {
+    if (state.squadEl && state.squadEl.isConnected && state.squadEl.parentElement === composer) {
       return state.squadEl;
     }
 
@@ -995,6 +1023,7 @@
     });
 
     unitRecord.enterTimer = setTimeout(() => {
+      unitRecord.enterTimer = 0;
       if (wrap && wrap.dataset) delete wrap.dataset.entering;
     }, 580);
 
@@ -1044,11 +1073,13 @@
     clearTimeout(unit.removeTimer);
 
     unit.retreatTimer = setTimeout(() => {
+      unit.retreatTimer = 0;
       unit.lifecycle = 'retreating';
       if (unit.wrapEl) {
         unit.wrapEl.dataset.retreating = '1';
       }
       unit.removeTimer = setTimeout(() => {
+        unit.removeTimer = 0;
         if (unit.wrapEl && unit.wrapEl.parentElement) {
           unit.wrapEl.remove();
         }
@@ -1095,7 +1126,7 @@
     if (activeList.length > 0 || completedList.length > 0 || state.unitsById.size > 0) {
       ensureMounted();
     }
-    if (!state.unitsWrapEl) return;
+    if (!state.unitsWrapEl || !state.unitsWrapEl.isConnected) return;
 
     const activeIds = new Set();
 
@@ -1112,7 +1143,9 @@
       } else {
         if (unit.lifecycle !== 'working') {
           clearTimeout(unit.retreatTimer);
+          unit.retreatTimer = 0;
           clearTimeout(unit.removeTimer);
+          unit.removeTimer = 0;
           unit.lifecycle = 'working';
           if (unit.wrapEl) {
             delete unit.wrapEl.dataset.retreating;
@@ -1199,6 +1232,9 @@
     if (prev) prev.remove();
     document.querySelectorAll('.agy-kasugai-crow-flyby').forEach((el) => el.remove());
     clearTimeout(state.victoryTimer);
+    state.victoryTimer = 0;
+    clearTimeout(state.crowTimer);
+    state.crowTimer = 0;
 
     const host = document.createElement('div');
     host.id = VICTORY_HOST_ID;
@@ -1247,12 +1283,14 @@
         `<polygon points="18,21 13,22.2 18.2,22.8" fill="#fde047"/>` +
         `</svg>`;
       document.body.appendChild(crowWrap);
-      setTimeout(() => {
+      state.crowTimer = setTimeout(() => {
+        state.crowTimer = 0;
         if (crowWrap.parentElement) crowWrap.remove();
       }, 1850);
     }
 
     state.victoryTimer = setTimeout(() => {
+      state.victoryTimer = 0;
       if (host.parentElement) host.remove();
     }, 1850);
   }
@@ -1391,6 +1429,8 @@
     clearSimulationTimers();
     clearTimeout(state.victoryTimer);
     state.victoryTimer = 0;
+    clearTimeout(state.crowTimer);
+    state.crowTimer = 0;
 
     state.unitsById.forEach((u) => {
       clearTimeout(u.enterTimer);
@@ -1400,6 +1440,9 @@
     state.unitsById.clear();
     state.assignedHeroBySubId.clear();
     state.seenCompletedIds.clear();
+    state.comboByHero = Object.create(null);
+    state.simActive = false;
+    state.lastSlashSeqHandled = 0;
     state.activeCid = '';
 
     if (typeof document !== 'undefined') {

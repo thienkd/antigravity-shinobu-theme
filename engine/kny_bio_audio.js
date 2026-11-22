@@ -109,14 +109,18 @@
       (typeof navigator !== 'undefined' && navigator.userActivation && navigator.userActivation.hasBeenActive)
     ),
     audioCtx: null,
+    audioCtxStateHandler: null,
     noiseBuffers: {
       pink: null,
       brown: null,
       white: null
     },
     ambientNodes: null,
+    ambientFadeTimer: 0,
+    pendingAmbientCleanup: null,
     hearthCrackleTimer: 0,
     suspendTimer: 0,
+    pendingResumeTimers: new Set(),
     activeOneShotUntil: 0,
     phraseCursor: 0,
     lastChimeAt: 0,
@@ -142,6 +146,7 @@
     swordSwitchEl: null,
     syncingSwordSfx: false,
     hudMountTimer: 0,
+    initHudTimer: 0,
     cleanups: []
   };
 
@@ -174,9 +179,18 @@
     return ROOT.AudioContext || ROOT.webkitAudioContext || null;
   }
 
+  function detachAudioCtxListener(ctx) {
+    const target = ctx || state.audioCtx;
+    if (target && state.audioCtxStateHandler && typeof target.removeEventListener === 'function') {
+      try { target.removeEventListener('statechange', state.audioCtxStateHandler); } catch (_) {}
+    }
+    state.audioCtxStateHandler = null;
+  }
+
   function ensureAudioContext() {
     if (state.destroyed || !state.userInteracted) return null;
     if (!state.audioCtx || state.audioCtx.state === 'closed') {
+      detachAudioCtxListener(state.audioCtx);
       const Ctor = getAudioContextCtor();
       if (!Ctor) return null;
       try {
@@ -189,14 +203,15 @@
         }
       }
       if (state.audioCtx && typeof state.audioCtx.addEventListener === 'function') {
-        state.audioCtx.addEventListener('statechange', () => {
+        state.audioCtxStateHandler = () => {
           if (state.destroyed || !state.audioCtx) return;
           const keepAlive = state.lastWorkingState ||
             (state.prefs.enabled && state.prefs.ambientMode !== 'off' && Boolean(state.ambientNodes));
           if (keepAlive && (state.audioCtx.state === 'suspended' || state.audioCtx.state === 'interrupted')) {
             try { state.audioCtx.resume().catch(() => {}); } catch (_) {}
           }
-        });
+        };
+        state.audioCtx.addEventListener('statechange', state.audioCtxStateHandler);
       }
     }
     if (state.audioCtx && state.audioCtx.state !== 'running' && state.audioCtx.state !== 'closed') {
@@ -232,6 +247,13 @@
     const limitMs = (typeof maxWaitMs === 'number' && maxWaitMs > 0) ? maxWaitMs : 1200;
     let settled = false;
     let timerId = 0;
+    const releaseTimer = () => {
+      if (timerId) {
+        clearTimeout(timerId);
+        state.pendingResumeTimers.delete(timerId);
+        timerId = 0;
+      }
+    };
 
     try {
       const resumePromise = ctx.resume();
@@ -244,31 +266,35 @@
       }
 
       timerId = setTimeout(() => {
-        if (settled) return;
+        state.pendingResumeTimers.delete(timerId);
+        timerId = 0;
+        if (settled || state.destroyed) return;
         settled = true;
         scheduleAutoSuspend();
       }, limitMs);
+      state.pendingResumeTimers.add(timerId);
 
       resumePromise.then(() => {
-        clearTimeout(timerId);
+        releaseTimer();
         if (settled || state.destroyed || ctx !== state.audioCtx || ctx.state !== 'running') {
-          if (!settled) scheduleAutoSuspend();
+          if (!settled && !state.destroyed) scheduleAutoSuspend();
           settled = true;
           return;
         }
         settled = true;
         try { fn(ctx); } catch (_) {}
       }).catch(() => {
-        clearTimeout(timerId);
+        releaseTimer();
         if (!settled) {
           settled = true;
-          scheduleAutoSuspend();
+          if (!state.destroyed) scheduleAutoSuspend();
         }
       });
 
-      return true;
+      // Chưa ở trạng thái 'running' tại thời điểm gọi đồng bộ: chỉ trả false để tránh báo phát thành công sai khi resume() bị từ chối/chặn Autoplay
+      return false;
     } catch (_) {
-      clearTimeout(timerId);
+      releaseTimer();
       scheduleAutoSuspend();
       return false;
     }
@@ -386,9 +412,11 @@
 
     const nowMs = Date.now();
     if (!force && nowMs - state.lastChimeAt < 900) return false;
-    state.lastChimeAt = nowMs;
 
     return withRunningAudioContext(1200, (ctx) => {
+      const fireMs = Date.now();
+      if (!force && fireMs - state.lastChimeAt < 900) return;
+      state.lastChimeAt = fireMs;
       const t0 = ctx.currentTime + 0.015;
       const isBackgrounded = typeof document !== 'undefined' && (
         Boolean(document.hidden) ||
@@ -507,9 +535,11 @@
 
     const nowMs = Date.now();
     if (!force && nowMs - state.lastSheatheAt < 420) return false;
-    state.lastSheatheAt = nowMs;
 
     return withRunningAudioContext(1200, (ctx) => {
+      const fireMs = Date.now();
+      if (!force && fireMs - state.lastSheatheAt < 420) return;
+      state.lastSheatheAt = fireMs;
       const t0 = ctx.currentTime + 0.015;
 
       // Layer A: Metallic blade slide & harmonic ring (2800Hz -> 4200Hz)
@@ -612,9 +642,11 @@
 
     const nowMs = Date.now();
     if (!force && nowMs - state.lastDrawAt < 380) return false;
-    state.lastDrawAt = nowMs;
 
     return withRunningAudioContext(1200, (ctx) => {
+      const fireMs = Date.now();
+      if (!force && fireMs - state.lastDrawAt < 380) return;
+      state.lastDrawAt = fireMs;
       const t0 = ctx.currentTime + 0.015;
 
       const noiseSrc = ctx.createBufferSource();
@@ -664,6 +696,13 @@
   function stopAmbientNodes(immediate = false) {
     clearTimeout(state.hearthCrackleTimer);
     state.hearthCrackleTimer = 0;
+    clearTimeout(state.ambientFadeTimer);
+    state.ambientFadeTimer = 0;
+    if (typeof state.pendingAmbientCleanup === 'function') {
+      const prevCleanup = state.pendingAmbientCleanup;
+      state.pendingAmbientCleanup = null;
+      try { prevCleanup(); } catch (_) {}
+    }
 
     const active = state.ambientNodes;
     state.ambientNodes = null;
@@ -692,8 +731,14 @@
       }
       gainParam.linearRampToValueAtTime(0.0001, now + 0.28);
       markOneShotActivity(0.35);
-      setTimeout(() => {
-        active.cleanup();
+      state.pendingAmbientCleanup = active.cleanup;
+      state.ambientFadeTimer = setTimeout(() => {
+        state.ambientFadeTimer = 0;
+        const fn = state.pendingAmbientCleanup;
+        state.pendingAmbientCleanup = null;
+        if (typeof fn === 'function') {
+          try { fn(); } catch (_) {}
+        }
         scheduleAutoSuspend();
       }, 320);
     } catch (_) {
@@ -1312,13 +1357,11 @@
     let chimePlayed = false;
     if (turnSeq !== null) {
       if (state.lastTurnFinishedSeq !== null && turnSeq > state.lastTurnFinishedSeq) {
-        playKaguraChime();
-        chimePlayed = true;
+        chimePlayed = Boolean(playKaguraChime());
       }
       state.lastTurnFinishedSeq = turnSeq;
     } else if (hasWorkingBool && prevWorking && !snap.isWorking) {
-      playKaguraChime();
-      chimePlayed = true;
+      chimePlayed = Boolean(playKaguraChime());
     }
 
     // Trigger Nichirin "Kachin!" sheathe when Demon Slash counter-attack succeeds
@@ -1441,6 +1484,7 @@
     const handleFlip = (ev) => {
       ev.stopPropagation();
       state.userInteracted = true;
+      ROOT.__AGY_AUDIO_UNLOCKED__ = true;
       const next = sw.getAttribute('aria-checked') !== 'true';
       sw.setAttribute('aria-checked', next ? 'true' : 'false');
       onToggle(next);
@@ -1627,6 +1671,7 @@
       b.addEventListener('click', (ev) => {
         ev.stopPropagation();
         state.userInteracted = true;
+        ROOT.__AGY_AUDIO_UNLOCKED__ = true;
         if (m.id !== 'off') state.prefs.enabled = true;
         state.prefs.ambientMode = m.id;
         savePrefs(state.prefs);
@@ -1652,6 +1697,7 @@
     testChimeBtn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       state.userInteracted = true;
+      ROOT.__AGY_AUDIO_UNLOCKED__ = true;
       playKaguraChime({ force: true });
     });
 
@@ -1662,6 +1708,7 @@
     testSheatheBtn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       state.userInteracted = true;
+      ROOT.__AGY_AUDIO_UNLOCKED__ = true;
       playNichirinSheathe({ force: true });
     });
 
@@ -1701,6 +1748,7 @@
     btn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       state.userInteracted = true;
+      ROOT.__AGY_AUDIO_UNLOCKED__ = true;
       openPopover(btn);
     });
 
@@ -1786,7 +1834,10 @@
         syncCircadianVeilAndShell(state.circadianPhase);
       }
     }, 1500);
-    setTimeout(ensureHudTriggerMounted, 250);
+    state.initHudTimer = setTimeout(() => {
+      state.initHudTimer = 0;
+      ensureHudTriggerMounted();
+    }, 250);
 
     const onFirstGesture = () => {
       unlockAudioOnUserGesture();
@@ -1832,10 +1883,28 @@
     closePopover();
     stopAmbientNodes(true);
     clearTimeout(state.suspendTimer);
+    state.suspendTimer = 0;
     clearTimeout(state.hearthCrackleTimer);
+    state.hearthCrackleTimer = 0;
     clearTimeout(state.toastHideTimer);
+    state.toastHideTimer = 0;
+    clearTimeout(state.initHudTimer);
+    state.initHudTimer = 0;
+    clearTimeout(state.ambientFadeTimer);
+    state.ambientFadeTimer = 0;
+    if (typeof state.pendingAmbientCleanup === 'function') {
+      const fn = state.pendingAmbientCleanup;
+      state.pendingAmbientCleanup = null;
+      try { fn(); } catch (_) {}
+    }
+    if (state.pendingResumeTimers && state.pendingResumeTimers.size > 0) {
+      state.pendingResumeTimers.forEach((tid) => clearTimeout(tid));
+      state.pendingResumeTimers.clear();
+    }
     clearInterval(state.circadianTimer);
+    state.circadianTimer = 0;
     clearInterval(state.hudMountTimer);
+    state.hudMountTimer = 0;
 
     while (state.cleanups.length > 0) {
       const fn = state.cleanups.pop();
@@ -1843,9 +1912,11 @@
     }
 
     if (state.audioCtx) {
+      detachAudioCtxListener(state.audioCtx);
       try { state.audioCtx.close().catch(() => {}); } catch (_) {}
       state.audioCtx = null;
     }
+    state.noiseBuffers = { pink: null, brown: null, white: null };
 
     if (typeof document !== 'undefined') {
       if (document.documentElement) {

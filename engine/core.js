@@ -8,10 +8,11 @@
     getInitialConfig: () => null,
     isSyncFromDaemon: () => false,
     saveConfigSecure: () => false,
+    isDangerousKey: (k) => ['__proto__', 'constructor', 'prototype', 'toString', 'valueOf', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable', 'toLocaleString', '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__'].includes(String(k || '').trim()),
     escapeHtml: (raw) => String(raw == null ? '' : raw).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])),
     stripProtoKeys: (obj) => obj,
     sanitizeCssUrl: (raw) => (typeof raw === 'string' && !/["'()\\;\r\n\0<>`{}]/.test(raw) ? raw.trim() : ''),
-    sanitizeCssValue: (raw, fb = '') => (typeof raw === 'string' && !/[;{}<>\\`\r\n\0]/.test(raw) ? raw.trim() : (typeof raw === 'number' && Number.isFinite(raw) ? String(raw) : fb)),
+    sanitizeCssValue: (raw, fb = '') => (typeof raw === 'number' && Number.isFinite(raw) ? String(raw) : (typeof raw === 'string' && raw.trim() && raw.trim().length <= 260 && !/["';{}<>\\`\x00-\x1f\x7f]|\/\*|\*\/|@import|@charset|@namespace|expression\s*\(|url\s*\(|image-set\s*\(|javascript:|vbscript:|behavior\s*:|-moz-binding/i.test(raw.trim()) ? raw.trim() : fb)),
     sanitizeSvgMarkup: (svg) => (typeof svg === 'string' && !/<script|<foreignobject|\bon[a-z]+\s*=/i.test(svg) ? svg.trim() : ''),
     sanitizeThemeDefinition: (t) => t,
     resolveAssetUrl: (val) => (typeof val === 'string' ? val.trim() : '')
@@ -95,7 +96,14 @@
     return SEC.resolveAssetUrl(trimmed) || SEC.sanitizeCssUrl(trimmed);
   }
 
-  const THEMES = /*__THEMES_PLACEHOLDER__*/{};
+  const RAW_THEMES = /*__THEMES_PLACEHOLDER__*/{};
+  const THEMES = Object.create(null);
+  if (RAW_THEMES && typeof RAW_THEMES === 'object' && !Array.isArray(RAW_THEMES)) {
+    for (const k of Object.keys(RAW_THEMES)) {
+      if (typeof SEC.isDangerousKey === 'function' ? SEC.isDangerousKey(k) : (k === '__proto__' || k === 'constructor' || k === 'prototype')) continue;
+      THEMES[k] = RAW_THEMES[k];
+    }
+  }
 
   Object.values(THEMES).forEach((cfg) => {
     if (!cfg || typeof cfg !== 'object') return;
@@ -128,29 +136,53 @@
 
   const CHECK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
-  const INPUT_STYLES = {
+  const INPUT_STYLES = Object.assign(Object.create(null), {
     'sync': {
-      label: 'Synced Ornament Frame',
-      desc: 'Follows the active theme borders & decorative SVG ornament'
+      label: 'Khung Họa Tiết Đồng Bộ',
+      desc: 'Đồng bộ viền và họa tiết SVG trang trí theo chủ đề đang bật'
     },
     'double_gold': {
-      label: 'Amber Gold Double Border',
-      desc: 'Warm metallic double border with corner filigree'
+      label: 'Viền Kép Hổ Phách Hoàng Kim',
+      desc: 'Viền kép ánh kim ấm áp kết hợp hoa văn góc cổ điển'
     },
     'glass': {
-      label: 'Translucent Crystal Glass',
-      desc: 'Lets more of your background artwork shine through'
+      label: 'Kính Pha Lê Trong Suốt',
+      desc: 'Làm nền kính trong hơn để lộ rõ tranh nền 4K phía sau'
     },
     'minimal': {
-      label: 'Minimal Clean',
-      desc: 'Sleek subtle border without top decorative stickers'
+      label: 'Tối Giản Thanh Lịch',
+      desc: 'Viền gọn nhẹ tinh tế, ẩn sticker trang trí phía trên'
     }
-  };
+  });
 
   function clampInt(val, min, max, fallback) {
     const parsed = parseInt(val, 10);
     if (!Number.isFinite(parsed)) return fallback;
     return Math.min(max, Math.max(min, parsed));
+  }
+
+  const FALLBACK_KNOWN_PERSONAS = new Set([
+    'yoriichi', 'shadow_monarch', 'six_eyes', 'great_sage',
+    'ubuyashiki', 'shinobu', 'giyu', 'rengoku', 'uzui', 'muichiro',
+    'mitsuri', 'obanai', 'sanemi', 'gyomei', 'tanjiro', 'nezuko', 'zenitsu', 'inosuke'
+  ]);
+
+  function hasValidMasterPersona(personaId) {
+    if (typeof personaId !== 'string' || !personaId.trim()) return false;
+    const clean = personaId.trim();
+    if (typeof window !== 'undefined' && window.__AGY_THEME_FORGE__ && typeof window.__AGY_THEME_FORGE__.hasPersona === 'function') {
+      return window.__AGY_THEME_FORGE__.hasPersona(clean);
+    }
+    return FALLBACK_KNOWN_PERSONAS.has(clean);
+  }
+
+  function normalizeSafeMasterPersona(raw) {
+    if (typeof raw !== 'string') return 'yoriichi';
+    const clean = raw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
+    if (!clean || SEC.isDangerousKey(clean) || !hasValidMasterPersona(clean)) {
+      return 'yoriichi';
+    }
+    return clean;
   }
 
   // Multi-window synchronization: when daemon re-injects secondary windows after a config save,
@@ -178,7 +210,7 @@
           localStorage.setItem(STORAGE_TRANSPARENT_WORLD, String(syncCfg.transparentWorld));
         }
         if (typeof syncCfg.masterPersona === 'string' && syncCfg.masterPersona) {
-          const cleanP = syncCfg.masterPersona.replace(/[^a-zA-Z0-9_-]/g, '') || 'yoriichi';
+          const cleanP = normalizeSafeMasterPersona(syncCfg.masterPersona);
           localStorage.setItem(STORAGE_MASTER_PERSONA, cleanP);
         }
         if (typeof syncCfg.userAvatar === 'string') {
@@ -272,7 +304,7 @@
 
     const storedPersona = localStorage.getItem(STORAGE_MASTER_PERSONA);
     const rawPersona = (storedPersona !== null && storedPersona !== '') ? storedPersona : (init.masterPersona || 'yoriichi');
-    const masterPersona = String(rawPersona).replace(/[^a-zA-Z0-9_-]/g, '') || 'yoriichi';
+    const masterPersona = normalizeSafeMasterPersona(rawPersona);
 
     return {
       themeName,
@@ -301,8 +333,10 @@
     const reader = new FileReader();
     reader.onerror = () => {};
     reader.onload = () => {
+      if (coreDestroyed) return;
       const img = new Image();
       img.onload = () => {
+        if (coreDestroyed) return;
         try {
           const size = 192;
           const canvas = document.createElement('canvas');
@@ -338,8 +372,10 @@
     const reader = new FileReader();
     reader.onerror = () => {};
     reader.onload = () => {
+      if (coreDestroyed) return;
       const img = new Image();
       img.onload = () => {
+        if (coreDestroyed) return;
         try {
           if (typeof window !== 'undefined' && window.__AGY_THEME_FORGE__ && typeof window.__AGY_THEME_FORGE__.compressBackdropToDataUrl === 'function') {
             const forgedCompressed = safeCssUrl(window.__AGY_THEME_FORGE__.compressBackdropToDataUrl(img));
@@ -434,7 +470,10 @@
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        if (!ctx) {
+          applyTaintedFileFallback();
+          return;
+        }
         const scaledBlur = Math.max(0, Math.min(18, Math.round(rawBlurNum * 0.85)));
         ctx.filter = scaledBlur > 0 ? `blur(${scaledBlur}px)` : 'none';
         ctx.drawImage(img, -16, -16, w + 32, h + 32);
@@ -473,21 +512,6 @@
     img.src = safeWp;
   }
 
-  const FALLBACK_KNOWN_PERSONAS = new Set([
-    'yoriichi', 'shadow_monarch', 'six_eyes', 'great_sage',
-    'ubuyashiki', 'shinobu', 'giyu', 'rengoku', 'uzui', 'muichiro',
-    'mitsuri', 'obanai', 'sanemi', 'gyomei', 'tanjiro', 'nezuko', 'zenitsu', 'inosuke'
-  ]);
-
-  function hasValidMasterPersona(personaId) {
-    if (typeof personaId !== 'string' || !personaId.trim()) return false;
-    const clean = personaId.trim();
-    if (typeof window !== 'undefined' && window.__AGY_THEME_FORGE__ && typeof window.__AGY_THEME_FORGE__.hasPersona === 'function') {
-      return window.__AGY_THEME_FORGE__.hasPersona(clean);
-    }
-    return FALLBACK_KNOWN_PERSONAS.has(clean);
-  }
-
   function getActiveMasterPersona(stOverride) {
     const st = stOverride || getEffectiveState();
     if (typeof window !== 'undefined' && window.__AGY_THEME_FORGE__ && typeof window.__AGY_THEME_FORGE__.getPersona === 'function') {
@@ -508,6 +532,7 @@
   }
 
   function applyTheme(overrides = {}, applyOpts = {}) {
+    if (coreDestroyed) return;
     const isTransient = Boolean(applyOpts && applyOpts.transient);
     const skipSaveDisk = Boolean(applyOpts && applyOpts.skipSaveDisk);
     const st = { ...getState(), ...overrides };
@@ -517,7 +542,7 @@
     st.avatarRadius = clampInt(st.avatarRadius, 0, 50, 50);
     st.inputStyle = INPUT_STYLES[st.inputStyle] ? st.inputStyle : 'sync';
     st.transparentWorld = st.transparentWorld !== false;
-    st.masterPersona = String(st.masterPersona || 'yoriichi').replace(/[^a-zA-Z0-9_-]/g, '') || 'yoriichi';
+    st.masterPersona = normalizeSafeMasterPersona(st.masterPersona);
 
     if (isTransient) {
       transientOverrideState = { ...st };
@@ -557,9 +582,9 @@
           try {
             const rawForged = localStorage.getItem('agy_forged_themes_v2');
             if (rawForged) {
-              const map = JSON.parse(rawForged);
-              if (map && typeof map === 'object') {
-                const keys = Object.keys(map).filter((k) => k !== st.themeName);
+              const map = SEC.stripProtoKeys(JSON.parse(rawForged));
+              if (map && typeof map === 'object' && !Array.isArray(map)) {
+                const keys = Object.keys(map).filter((k) => k !== st.themeName && Object.prototype.hasOwnProperty.call(map, k));
                 if (keys.length > 0) {
                   delete map[keys[0]];
                   localStorage.setItem('agy_forged_themes_v2', JSON.stringify(map));
@@ -573,10 +598,18 @@
 
       if (!skipSaveDisk) {
         const activeThForDisk = THEMES[st.themeName];
+        const bubbleThForDisk = THEMES[st.bubbleName];
+        const forgedMain = (activeThForDisk && activeThForDisk.isForged)
+          ? { ...activeThForDisk, name: st.themeName }
+          : null;
+        const forgedBubble = (bubbleThForDisk && bubbleThForDisk.isForged)
+          ? { ...bubbleThForDisk, name: st.bubbleName }
+          : null;
         const diskPayload = {
           ...st,
-          activeForgedTheme: (activeThForDisk && activeThForDisk.isForged)
-            ? { ...activeThForDisk, name: st.themeName }
+          activeForgedTheme: forgedMain || forgedBubble || null,
+          activeForgedBubbleTheme: (forgedMain && forgedBubble && st.bubbleName !== st.themeName)
+            ? forgedBubble
             : null
         };
         SEC.saveConfigSecure(diskPayload);
@@ -738,10 +771,15 @@
     );
     const composerStickerUrl = safeCssUrl(bubbleTheme.sticker || '');
 
-    const sTop = Number(bubbleTheme.stickerTop) || -56;
-    const sRight = Number(bubbleTheme.stickerRight ?? 10) || 10;
-    const sW = Number(bubbleTheme.stickerW) || 136;
-    const sH = Number(bubbleTheme.stickerH) || 64;
+    const parseNumericProp = (val, fb) => {
+      if (val === undefined || val === null || val === '' || typeof val === 'boolean') return fb;
+      const n = Number(val);
+      return Number.isFinite(n) ? n : fb;
+    };
+    const sTop = parseNumericProp(bubbleTheme.stickerTop, -56);
+    const sRight = parseNumericProp(bubbleTheme.stickerRight, 10);
+    const sW = parseNumericProp(bubbleTheme.stickerW, 136);
+    const sH = parseNumericProp(bubbleTheme.stickerH, 64);
 
     const uTop = usingPersonaBubbleSticker ? -56 : sTop;
     const uRight = usingPersonaBubbleSticker ? 10 : sRight;
@@ -800,6 +838,11 @@
 
     const showInputSticker = st.inputStyle !== 'minimal' && Boolean(composerStickerUrl);
     const composerMarginTop = Math.max(16, Math.abs(sTop) + 8);
+    const isZeroComposerSticker = sW <= 0 || sH <= 0;
+    const compOrnamentW = isZeroComposerSticker ? Math.max(0, sW) : (bubbleTheme.isChibiNpc ? sW : (sW + 8));
+    const compOrnamentH = isZeroComposerSticker ? Math.max(0, sH) : (bubbleTheme.isChibiNpc ? sH : (sH + 2));
+    const compPlainW = isZeroComposerSticker ? Math.max(0, sW) : (sW + 6);
+    const compPlainH = isZeroComposerSticker ? Math.max(0, sH) : (sH + 6);
     const inputStickerCss = showInputSticker ? (bubbleTheme.isOrnament ? `
       .surface-composer {
         margin-top: ${bubbleTheme.isChibiNpc ? composerMarginTop : 16}px !important;
@@ -810,8 +853,8 @@
         position: absolute;
         top: ${sTop}px;
         right: ${bubbleTheme.isChibiNpc ? sRight : 16}px;
-        width: ${bubbleTheme.isChibiNpc ? sW : (sW + 8)}px;
-        height: ${bubbleTheme.isChibiNpc ? sH : (sH + 2)}px;
+        width: ${compOrnamentW}px;
+        height: ${compOrnamentH}px;
         background-image: url("${composerStickerUrl}");
         background-size: contain;
         background-position: ${bubbleTheme.isChibiNpc ? 'bottom center' : 'center'};
@@ -849,8 +892,8 @@
         position: absolute;
         top: ${sTop - 4}px;
         right: 16px;
-        width: ${sW + 6}px;
-        height: ${sH + 6}px;
+        width: ${compPlainW}px;
+        height: ${compPlainH}px;
         background-image: url("${composerStickerUrl}");
         background-size: contain;
         background-position: bottom center;
@@ -1306,12 +1349,12 @@
       }
 
       ${bubbleComposerHeaderBg ? `
-      .surface-composer > :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(#agy-chibi-skill-bar):not(agy-chibi-aura):not(agy-hashira-squad) {
+      .surface-composer > :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(agy-chibi-aura):not(agy-hashira-squad) {
         background: ${bubbleComposerHeaderBg} !important;
         border-radius: 14.5px 14.5px 0 0 !important;
         padding: 4px 8px !important;
       }
-      .surface-composer:has(> :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(#agy-chibi-skill-bar):not(agy-chibi-aura):not(agy-hashira-squad)) .surface-composer-card {
+      .surface-composer:has(> :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(agy-chibi-aura):not(agy-hashira-squad)) .surface-composer-card {
         border-radius: 0 0 14.5px 14.5px !important;
       }
       ` : ''}
@@ -1420,7 +1463,7 @@
   }
 
   function syncTitleBarOverlay(stOverride) {
-    if (IS_MAC) return;
+    if (coreDestroyed || IS_MAC) return;
     const st = stOverride || getEffectiveState();
     const activeTh = THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
     if (window.electronNative && typeof window.electronNative.setTitleBarOverlay === 'function') {
@@ -1442,11 +1485,13 @@
 
   function scheduleTitleBarSync(stOverride) {
     clearTitleBarTimers();
-    if (IS_MAC) return;
+    if (coreDestroyed || IS_MAC) return;
     const st = stOverride || getEffectiveState();
     syncTitleBarOverlay(st);
     [300, 900, 2000, 4000, 7000].forEach(ms => {
-      window.__AGY_TBO_TIMERS__.push(setTimeout(() => syncTitleBarOverlay(), ms));
+      window.__AGY_TBO_TIMERS__.push(setTimeout(() => {
+        if (!coreDestroyed) syncTitleBarOverlay();
+      }, ms));
     });
   }
 
@@ -1549,6 +1594,7 @@
     captureSnapshot,
     getSnapshot: captureSnapshot,
     applyTransientTheme: (themeKey) => {
+      if (coreDestroyed) return false;
       const q = String(themeKey || '').trim();
       if (!q) return false;
       const qLower = q.toLowerCase();
@@ -1570,6 +1616,7 @@
       return true;
     },
     restoreSnapshot: (snap) => {
+      if (coreDestroyed) return false;
       transientOverrideState = null;
       const restored = (snap && typeof snap === 'object') ? { ...getState(), ...snap } : getState();
       applyTheme(restored, { skipSaveDisk: true });
@@ -1578,6 +1625,7 @@
   };
 
   function openCustomThemeModal() {
+    if (coreDestroyed) return;
     try { window.__AGY_TOKEN_HUD__?.closePopover?.(); } catch (_) {}
     try { window.__AGY_BIO_AUDIO__?.closePopover?.(); } catch (_) {}
     try { window.__AGY_CINEMA_DIRECTOR__?.closePanel?.(); } catch (_) {}
@@ -1603,8 +1651,8 @@
         <div id="agy-custom-theme-modal-dialog" style="background: rgba(16, 12, 11, 0.97); border: 1.2px solid rgba(212, 148, 106, 0.35); border-radius: 18px; width: 100%; max-width: 900px; height: 86vh; max-height: 860px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.9), 0 0 32px rgba(224, 142, 85, 0.25); font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;">
           <div id="agy-custom-theme-modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 18px 26px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: rgba(22, 16, 14, 0.85);">
             <div style="display: flex; align-items: center; gap: 10px;">
-              <span style="font-size: 17px; font-weight: 600; color: #f4f4f5; letter-spacing: -0.2px;">Custom Theme Studio</span>
-              <span id="agy-custom-theme-badge" style="font-size: 11.5px; padding: 2.5px 9px; border-radius: 9999px; background: rgba(224, 142, 85, 0.2); color: #e08e55; font-weight: 500; border: 1px solid rgba(224, 142, 85, 0.3);">${THEME_KEYS.length} Preset${THEME_KEYS.length > 1 ? 's' : ''}</span>
+              <span style="font-size: 17px; font-weight: 600; color: #f4f4f5; letter-spacing: -0.2px;">Xưởng Giao Diện Tùy Biến</span>
+              <span id="agy-custom-theme-badge" style="font-size: 11.5px; padding: 2.5px 9px; border-radius: 9999px; background: rgba(224, 142, 85, 0.2); color: #e08e55; font-weight: 500; border: 1px solid rgba(224, 142, 85, 0.3);">${THEME_KEYS.length} Chủ đề</span>
             </div>
             <button id="agy-theme-modal-close-btn" type="button" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); color: #d4d4d8; cursor: pointer; width: 30px; height: 30px; border-radius: 8px; font-size: 15px; display: flex; align-items: center; justify-content: center; transition: all 0.15s ease;">✕</button>
           </div>
@@ -1632,7 +1680,7 @@
     backdrop.style.display = 'flex';
     const badgeEl = backdrop.querySelector('#agy-custom-theme-badge');
     if (badgeEl) {
-      badgeEl.textContent = `${THEME_KEYS.length} Preset${THEME_KEYS.length > 1 ? 's' : ''}`;
+      badgeEl.textContent = `${THEME_KEYS.length} Chủ đề`;
     }
     const body = backdrop.querySelector('#agy-theme-modal-body');
     renderThemePanels(body);
@@ -1675,41 +1723,47 @@
       ? forge.FX_MODE_OPTIONS
       : [{ value: 'wisteria', label: '🦋 Tử Đằng Nguyệt Dạ' }];
 
+    const esc = (v) => SEC.escapeHtml(v);
+    const escMainPrimary = esc(safeMainPrimary);
+    const escMainAccent = esc(safeMainAccent);
+    const escMainBorder = esc(safeMainBorder);
+    const escCardBg = esc(safeCardBg);
+
     container.innerHTML = `
       <div id="agy-theme-scroll-container" style="padding: 24px 32px 48px 32px; max-width: 860px; margin: 0 auto; overflow-y: auto; height: 100%; color: #f4f4f5;">
-        <div style="border: 1px solid ${safeMainBorder}; background: ${safeCardBg}; border-radius: 12px; padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="border: 1px solid ${escMainBorder}; background: ${escCardBg}; border-radius: 12px; padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
-              <div style="font-size: 14.5px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Wallpaper, Pre-Baked Blur &amp; Deep-Focus</div>
-              <div style="font-size: 12.5px; color: #a1a1aa;">120fps pre-baked glass, Single-Window GPU 0% idle &amp; Thế Giới Trong Suốt.</div>
+              <div style="font-size: 14.5px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Hình Nền, Kính Mờ Pre-Baked &amp; Tập Trung Sâu</div>
+              <div style="font-size: 12.5px; color: #a1a1aa;">Kính mờ pre-baked 120fps, GPU 0% khi rảnh &amp; Thế Giới Trong Suốt.</div>
             </div>
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
               <label style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #d4d4d8; cursor: pointer;">
-                <input id="agy-wp-toggle" type="checkbox" ${st.wpEnabled ? 'checked' : ''} style="accent-color: ${safeMainPrimary}; cursor: pointer;" />
-                Backdrop
+                <input id="agy-wp-toggle" type="checkbox" ${st.wpEnabled ? 'checked' : ''} style="accent-color: ${escMainPrimary}; cursor: pointer;" />
+                Hình nền
               </label>
               <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #a1a1aa;">
-                Dim
+                Độ tối
                 <input id="agy-dim-slider" type="range" min="15" max="92" value="${st.dimming}" style="width: 90px; cursor: pointer; accent-color: #ffffff; height: 5px;" />
                 <span id="agy-dim-val" style="min-width: 32px; text-align: right;">${st.dimming}%</span>
               </label>
               <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #a1a1aa;">
-                Blur
-                <input id="agy-blur-slider" type="range" min="0" max="16" value="${st.glassBlur}" style="width: 72px; cursor: pointer; accent-color: ${safeMainPrimary}; height: 5px;" />
+                Độ mờ
+                <input id="agy-blur-slider" type="range" min="0" max="16" value="${st.glassBlur}" style="width: 72px; cursor: pointer; accent-color: ${escMainPrimary}; height: 5px;" />
                 <span id="agy-blur-val" style="min-width: 30px; text-align: right;">${st.glassBlur}px</span>
               </label>
-              <label style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${safeMainBorder}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                Custom Image
+              <label style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${escMainBorder}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+                Ảnh tùy chọn
                 <input id="agy-wp-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
               </label>
               <button id="agy-export-btn" type="button" style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                Export JSON
+                Xuất JSON
               </button>
               <button id="agy-import-toggle" type="button" style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                Import JSON / .agytheme
+                Nhập JSON / .agytheme
               </button>
               <button id="agy-reset-btn" type="button" style="padding: 5px 10px; border-radius: 8px; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.35); color: #fca5a5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                Reset
+                Đặt lại
               </button>
             </div>
           </div>
@@ -1721,7 +1775,7 @@
             <span style="font-size: 11.5px; color: #a1a1aa;">Tự làm chậm hạt nền 20% &amp; giảm chói 35% khi gõ sâu (&ge; 4 phím/giây) hoặc đọc diff.</span>
           </div>
           <div id="agy-import-box" style="display: none; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
-            <textarea id="agy-import-text" rows="3" placeholder="Dán JSON cấu hình hoặc nội dung gói .agytheme (schema: agytheme/2.0) vào đây..." style="width: 100%; box-sizing: border-box; background: rgba(0,0,0,0.35); color: #f4f4f5; border: 1px solid ${safeMainBorder}; border-radius: 8px; padding: 8px 10px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+            <textarea id="agy-import-text" rows="3" placeholder="Dán JSON cấu hình hoặc nội dung gói .agytheme (schema: agytheme/2.0) vào đây..." style="width: 100%; box-sizing: border-box; background: rgba(0,0,0,0.35); color: #f4f4f5; border: 1px solid ${escMainBorder}; border-radius: 8px; padding: 8px 10px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
               <label style="padding: 5px 10px; border-radius: 7px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); color: #e4e4e7; font-size: 12px; cursor: pointer;">
                 📂 Chọn file .agytheme / .json
@@ -1729,20 +1783,20 @@
               </label>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <span id="agy-import-msg" style="font-size: 12px; color: #fca5a5;"></span>
-                <button id="agy-import-apply" type="button" style="padding: 5px 12px; border-radius: 7px; background: ${safeMainPrimary}; color: #090d16; font-weight: 600; font-size: 12px; border: none; cursor: pointer;">Nạp cấu hình</button>
+                <button id="agy-import-apply" type="button" style="padding: 5px 12px; border-radius: 7px; background: ${escMainPrimary}; color: #090d16; font-weight: 600; font-size: 12px; border: none; cursor: pointer;">Nạp cấu hình</button>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Master Persona Selector (Independent from Active Theme) -->
-        <div style="border: 1px solid ${safeMainBorder}; background: ${safeCardBg}; border-radius: 12px; padding: 14px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="border: 1px solid ${escMainBorder}; background: ${escCardBg}; border-radius: 12px; padding: 14px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
-              <div style="font-size: 14px; font-weight: 600; color: #fef08a; margin-bottom: 2px;">👑 Bản Ngã Chủ Nhân (Master Persona — Độc lập khỏi Theme nền)</div>
+              <div style="font-size: 14px; font-weight: 600; color: #fef08a; margin-bottom: 2px;">👑 Bản Ngã Chủ Nhân (Độc lập khỏi chủ đề nền)</div>
               <div style="font-size: 12px; color: #a1a1aa;">Mặc định Khai Tổ Hỏa Thần Yoriichi, hoặc hóa thân thành 14 Đại Trụ / Kiếm sĩ &amp; 3 Đế Vương Đa Vũ Trụ!</div>
             </div>
-            <select id="agy-persona-select" style="padding: 6px 12px; border-radius: 8px; background: rgba(10, 10, 20, 0.88); color: #f8fafc; border: 1px solid ${safeMainPrimary}; font-size: 12.5px; font-weight: 600; cursor: pointer; min-width: 250px;">
+            <select id="agy-persona-select" style="padding: 6px 12px; border-radius: 8px; background: rgba(10, 10, 20, 0.88); color: #f8fafc; border: 1px solid ${escMainPrimary}; font-size: 12.5px; font-weight: 600; cursor: pointer; min-width: 250px;">
               ${personaList.map((p) => {
                 const sel = p.id === st.masterPersona ? 'selected' : '';
                 return `<option value="${SEC.escapeHtml(p.id)}" ${sel}>${SEC.escapeHtml(p.label)}</option>`;
@@ -1753,10 +1807,10 @@
             ${personaList.slice(0, 8).map((p) => {
               const isAct = p.id === st.masterPersona;
               const pAv = SEC.sanitizeCssUrl(p.userAvatar || '');
-              const pRing = SEC.sanitizeCssValue(p.ringColor, '#fde047');
+              const pRing = esc(SEC.sanitizeCssValue(p.ringColor, '#fde047'));
               return `
                 <button type="button" class="agy-persona-pill" data-persona="${SEC.escapeHtml(p.id)}" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 5px; border-radius: 999px; border: 1px solid ${isAct ? pRing : 'rgba(255,255,255,0.14)'}; background: ${isAct ? 'rgba(250, 204, 21, 0.16)' : 'rgba(255,255,255,0.05)'}; color: #f8fafc; font-size: 11.5px; font-weight: ${isAct ? '600' : '400'}; cursor: pointer;">
-                  <span style="width: 20px; height: 20px; border-radius: 50%; border: 1px solid ${pRing}; background: rgba(0,0,0,0.4) ${pAv ? `url("${pAv}") center/cover no-repeat` : ''}; flex-shrink: 0;"></span>
+                  <span style="width: 20px; height: 20px; border-radius: 50%; border: 1px solid ${pRing}; background: rgba(0,0,0,0.4) ${pAv ? `url(&quot;${esc(pAv)}&quot;) center/cover no-repeat` : ''}; flex-shrink: 0;"></span>
                   <span>${SEC.escapeHtml(p.shortLabel || p.label)}</span>
                 </button>
               `;
@@ -1769,7 +1823,7 @@
         <div style="border: 1px solid rgba(192, 132, 252, 0.42); background: linear-gradient(145deg, rgba(20, 12, 38, 0.88), rgba(11, 15, 30, 0.92)); border-radius: 12px; padding: 15px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 11px;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
-              <div style="font-size: 14.5px; font-weight: 700; color: #e9d5ff; margin-bottom: 2px;">⚒️ Lò Rèn Đa Vũ Trụ — AI Theme Forge (OKLCH &amp; .agytheme)</div>
+              <div style="font-size: 14.5px; font-weight: 700; color: #e9d5ff; margin-bottom: 2px;">⚒️ Lò Rèn Đa Vũ Trụ — Rèn Chủ Đề OKLCH &amp; .agytheme</div>
               <div style="font-size: 12px; color: #cbd5e1;">Thả ảnh 4K bất kỳ để trích xuất 14 biến màu kính mờ chuẩn tương phản đọc code WCAG AA, hoặc mở rộng Đa Vũ Trụ ngay!</div>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -1805,69 +1859,72 @@
         </div>
         ` : ''}
 
-        <div style="border: 1px solid ${safeMainBorder}; background: ${safeCardBg}; border-radius: 12px; padding: 14px 20px; margin-bottom: 24px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="border: 1px solid ${escMainBorder}; background: ${escCardBg}; border-radius: 12px; padding: 14px 20px; margin-bottom: 24px; display: flex; flex-direction: column; gap: 10px;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div>
-              <div style="font-size: 14px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Chat Avatars (User &amp; AI Agent)</div>
-              <div style="font-size: 12px; color: #a1a1aa;">Profile badges rendered beside chat messages (auto-compressed WebP, &le; 15MB).</div>
+              <div style="font-size: 14px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Ảnh Đại Diện Hội Thoại (Người dùng &amp; Trợ lý AI)</div>
+              <div style="font-size: 12px; color: #a1a1aa;">Huy hiệu hiển thị cạnh tin nhắn (tự động nén WebP, &le; 15MB).</div>
             </div>
             <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
               <div style="display: flex; align-items: center; gap: 8px;">
-                <div id="agy-user-av-preview" style="width: 30px; height: 30px; border-radius: ${st.avatarRadius}%; border: 1.5px solid ${safeMainPrimary}; background: rgba(255,255,255,0.06) ${effUserAv ? `url("${effUserAv}") center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effUserAv ? '' : 'U'}</div>
-                <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${safeMainBorder}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                  User
+                <div id="agy-user-av-preview" style="width: 30px; height: 30px; border-radius: ${st.avatarRadius}%; border: 1.5px solid ${escMainPrimary}; background: rgba(255,255,255,0.06) ${effUserAv ? `url(&quot;${esc(effUserAv)}&quot;) center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effUserAv ? '' : 'B'}</div>
+                <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${escMainBorder}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+                  Người dùng
                   <input id="agy-user-av-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
                 </label>
-                <button id="agy-user-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Off</button>
+                <button id="agy-user-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Tắt</button>
               </div>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <div id="agy-agent-av-preview" style="width: 30px; height: 30px; border-radius: ${st.avatarRadius}%; border: 1.5px solid ${safeMainAccent}; background: rgba(255,255,255,0.06) ${effAgentAv ? `url("${effAgentAv}") center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effAgentAv ? '' : 'AI'}</div>
-                <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${safeMainBorder}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                  Agent
+                <div id="agy-agent-av-preview" style="width: 30px; height: 30px; border-radius: ${st.avatarRadius}%; border: 1.5px solid ${escMainAccent}; background: rgba(255,255,255,0.06) ${effAgentAv ? `url(&quot;${esc(effAgentAv)}&quot;) center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effAgentAv ? '' : 'AI'}</div>
+                <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${escMainBorder}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+                  Trợ lý AI
                   <input id="agy-agent-av-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
                 </label>
-                <button id="agy-agent-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Off</button>
+                <button id="agy-agent-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Tắt</button>
               </div>
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.07);">
             <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1aa;">
-              Size
-              <input id="agy-av-size" type="range" min="22" max="52" value="${st.avatarSize}" style="width: 100px; cursor: pointer; accent-color: ${safeMainPrimary}; height: 5px;" />
+              Kích thước
+              <input id="agy-av-size" type="range" min="22" max="52" value="${st.avatarSize}" style="width: 100px; cursor: pointer; accent-color: ${escMainPrimary}; height: 5px;" />
               <span id="agy-av-size-val" style="min-width: 34px;">${st.avatarSize}px</span>
             </label>
             <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1aa;">
-              Corner Radius
-              <input id="agy-av-rad" type="range" min="0" max="50" value="${st.avatarRadius}" style="width: 100px; cursor: pointer; accent-color: ${safeMainPrimary}; height: 5px;" />
+              Bo góc
+              <input id="agy-av-rad" type="range" min="0" max="50" value="${st.avatarRadius}" style="width: 100px; cursor: pointer; accent-color: ${escMainPrimary}; height: 5px;" />
               <span id="agy-av-rad-val" style="min-width: 34px;">${st.avatarRadius}%</span>
             </label>
           </div>
         </div>
 
         <div style="margin-bottom: 28px;">
-          <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">User Chat Bubble</div>
-          <div style="font-size: 12.5px; color: #a1a1aa; margin-bottom: 14px;">Mix and match bubble frame &amp; ornament independently from the active wallpaper.</div>
+          <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">Khung Tin Nhắn Người Dùng</div>
+          <div style="font-size: 12.5px; color: #a1a1aa; margin-bottom: 14px;">Phối hợp viền khung tin nhắn &amp; họa tiết trang trí độc lập với hình nền.</div>
           <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
             ${THEME_KEYS.map(name => {
               const th = THEMES[name] || {};
               const safeNameHtml = SEC.escapeHtml(name);
               const isSelected = name === st.bubbleName;
-              const stickerTop = th.isOrnament ? Math.round((Number(th.stickerTop) || 0) * 0.85) : Math.round((Number(th.stickerTop) || 0) * 0.74);
-              const stickerW = Math.round((Number(th.stickerW) || 0) * 0.78);
-              const stickerH = th.isOrnament ? Math.round((Number(th.stickerH) || 0) * 0.8) : Math.round((Number(th.stickerH) || 0) * 0.78);
-              const safeThFrame = SEC.sanitizeCssValue(th.frameBg, '#c084fc');
-              const safeThGlow = SEC.sanitizeCssValue(th.glow, 'rgba(192,132,252,0.28)');
-              const safeThBg = SEC.sanitizeCssValue(th.userBubble || th.bg, 'rgba(24,18,42,0.9)');
-              const safeThBorder = SEC.sanitizeCssValue(th.innerBorder, '1px solid ' + SEC.sanitizeCssValue(th.borderColor, 'rgba(255,255,255,0.16)'));
-              const safeThText = SEC.sanitizeCssValue(th.textColor || th.textMain, '#f8fafc');
+              const rawTop = Number.isFinite(Number(th.stickerTop)) ? Number(th.stickerTop) : 0;
+              const rawW = Number.isFinite(Number(th.stickerW)) ? Number(th.stickerW) : 0;
+              const rawH = Number.isFinite(Number(th.stickerH)) ? Number(th.stickerH) : 0;
+              const stickerTop = th.isOrnament ? Math.round(rawTop * 0.85) : Math.round(rawTop * 0.74);
+              const stickerW = Math.round(rawW * 0.78);
+              const stickerH = th.isOrnament ? Math.round(rawH * 0.8) : Math.round(rawH * 0.78);
+              const safeThFrame = esc(SEC.sanitizeCssValue(th.frameBg, '#c084fc'));
+              const safeThGlow = esc(SEC.sanitizeCssValue(th.glow, 'rgba(192,132,252,0.28)'));
+              const safeThBg = esc(SEC.sanitizeCssValue(th.userBubble || th.bg, 'rgba(24,18,42,0.9)'));
+              const safeThBorder = esc(SEC.sanitizeCssValue(th.innerBorder, '1px solid ' + SEC.sanitizeCssValue(th.borderColor, 'rgba(255,255,255,0.16)')));
+              const safeThText = esc(SEC.sanitizeCssValue(th.textColor || th.textMain, '#f8fafc'));
               const safeStickerUrl = SEC.sanitizeCssUrl(th.sticker || '');
               return `
                 <div class="agy-bubble-card" data-name="${safeNameHtml}" style="position: relative; border-radius: 12px; border: ${isSelected ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)'}; background: ${isSelected ? 'rgba(42, 34, 30, 0.68)' : 'rgba(14, 12, 12, 0.78)'}; padding: 24px 18px 14px 18px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; min-height: 112px; transition: border-color 0.15s ease, background-color 0.15s ease;">
                   <div style="display: flex; justify-content: center; align-items: center; width: 100%; margin-top: 6px; margin-bottom: 10px;">
                     <div style="position: relative; width: 192px; height: 46px; padding: 1.2px; border-radius: ${th.isScroll ? '6px' : '12px'}; background: ${safeThFrame}; box-shadow: 0 4px 14px rgba(0,0,0,0.45), 0 0 10px ${safeThGlow};">
                       <div style="position: relative; width: 100%; height: 100%; background: ${safeThBg}; border: ${safeThBorder}; border-radius: ${th.isScroll ? '4px' : '11px'}; display: flex; align-items: center; padding: 0 16px;">
-                        ${safeStickerUrl ? `<div style="position: absolute; top: ${stickerTop}px; right: 8px; width: ${stickerW}px; height: ${stickerH}px; background-image: url(&quot;${safeStickerUrl}&quot;); background-size: contain; background-position: ${th.isOrnament ? 'center' : 'bottom center'}; background-repeat: no-repeat; pointer-events: none;"></div>` : ''}
-                        <span style="font-size: 13.5px; font-weight: 500; color: ${safeThText};">Hello ✨</span>
+                        ${safeStickerUrl ? `<div style="position: absolute; top: ${stickerTop}px; right: 8px; width: ${stickerW}px; height: ${stickerH}px; background-image: url(&quot;${esc(safeStickerUrl)}&quot;); background-size: contain; background-position: ${th.isOrnament ? 'center' : 'bottom center'}; background-repeat: no-repeat; pointer-events: none;"></div>` : ''}
+                        <span style="font-size: 13.5px; font-weight: 500; color: ${safeThText};">Xin chào ✨</span>
                       </div>
                     </div>
                   </div>
@@ -1882,8 +1939,8 @@
         </div>
 
         <div style="margin-bottom: 28px;">
-          <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">Composer Style</div>
-          <div style="font-size: 12.5px; color: #a1a1aa; margin-bottom: 14px;">Customize the chat input frame without affecting keyboard shortcuts or attachments.</div>
+          <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">Kiểu Khung Soạn Thảo</div>
+          <div style="font-size: 12.5px; color: #a1a1aa; margin-bottom: 14px;">Tùy biến khung nhập liệu mà không ảnh hưởng phím tắt hay tệp đính kèm.</div>
           <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
             ${Object.entries(INPUT_STYLES).map(([key, item]) => {
               const isSelected = key === st.inputStyle;
@@ -1891,24 +1948,24 @@
               const previewStickerStyle = activeBubbleTh.isOrnament
                 ? 'top: -12px; right: 10px; width: 72px; height: 22px; background-position: center;'
                 : 'top: -22px; right: 10px; width: 32px; height: 28px; background-position: bottom center;';
-              const previewInnerBg = SEC.sanitizeCssValue(
+              const previewInnerBg = esc(SEC.sanitizeCssValue(
                 key === 'glass'
                   ? (activeBubbleTh.inputGlassBg || 'rgba(20, 15, 13, 0.45)')
                   : (activeBubbleTh.inputCardBg || activeBubbleTh.composerBg || 'rgba(26, 18, 15, 0.92)'),
                 'rgba(26, 18, 15, 0.92)'
-              );
+              ));
               const previewFrameBg = key === 'double_gold'
                 ? 'linear-gradient(135deg, #f59e0b, #fbbf24)'
-                : SEC.sanitizeCssValue(activeBubbleTh.frameBg, '#c084fc');
+                : esc(SEC.sanitizeCssValue(activeBubbleTh.frameBg, '#c084fc'));
               const previewStickerUrl = SEC.sanitizeCssUrl(activeBubbleTh.sticker || '');
-              const previewPrimary = SEC.sanitizeCssValue(activeBubbleTh.primary, '#c084fc');
+              const previewPrimary = esc(SEC.sanitizeCssValue(activeBubbleTh.primary, '#c084fc'));
               return `
                 <div class="agy-input-card" data-style="${SEC.escapeHtml(key)}" style="border-radius: 12px; border: ${isSelected ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)'}; background: ${isSelected ? 'rgba(42, 34, 30, 0.68)' : 'rgba(14, 12, 12, 0.78)'}; padding: 16px 18px; cursor: pointer; display: flex; flex-direction: column; gap: 12px; transition: border-color 0.15s ease, background-color 0.15s ease;">
                   <div class="agy-input-preview-outer" style="position: relative; margin-top: 8px; padding: 1.5px; border-radius: 10px; background: ${previewFrameBg};">
-                    <div class="agy-input-preview-sticker" style="position: absolute; ${previewStickerStyle} ${previewStickerUrl ? `background-image: url(&quot;${previewStickerUrl}&quot;);` : ''} background-size: contain; background-repeat: no-repeat; display: ${key !== 'minimal' && previewStickerUrl ? 'block' : 'none'}; pointer-events: none;"></div>
+                    <div class="agy-input-preview-sticker" style="position: absolute; ${previewStickerStyle} ${previewStickerUrl ? `background-image: url(&quot;${esc(previewStickerUrl)}&quot;);` : ''} background-size: contain; background-repeat: no-repeat; display: ${key !== 'minimal' && previewStickerUrl ? 'block' : 'none'}; pointer-events: none;"></div>
                     <div class="agy-input-preview-inner" style="background: ${previewInnerBg}; border-radius: 9px; padding: 8px 12px; font-size: 12px; color: #a1a1aa; display: flex; justify-content: space-between; align-items: center;">
-                      <span>Ask anything, @ to mention...</span>
-                      <span class="agy-input-preview-turbo" style="color: ${previewPrimary}; font-size: 11px;">Send →</span>
+                      <span>Hỏi bất cứ điều gì, gõ @ để nhắc tới...</span>
+                      <span class="agy-input-preview-turbo" style="color: ${previewPrimary}; font-size: 11px;">Gửi →</span>
                     </div>
                   </div>
                   <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -1927,11 +1984,11 @@
         <div>
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
             <div>
-              <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 3px;">Theme Presets (${THEME_KEYS.length})</div>
-              <div style="font-size: 12.5px; color: #a1a1aa;">Bộ sưu tập Thanh Gươm Diệt Quỷ &amp; Đa Vũ Trụ OKLCH — 60fps Live Glass &amp; NPC.</div>
+              <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 3px;">Bộ Sưu Tập Chủ Đề (${THEME_KEYS.length})</div>
+              <div style="font-size: 12.5px; color: #a1a1aa;">Bộ sưu tập Thanh Gươm Diệt Quỷ &amp; Đa Vũ Trụ OKLCH — Kính mờ 60fps &amp; NPC.</div>
             </div>
             <div id="agy-preset-filter-bar" style="display: flex; flex-wrap: wrap; gap: 6px;">
-              <button type="button" class="agy-filter-chip" data-filter="all" style="padding: 4px 10px; border-radius: 999px; border: 1px solid ${safeMainPrimary}; background: rgba(255,255,255,0.12); color: #fff; font-size: 11.5px; font-weight: 600; cursor: pointer;">Tất cả (${THEME_KEYS.length})</button>
+              <button type="button" class="agy-filter-chip" data-filter="all" style="padding: 4px 10px; border-radius: 999px; border: 1px solid ${escMainPrimary}; background: rgba(255,255,255,0.12); color: #fff; font-size: 11.5px; font-weight: 600; cursor: pointer;">Tất cả (${THEME_KEYS.length})</button>
               <button type="button" class="agy-filter-chip" data-filter="royal" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(250,204,21,0.45); background: rgba(250,204,21,0.12); color: #fef08a; font-size: 11.5px; font-weight: 600; cursor: pointer;">👑 Chúa Công</button>
               <button type="button" class="agy-filter-chip" data-filter="hashira" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 11.5px; cursor: pointer;">⚔️ Cửu Trụ (9)</button>
               <button type="button" class="agy-filter-chip" data-filter="kamaboko" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 11.5px; cursor: pointer;">🔥 Nhân Vật Chính</button>
@@ -1951,9 +2008,9 @@
                 : (isRoyal ? 'royal' : (/Trụ|Shinobu/i.test(name) ? 'hashira' : (/(Tanjiro|Nezuko|Zenitsu|Inosuke)/i.test(name) ? 'kamaboko' : 'classic')));
               const safeWpUrl = SEC.sanitizeCssUrl(th.wallpaper || '');
               const thumbBg = safeWpUrl
-                ? `linear-gradient(180deg, rgba(0,0,0,0.10), rgba(10,8,18,0.86)), url(&quot;${safeWpUrl}&quot;)`
-                : SEC.sanitizeCssValue(th.pureBg || th.bg, '#111118');
-              const safeBgPos = SEC.sanitizeCssValue(th.bgPosition, 'center');
+                ? `linear-gradient(180deg, rgba(0,0,0,0.10), rgba(10,8,18,0.86)), url(&quot;${esc(safeWpUrl)}&quot;)`
+                : esc(SEC.sanitizeCssValue(th.pureBg || th.bg, '#111118'));
+              const safeBgPos = esc(SEC.sanitizeCssValue(th.bgPosition, 'center'));
               const safeStickerUrl = SEC.sanitizeCssUrl(th.sticker || '');
               const thumbOrnamentStyle = th.isChibiNpc
                 ? 'right: 8px; bottom: 0px; width: 92px; height: 45px; background-position: bottom right;'
@@ -1968,7 +2025,7 @@
                 <div class="agy-preset-card" data-name="${safeNameHtml}" data-group="${SEC.escapeHtml(groupTag)}" style="border-radius: 12px; border: ${borderStyle}; background: ${isRoyal ? 'linear-gradient(145deg, rgba(32, 18, 52, 0.92), rgba(18, 12, 32, 0.94))' : 'rgba(14, 12, 18, 0.84)'}; ${cardShadow} overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: border-color 0.15s ease, transform 0.15s ease;">
                   <div style="height: 78px; width: 100%; background-image: ${thumbBg}; background-size: cover; background-position: ${safeBgPos}; position: relative; display: flex; align-items: flex-end; padding: 8px 14px;">
                     ${isRoyal ? `<span style="position:absolute; top:7px; left:10px; padding:2px 8px; border-radius:999px; background:linear-gradient(90deg, rgba(250,204,21,0.92), rgba(232,121,249,0.88)); color:#180d2c; font-size:10px; font-weight:800; letter-spacing:0.2px;">★ ĐẶC BIỆT</span>` : (isForged ? `<span style="position:absolute; top:7px; left:10px; padding:2px 8px; border-radius:999px; background:rgba(168,85,247,0.85); color:#fff; font-size:10px; font-weight:700;">⚒️ OKLCH</span>` : '')}
-                    ${safeStickerUrl ? `<div style="position: absolute; ${thumbOrnamentStyle} background-image: url(&quot;${safeStickerUrl}&quot;); background-size: contain; background-repeat: no-repeat; pointer-events: none;"></div>` : ''}
+                    ${safeStickerUrl ? `<div style="position: absolute; ${thumbOrnamentStyle} background-image: url(&quot;${esc(safeStickerUrl)}&quot;); background-size: contain; background-repeat: no-repeat; pointer-events: none;"></div>` : ''}
                     <span style="font-size: 13.5px; font-weight: 600; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.92); padding-right: 78px;">${safeNameHtml}</span>
                   </div>
                   <div style="padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
@@ -2054,8 +2111,10 @@
     const wpUpload = container.querySelector('#agy-wp-upload');
     wpUpload.addEventListener('change', (e) => {
       const file = e.target.files && e.target.files[0];
+      e.target.value = '';
       if (!file) return;
       compressWallpaperFile(file, (safeDataUrl) => {
+        if (coreDestroyed) return;
         applyTheme({ customWp: safeDataUrl, wpEnabled: true });
         const toggle = container.querySelector('#agy-wp-toggle');
         if (toggle) toggle.checked = true;
@@ -2065,7 +2124,7 @@
     // Master Persona selector & quick pills
     const personaSelect = container.querySelector('#agy-persona-select');
     const applyMasterPersona = (pid) => {
-      const cleanId = String(pid || 'yoriichi').replace(/[^a-zA-Z0-9_-]/g, '') || 'yoriichi';
+      const cleanId = normalizeSafeMasterPersona(pid);
       // Clear manual userAvatar override if it was 'none' or empty so persona emblem shows immediately
       const nextOverrides = { masterPersona: cleanId };
       const curAv = localStorage.getItem(STORAGE_USER_AVATAR);
@@ -2104,19 +2163,20 @@
       const renderSwatchesPreview = (themeObj) => {
         if (!forgeSwatches || !themeObj) return;
         const swatches = [
-          { label: 'Primary', color: themeObj.primary },
-          { label: 'Accent', color: themeObj.accent },
-          { label: 'CodeBg', color: themeObj.codeBg },
-          { label: 'TextMain', color: themeObj.textMain },
-          { label: 'TextMuted', color: themeObj.textMuted },
-          { label: 'PillBg', color: themeObj.pillBg }
+          { label: 'Màu chính', color: themeObj.primary },
+          { label: 'Điểm nhấn', color: themeObj.accent },
+          { label: 'Nền Code', color: themeObj.codeBg },
+          { label: 'Chữ chính', color: themeObj.textMain },
+          { label: 'Chữ phụ', color: themeObj.textMuted },
+          { label: 'Nền nhãn', color: themeObj.pillBg }
         ];
         const swHtml = swatches.map((sw) => {
           const c = SEC.sanitizeCssValue(sw.color, '#1e293b');
-          return `<span title="${SEC.escapeHtml(sw.label)}: ${SEC.escapeHtml(c)}" style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.14);"><i style="width:11px;height:11px;border-radius:3px;background:${c};display:inline-block;"></i>${SEC.escapeHtml(sw.label)}</span>`;
+          const escC = SEC.escapeHtml(c);
+          return `<span title="${SEC.escapeHtml(sw.label)}: ${escC}" style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.14);"><i style="width:11px;height:11px;border-radius:3px;background:${escC};display:inline-block;"></i>${SEC.escapeHtml(sw.label)}</span>`;
         }).join('');
         const ratio = themeObj.wcagReport ? themeObj.wcagReport.textContrast : '12.0';
-        forgeSwatches.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:5px;">${swHtml}</div><span style="color:#fef08a;font-weight:600;">WCAG AA/AAA: ${SEC.escapeHtml(String(ratio))}:1 ✓</span>`;
+        forgeSwatches.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:5px;">${swHtml}</div><span style="color:#fef08a;font-weight:600;">Chuẩn WCAG AA/AAA: ${SEC.escapeHtml(String(ratio))}:1 ✓</span>`;
       };
 
       // Restore workbench draft if user switched Master Persona mid-forge
@@ -2143,6 +2203,7 @@
         const activePersonaId = getState().masterPersona || 'yoriichi';
         showForgeStatus('⏳ Đang quét histogram 64×64 & giải phương trình màu OKLCH...', false);
         forge.forgeFromWallpaperFile(file, { personaId: activePersonaId }).then((res) => {
+          if (coreDestroyed) return;
           modalPendingForged = res;
           modalPendingForgeName = res.suggestedName || '';
           modalPendingForgeFx = res.fxMode || 'wisteria';
@@ -2152,6 +2213,7 @@
           renderSwatchesPreview(res.theme);
           showForgeStatus('✨ Đã trích xuất đủ 14 biến màu kính mờ OKLCH đạt chuẩn tương phản đọc code WCAG AA!', false);
         }).catch((err) => {
+          if (coreDestroyed) return;
           showForgeStatus('⚠️ ' + (err && err.message ? err.message : 'Không thể xử lý ảnh.'), true);
         });
       };
@@ -2159,6 +2221,7 @@
       if (forgeFile) {
         forgeFile.addEventListener('change', (e) => {
           const f = e.target.files && e.target.files[0];
+          e.target.value = '';
           handleForgeFile(f);
         });
       }
@@ -2184,7 +2247,7 @@
       if (forgeCommit) {
         forgeCommit.addEventListener('click', () => {
           if (!modalPendingForged || !modalPendingForged.theme) return;
-          const chosenName = (forgeName && forgeName.value.trim()) || modalPendingForged.suggestedName || '⚒️ Forged Universe';
+          const chosenName = (forgeName && forgeName.value.trim()) || modalPendingForged.suggestedName || '⚒️ Vũ Trụ Mới';
           const chosenFx = (forgeFx && forgeFx.value) || modalPendingForged.fxMode || 'wisteria';
           if (typeof forge.applyCompanionForFxMode === 'function') {
             forge.applyCompanionForFxMode(modalPendingForged.theme, chosenFx);
@@ -2197,7 +2260,7 @@
             modalPendingForgeName = '';
             modalPendingForgeFx = '';
             const badgeEl = document.getElementById('agy-custom-theme-badge');
-            if (badgeEl) badgeEl.textContent = `${THEME_KEYS.length} Presets`;
+            if (badgeEl) badgeEl.textContent = `${THEME_KEYS.length} Chủ đề`;
             applyTheme({
               themeName: saved.name,
               bubbleName: saved.name,
@@ -2214,6 +2277,8 @@
                 nextStatusEl.textContent = '⚠️ Bộ nhớ trình duyệt đã đầy — Theme mới đã được kích hoạt và đồng bộ trực tiếp vào cấu hình chính.';
               }
             }
+          } else {
+            showForgeStatus('⚠️ Tên giao diện không hợp lệ vì lý do bảo mật.', true);
           }
         });
       }
@@ -2226,11 +2291,11 @@
           const saved = forge.registerThemeIntoRegistry(THEMES, THEME_KEYS, preset.name, built);
           if (saved) {
             const badgeEl = document.getElementById('agy-custom-theme-badge');
-            if (badgeEl) badgeEl.textContent = `${THEME_KEYS.length} Presets`;
+            if (badgeEl) badgeEl.textContent = `${THEME_KEYS.length} Chủ đề`;
             applyTheme({
               themeName: saved.name,
               bubbleName: saved.name,
-              masterPersona: preset.personaId || st.masterPersona,
+              masterPersona: normalizeSafeMasterPersona(preset.personaId || st.masterPersona),
               dimming: saved.theme.defaultDimming || 25,
               customWp: '',
               wpEnabled: true
@@ -2274,24 +2339,28 @@
     if (userAvUpload) {
       userAvUpload.addEventListener('change', (e) => {
         const file = e.target.files && e.target.files[0];
+        e.target.value = '';
         if (!file) return;
         compressAvatarFile(file, (dataUrl) => {
+          if (coreDestroyed) return;
           applyTheme({ userAvatar: dataUrl });
-          syncAvPreview(userAvPreview, dataUrl, 'U');
+          syncAvPreview(userAvPreview, dataUrl, 'B');
         });
       });
     }
     if (userAvClear) {
       userAvClear.addEventListener('click', () => {
         applyTheme({ userAvatar: 'none' });
-        syncAvPreview(userAvPreview, '', 'U');
+        syncAvPreview(userAvPreview, '', 'B');
       });
     }
     if (agentAvUpload) {
       agentAvUpload.addEventListener('change', (e) => {
         const file = e.target.files && e.target.files[0];
+        e.target.value = '';
         if (!file) return;
         compressAvatarFile(file, (dataUrl) => {
+          if (coreDestroyed) return;
           applyTheme({ agentAvatar: dataUrl });
           syncAvPreview(agentAvPreview, dataUrl, 'AI');
         });
@@ -2356,20 +2425,20 @@
       }
 
       // Support `.agytheme` ("agytheme/2.0") package format natively
-      if ((parsed.schema && String(parsed.schema).startsWith('agytheme/')) || (parsed.theme && typeof parsed.theme === 'object')) {
+      if ((parsed.schema && String(parsed.schema).startsWith('agytheme/')) || Object.prototype.hasOwnProperty.call(parsed, 'theme')) {
         if (!forge || typeof forge.importAgyThemeObject !== 'function') {
           throw new Error('Mô-đun AI Theme Forge chưa sẵn sàng.');
         }
         const imported = forge.importAgyThemeObject(parsed, THEMES, THEME_KEYS);
         const badgeEl = document.getElementById('agy-custom-theme-badge');
-        if (badgeEl) badgeEl.textContent = `${THEME_KEYS.length} Presets`;
+        if (badgeEl) badgeEl.textContent = `${THEME_KEYS.length} Chủ đề`;
         const nextPatch = {
           themeName: imported.name,
           bubbleName: imported.name,
           customWp: '',
           wpEnabled: true
         };
-        if (imported.masterPersona) nextPatch.masterPersona = imported.masterPersona;
+        if (imported.masterPersona) nextPatch.masterPersona = normalizeSafeMasterPersona(imported.masterPersona);
         if (imported.settings.dimming !== undefined) nextPatch.dimming = imported.settings.dimming;
         if (imported.settings.glassBlur !== undefined) nextPatch.glassBlur = imported.settings.glassBlur;
         if (imported.settings.inputStyle && INPUT_STYLES[imported.settings.inputStyle]) nextPatch.inputStyle = imported.settings.inputStyle;
@@ -2391,7 +2460,7 @@
         allowed.inputStyle = parsed.inputStyle;
       }
       if (typeof parsed.masterPersona === 'string') {
-        allowed.masterPersona = parsed.masterPersona.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) || 'yoriichi';
+        allowed.masterPersona = normalizeSafeMasterPersona(parsed.masterPersona);
       }
       if (typeof parsed.dimming === 'number' && Number.isFinite(parsed.dimming)) {
         allowed.dimming = clampInt(parsed.dimming, 15, 92, 69);
@@ -2432,8 +2501,8 @@
         const json = JSON.stringify(getState(), null, 2);
         if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
           navigator.clipboard.writeText(json).then(() => {
-            exportBtn.textContent = 'Copied ✓';
-            setTimeout(() => { exportBtn.textContent = 'Export JSON'; }, 1500);
+            exportBtn.textContent = 'Đã chép ✓';
+            setTimeout(() => { exportBtn.textContent = 'Xuất JSON'; }, 1500);
           }).catch(() => {
             if (importBox && importText) {
               importBox.style.display = 'flex';
@@ -2457,13 +2526,19 @@
     if (importFile) {
       importFile.addEventListener('change', (e) => {
         const file = e.target.files && e.target.files[0];
+        e.target.value = '';
         if (!file) return;
         if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
           if (importMsg) importMsg.textContent = 'File quá lớn (> 15MB).';
           return;
         }
         const reader = new FileReader();
+        reader.onerror = () => {
+          if (coreDestroyed) return;
+          if (importMsg) importMsg.textContent = 'Không thể đọc tệp đã chọn.';
+        };
         reader.onload = () => {
+          if (coreDestroyed) return;
           try {
             applyImportedJsonString(String(reader.result || ''));
           } catch (err) {
@@ -2555,7 +2630,7 @@
           const curSt = getState();
           const curP = getActiveMasterPersona(curSt);
           const pValid = hasValidMasterPersona(curSt.masterPersona);
-          syncAvPreview(userAvPreview, pValid ? (curP.userAvatar || pickedTh.userAvatar || '') : (pickedTh.userAvatar || curP.userAvatar || ''), 'U');
+          syncAvPreview(userAvPreview, pValid ? (curP.userAvatar || pickedTh.userAvatar || '') : (pickedTh.userAvatar || curP.userAvatar || ''), 'B');
         }
         if (!localStorage.getItem(STORAGE_AGENT_AVATAR)) {
           syncAvPreview(agentAvPreview, pickedTh.agentAvatar || '', 'AI');
@@ -2643,7 +2718,7 @@
     btn.style.cssText = 'text-align: left; background: transparent; border: none; color: inherit; display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 12px; border-radius: 8px; cursor: pointer;';
     btn.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-      <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Custom theme</span>
+      <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Giao diện tùy biến</span>
     `;
 
     row.parentNode.insertBefore(btn, row.nextSibling);
@@ -2680,7 +2755,7 @@
     btn.style.cssText = 'background: linear-gradient(135deg, #e08e55 0%, #b45309 100%); border: 1px solid rgba(251, 191, 36, 0.4); box-shadow: 0 2px 10px rgba(224, 142, 85, 0.3); margin-top: 8px; margin-bottom: 8px; display: inline-flex; align-items: center; gap: 6px;';
     btn.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-      <span>Open Custom Theme Studio</span>
+      <span>Mở Xưởng Giao Diện Tùy Biến</span>
     `;
 
     targetContainer.parentNode.insertBefore(btn, targetContainer.nextSibling);
@@ -3009,6 +3084,7 @@
   }
 
   function syncLiveWallpaperFx(stOverride, themeOverride) {
+    if (coreDestroyed) return;
     const st = stOverride || getEffectiveState();
     const th = themeOverride || THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
     const fxMode = th.fxMode || (th.liveWallpaperFx ? 'wisteria' : '');
@@ -3026,8 +3102,17 @@
     }
 
     teardownLiveWallpaperFx();
-    rt.activeFxMode = fxMode;
 
+    const canvas = document.createElement('canvas');
+    canvas.id = 'agy-live-fx-canvas';
+    canvas.style.cssText = 'width: 100%; height: 100%; display: block; pointer-events: none;';
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      teardownLiveWallpaperFx();
+      return;
+    }
+
+    rt.activeFxMode = fxMode;
     host = document.createElement('agy-live-fx');
     host.id = 'agy-live-fx-host';
     host.setAttribute('aria-hidden', 'true');
@@ -3043,14 +3128,8 @@
       'contain-intrinsic-size: auto none auto 600px'
     ].join(';');
 
-    const canvas = document.createElement('canvas');
-    canvas.id = 'agy-live-fx-canvas';
-    canvas.style.cssText = 'width: 100%; height: 100%; display: block; pointer-events: none;';
     host.appendChild(canvas);
     shell.insertBefore(host, shell.firstChild);
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
 
     let width = 1280;
     let height = 720;
@@ -3385,6 +3464,7 @@
   }
 
   function speakShinobuLine(line, expandIfCollapsed = true) {
+    if (coreDestroyed) return;
     const rt = getShinobuRuntime();
     if (expandIfCollapsed) {
       rt.npcCollapsed = false;
@@ -3412,6 +3492,11 @@
     textEl.textContent = '';
     textEl.dataset.typing = '1';
     rt.typeTimer = setInterval(() => {
+      if (coreDestroyed) {
+        clearInterval(rt.typeTimer);
+        rt.typeTimer = 0;
+        return;
+      }
       idx += 1;
       textEl.textContent = chars.slice(0, idx).join('');
       if (idx >= chars.length) {
@@ -3744,6 +3829,7 @@
   }
 
   function syncShinobuNpc(stOverride, bubbleThemeOverride) {
+    if (coreDestroyed) return;
     const st = stOverride || getEffectiveState();
     const activeBubbleKey = st.bubbleName || st.themeName || DEFAULT_THEME_KEY;
     const bTheme = bubbleThemeOverride || THEMES[activeBubbleKey] || THEMES[DEFAULT_THEME_KEY] || {};
@@ -3881,6 +3967,7 @@
         const now = Date.now();
         if (e.key === 'Enter' && !e.shiftKey) {
           setTimeout(() => {
+            if (coreDestroyed) return;
             if (!rt.npcCollapsed) {
               speakShinobuLine(pickRandomLine('sent', ''), false);
             }
@@ -3931,6 +4018,7 @@
       const safeNpcUserAv = safeCssUrl(
         (personaValid ? (persona.userAvatar || bTheme.userAvatar) : (bTheme.userAvatar || persona.userAvatar)) || ''
       );
+      const safeRingColorAttr = SEC.escapeHtml(SEC.sanitizeCssValue(persona.ringColor, '#fde047'));
 
       wrap.innerHTML = `
         <button type="button" class="agy-npc-badge" title="${safeTitle}">${safeBadge}</button>
@@ -3948,9 +4036,9 @@
             </div>
           </div>
           <div class="agy-npc-user-sent">
-            <span class="agy-npc-user-av" style="${safeNpcUserAv ? `background-image: url(&quot;${safeNpcUserAv}&quot;);` : ''} border-color: ${SEC.sanitizeCssValue(persona.ringColor, '#fde047')};"></span>
+            <span class="agy-npc-user-av" style="${safeNpcUserAv ? `background-image: url(&quot;${SEC.escapeHtml(safeNpcUserAv)}&quot;);` : ''} border-color: ${safeRingColorAttr};"></span>
             <div class="agy-npc-user-col">
-              <span class="agy-npc-user-tag" style="color: ${SEC.sanitizeCssValue(persona.ringColor, '#fde047')};">${safePersonaTag}</span>
+              <span class="agy-npc-user-tag" style="color: ${safeRingColorAttr};">${safePersonaTag}</span>
               <span class="agy-npc-user-msg"></span>
             </div>
           </div>
@@ -4100,6 +4188,11 @@
 
     if (!rt.remindTimer) {
       rt.remindTimer = setInterval(() => {
+        if (coreDestroyed) {
+          clearInterval(rt.remindTimer);
+          rt.remindTimer = 0;
+          return;
+        }
         if (!document.hidden && !rt.npcCollapsed) {
           const curProf = getActiveNpcProfile();
           speakShinobuLine(pickRandomLine('remind', '', curProf), false);
@@ -4109,6 +4202,7 @@
   }
 
   function syncTokenHud(stOverride) {
+    if (coreDestroyed) return;
     const st = stOverride || getEffectiveState();
     const mainTheme = THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
     const activeKey = st.bubbleName || st.themeName || DEFAULT_THEME_KEY;
@@ -4228,6 +4322,7 @@
   }
 
   function tick() {
+    if (coreDestroyed) return;
     injectMainSidebarButton();
     injectSettingsModalButton();
     hookSidebarScroll();
@@ -4238,10 +4333,10 @@
   }
 
   function scheduleTick() {
-    if (window.__AGY_TICK_RAF__) return;
+    if (coreDestroyed || window.__AGY_TICK_RAF__) return;
     window.__AGY_TICK_RAF__ = requestAnimationFrame(() => {
       window.__AGY_TICK_RAF__ = 0;
-      tick();
+      if (!coreDestroyed) tick();
     });
   }
 
@@ -4282,7 +4377,7 @@
   }
 
   const INTERNAL_ENGINE_MUTATION_SELECTOR =
-    '#agy-token-context-bar, #agy-yoriichi-msg-echo, #agy-shinobu-npc-wrap, #agy-chibi-skill-bar, agy-chibi-aura, agy-hashira-squad, agy-skill-vfx, agy-live-fx, #agy-live-fx-host, #agy-cinema-director-panel, #agy-cinema-privacy-badge, #agy-cinema-stage-banner, #agy-cinema-metsu-seal, #agy-cinema-red-blade-crest, #agy-kny-bio-audio-popover, #agy-kny-circadian-toast, agy-circadian-veil, #agy-kny-dawn-glow-layer, #agy-metsu-victory-overlay, .agy-kasugai-crow-flyby, #agy-custom-theme-modal-backdrop';
+    '#agy-token-context-bar, #agy-yoriichi-msg-echo, #agy-shinobu-npc-wrap, agy-chibi-aura, agy-hashira-squad, agy-skill-vfx, agy-live-fx, #agy-live-fx-host, #agy-cinema-director-panel, #agy-cinema-privacy-badge, #agy-cinema-stage-banner, #agy-cinema-metsu-seal, #agy-cinema-red-blade-crest, #agy-kny-bio-audio-popover, #agy-kny-circadian-toast, agy-circadian-veil, #agy-kny-dawn-glow-layer, #agy-metsu-victory-overlay, .agy-kasugai-crow-flyby, #agy-custom-theme-modal-backdrop';
 
   function isInternalEngineMutation(m) {
     const t = m && m.target;
