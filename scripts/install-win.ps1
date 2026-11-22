@@ -25,47 +25,88 @@ if ($NodeMajor -lt 22) {
     Write-Error "Node.js >= 22 is required (found v$NodeVersionFull at $NodeExe). Please upgrade Node.js to >= 22."
 }
 
-if (-not (Test-Path -LiteralPath $PayloadJs)) {
-    Write-Host "[install-win] Building dist/theme_payload.js via Node.js..."
+Write-Host "[install-win] Building fresh dist/theme_payload.js via Node.js..."
+$PayloadBuilt = $false
+try {
     & $NodeExe $BuildNode
-    if (($LASTEXITCODE -ne 0) -or (-not (Test-Path -LiteralPath $PayloadJs))) {
-        $PyCmd = Get-Command python -ErrorAction SilentlyContinue | Where-Object { $_.Source -notmatch 'WindowsApps' } | Select-Object -First 1
-        if (-not $PyCmd) {
-            $PyCmd = Get-Command python3 -ErrorAction SilentlyContinue | Where-Object { $_.Source -notmatch 'WindowsApps' } | Select-Object -First 1
-        }
-        if ($PyCmd) {
-            Write-Host "[install-win] Node build failed, falling back to Python builder..."
-            & $PyCmd.Source $BuildPy
-        }
+    if (($LASTEXITCODE -eq 0) -and (Test-Path -LiteralPath $PayloadJs)) {
+        $PayloadBuilt = $true
     }
-    if (-not (Test-Path -LiteralPath $PayloadJs)) {
-        Write-Error "Failed to build dist/theme_payload.js."
+} catch {
+    $PayloadBuilt = $false
+}
+if (-not $PayloadBuilt) {
+    $PyCmd = Get-Command python -ErrorAction SilentlyContinue | Where-Object { $_.Source -notmatch 'WindowsApps' } | Select-Object -First 1
+    if (-not $PyCmd) {
+        $PyCmd = Get-Command python3 -ErrorAction SilentlyContinue | Where-Object { $_.Source -notmatch 'WindowsApps' } | Select-Object -First 1
+    }
+    if ($PyCmd) {
+        Write-Host "[install-win] Node build failed, falling back to Python builder..."
+        try {
+            & $PyCmd.Source $BuildPy
+            if (($LASTEXITCODE -eq 0) -and (Test-Path -LiteralPath $PayloadJs)) {
+                $PayloadBuilt = $true
+            }
+        } catch {
+            $PayloadBuilt = $false
+        }
     }
 }
+if (-not $PayloadBuilt) {
+    Write-Error "Failed to build dist/theme_payload.js."
+}
+
+function Test-VerifiedDaemonPid([int]$TargetPid) {
+    if ($TargetPid -le 0 -or $TargetPid -eq $PID) { return $false }
+    try {
+        $CimProc = Get-CimInstance Win32_Process -Filter "ProcessId = $TargetPid" -ErrorAction Stop
+        if ($CimProc -and ($CimProc.Name -imatch '^node(?:js|\d+)?(?:\.exe)?$') -and $CimProc.CommandLine -and ($CimProc.CommandLine -imatch 'theme_daemon\.js')) {
+            return $true
+        }
+        return $false
+    } catch {
+        try {
+            $WmicText = (& wmic.exe process where "ProcessId=$TargetPid" get Name,CommandLine /FORMAT:LIST 2>$null | Out-String)
+            if ($WmicText -and ($WmicText -imatch '\bnode(?:js|\d+)?(?:\.exe)?\b') -and ($WmicText -imatch 'theme_daemon\.js')) {
+                return $true
+            }
+        } catch {}
+        return $false
+    }
+}
+
+$StoppedPids = @{}
 
 if (Test-Path -LiteralPath $PidFile) {
     $OldPidText = (Get-Content -LiteralPath $PidFile -ErrorAction SilentlyContinue | Select-Object -First 1)
     $OldPid = 0
     if ([int]::TryParse(($OldPidText -as [string]), [ref]$OldPid) -and $OldPid -gt 0) {
-        $ExistingProc = Get-Process -Id $OldPid -ErrorAction SilentlyContinue
-        if ($ExistingProc -and $ExistingProc.ProcessName -imatch '^node(?:js|\d+)?$') {
-            $IsDaemonCmd = $true
-            try {
-                $CimProc = Get-CimInstance Win32_Process -Filter "ProcessId = $OldPid" -ErrorAction Stop
-                if ($CimProc -and $CimProc.CommandLine -and ($CimProc.CommandLine -notmatch 'theme_daemon\.js')) {
-                    $IsDaemonCmd = $false
-                }
-            } catch {
-                $IsDaemonCmd = $true
-            }
-            if ($IsDaemonCmd) {
-                Write-Host "[install-win] Stopping existing daemon (PID $OldPid)..."
-                Stop-Process -Id $OldPid -Force -ErrorAction SilentlyContinue
-                Start-Sleep -Milliseconds 350
-            }
+        if (Test-VerifiedDaemonPid $OldPid) {
+            Write-Host "[install-win] Stopping existing daemon (PID $OldPid)..."
+            Stop-Process -Id $OldPid -Force -ErrorAction SilentlyContinue
+            $StoppedPids[$OldPid] = $true
+            Start-Sleep -Milliseconds 350
         }
     }
     Remove-Item -LiteralPath $PidFile -Force -ErrorAction SilentlyContinue
+}
+
+# Also sweep orphan node processes running this exact $DaemonJs path if daemon.pid was lost
+try {
+    $NodeProcs = Get-CimInstance Win32_Process -Filter "Name LIKE 'node%'" -ErrorAction Stop
+    foreach ($Proc in $NodeProcs) {
+        $CandPid = [int]$Proc.ProcessId
+        if ($CandPid -gt 0 -and $CandPid -ne $PID -and (-not $StoppedPids.ContainsKey($CandPid)) -and $Proc.CommandLine) {
+            if ($Proc.CommandLine.IndexOf($DaemonJs, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                Write-Host "[install-win] Stopping orphan daemon process (PID $CandPid)..."
+                Stop-Process -Id $CandPid -Force -ErrorAction SilentlyContinue
+                $StoppedPids[$CandPid] = $true
+                Start-Sleep -Milliseconds 250
+            }
+        }
+    }
+} catch {
+    # Fail-closed: never blindly terminate user node.exe processes if WMI/CIM is unavailable
 }
 
 # Generate silent-start.vbs using UTF-16LE with BOM ([System.Text.Encoding]::Unicode)

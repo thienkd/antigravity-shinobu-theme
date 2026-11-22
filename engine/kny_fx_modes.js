@@ -1024,8 +1024,8 @@
         pools: [pollen, petals, butterflies],
         onResize(nw, nh, sx, sy) {
           for (let i = 0; i < butterflies.length; i++) {
-            butterflies[i].tx *= sx;
-            butterflies[i].ty *= sy;
+            butterflies[i].tx = clamp(butterflies[i].tx * sx, 0, nw);
+            butterflies[i].ty = clamp(butterflies[i].ty * sy, 0, nh);
           }
         },
         drawStatic,
@@ -1194,6 +1194,13 @@
             const yFloat = Math.sin(now * 0.00038 + mp.phase) * 8;
             if (mp.x - mp.rx > width + 40) {
               mp.x = -mp.rx - 20;
+            } else if (mp.x + mp.rx < -40) {
+              mp.x = width + mp.rx + 20;
+            }
+            if (mp.y + mp.ry < -40) {
+              mp.y = height * 0.14;
+            } else if (mp.y - mp.ry > height + 40) {
+              mp.y = height * 0.86;
             }
             const breathe = mp.baseAlpha * (0.85 + 0.15 * Math.sin(now * 0.00055 + mp.phase));
             drawVolumetricMistPuff(ctx, mp.x, mp.y + yFloat, mp.rx, mp.ry, mp.rgb, breathe);
@@ -1204,6 +1211,7 @@
             const m = dewMotes[i];
             m.x += m.vx * dt;
             m.y += (m.vy + Math.sin(now * 0.0009 + m.phase) * 0.04) * dt;
+            if (m.x < -10) m.x = width + 10;
             if (m.x > width + 10) m.x = -10;
             if (m.y < -10) m.y = height + 10;
             if (m.y > height + 10) m.y = -10;
@@ -1224,8 +1232,11 @@
             if (lf.y > height + 18) {
               lf.y = -16;
               lf.x = edgeWeightedFrac(seededFrac(i + Math.floor(now * 0.0007), 83, 17)) * width;
+            } else if (lf.y < -22) {
+              lf.y = height + 16;
             }
             if (lf.x > width + 22) lf.x = -20;
+            else if (lf.x < -22) lf.x = width + 20;
 
             if (lf.isGinkgo) {
               drawGinkgoLeaf(ctx, lf.x, lf.y, lf.r, lf.rot, lf.flip, lf.rgb, lf.alpha, lf.layer);
@@ -1559,6 +1570,7 @@
       for (let i = 0; i < 8; i++) {
         const side = i % 2 === 0 ? -1 : 1;
         marginBokeh.push({
+          side,
           x: strictMarginX(seededFrac(i, 71, 19), side, initW),
           y: (0.12 + seededFrac(i, 83, 11) * 0.78) * initH,
           r: 18 + seededFrac(i, 43, 7) * 26,
@@ -1592,7 +1604,13 @@
             b.y += b.vy * dt;
             const swayX = Math.sin(now * 0.0006 + b.phase) * 0.08;
             b.x += swayX * dt;
-            if (b.y < -b.r * 2) b.y = height + b.r * 2;
+            if (b.y < -b.r * 2 || b.y > height + b.r * 2 || b.x < -b.r * 2 || b.x > width + b.r * 2) {
+              const u = seededFrac(i + Math.floor(now * 0.0007), 71, 19);
+              b.x = strictMarginX(u, b.side || (i % 2 === 0 ? -1 : 1), width);
+              if (b.y < -b.r * 2) b.y = height + b.r * 1.8;
+              else if (b.y > height + b.r * 2) b.y = -b.r * 1.8;
+              else b.y = clamp(b.y, 0, height);
+            }
             const pulse = 0.80 + 0.20 * Math.sin(now * 0.0011 + b.phase);
             drawOpticalBokeh(ctx, b.x, b.y, b.r, b.rgb, b.alpha * pulse);
           }
@@ -1608,7 +1626,7 @@
             p.rot += (p.vrot + flutter * 0.004) * dt;
             p.flip += p.vflip * dt;
 
-            if (p.y > height + 20 || p.x < -28) {
+            if (p.y > height + 20 || p.x < -28 || p.x > width + 28 || p.y < -28) {
               const u = seededFrac(i + Math.floor(now * 0.0009), 89, 17);
               if (p.layer === 2) {
                 p.x = strictMarginX(u, i % 2 === 0 ? -1 : 1, width);
@@ -1650,12 +1668,16 @@
       for (let i = 0; i < 22; i++) {
         const isEmerald = i % 2 === 0;
         const isBokeh = i < 3;
+        let initVy = (seededFrac(i, 53, 13) - 0.55) * 0.15;
+        if (Math.abs(initVy) < 0.045) {
+          initVy = (initVy < 0 ? -1 : 1) * 0.055;
+        }
         fireflies.push({
           x: isBokeh ? strictMarginX(seededFrac(i, 79, 17), i % 2 === 0 ? -1 : 1, initW) : edgeWeightedFrac(seededFrac(i, 79, 17)) * initW,
           y: (0.14 + seededFrac(i, 97, 23) * 0.80) * initH,
           r: isBokeh ? (15 + i * 4) : (1.1 + seededFrac(i, 43, 11) * 1.6),
           vx: (seededFrac(i, 31, 7) - 0.5) * 0.18,
-          vy: (seededFrac(i, 53, 13) - 0.55) * 0.15,
+          vy: initVy,
           phase: seededFrac(i, 67, 29) * TWO_PI,
           pulseSpeed: 0.0012 + seededFrac(i, 37, 5) * 0.0010,
           haloRgb: isEmerald ? '52, 211, 153' : '192, 132, 252',
@@ -1703,8 +1725,13 @@
 
             if (f.x < -18) f.x = width + 18;
             if (f.x > width + 18) f.x = -18;
-            if (f.y < height * 0.06) f.vy = Math.abs(f.vy);
-            if (f.y > height * 0.96) f.vy = -Math.abs(f.vy);
+            if (f.y < height * 0.06) {
+              f.y = height * 0.06;
+              f.vy = Math.max(0.045, Math.abs(f.vy));
+            } else if (f.y > height * 0.96) {
+              f.y = height * 0.96;
+              f.vy = -Math.max(0.045, Math.abs(f.vy));
+            }
 
             // Natural firefly glow curve: smooth swell with calm dark rest
             const rawWave = 0.5 + 0.5 * Math.sin(now * f.pulseSpeed + f.phase);
@@ -1959,7 +1986,11 @@
             if (m.y < -12) {
               m.y = height + 10;
               m.x = edgeWeightedFrac(seededFrac(i + Math.floor(now * 0.0008), 89, 29)) * width;
+            } else if (m.y > height + 16) {
+              m.y = -10;
             }
+            if (m.x < -14) m.x = width + 14;
+            if (m.x > width + 14) m.x = -14;
             const vEnv = clamp(Math.min(m.y / (height * 0.16), (height - m.y + 20) / 60), 0.1, 1);
             const calmPulse = 0.72 + 0.28 * Math.sin(now * 0.0012 + m.phase);
             drawGlowMote(ctx, m.x, m.y, m.r, m.rgb, '255, 251, 235', 0.22 * vEnv * calmPulse, 3.0);
@@ -1978,7 +2009,11 @@
               lf.y = -16;
               const u = seededFrac(i + Math.floor(now * 0.0007), 79, 13);
               lf.x = lf.layer === 2 ? strictMarginX(u, i % 2 === 0 ? -1 : 1, width) : edgeWeightedFrac(u) * width;
+            } else if (lf.y < -22) {
+              lf.y = height + 16;
             }
+            if (lf.x < -22) lf.x = width + 20;
+            if (lf.x > width + 22) lf.x = -20;
             drawGinkgoLeaf(ctx, lf.x, lf.y, lf.r, lf.rot, lf.flip, lf.rgb, lf.alpha, lf.layer);
           }
 
@@ -2056,6 +2091,7 @@
             if (b.x < -b.r) b.x = width + b.r;
             if (b.x > width + b.r) b.x = -b.r;
             if (b.y < -b.r) b.y = height + b.r;
+            if (b.y > height + b.r) b.y = -b.r;
 
             const breathe = 0.72 + 0.28 * Math.sin(now * 0.0010 + b.phase);
             const a = b.baseAlpha * breathe * centerAttenuation(b.x, width);
@@ -2071,6 +2107,8 @@
             if (g.y > height + 12) {
               g.y = -10;
               g.x = edgeWeightedFrac(seededFrac(i + Math.floor(now * 0.0009), 83, 29)) * width;
+            } else if (g.y < -14) {
+              g.y = height + 10;
             }
             if (g.x < -12) g.x = width + 12;
             if (g.x > width + 12) g.x = -12;
@@ -2167,6 +2205,13 @@
               f.y = height + 12;
               const u = seededFrac(i + Math.floor(now * 0.0009), 79, 13);
               f.x = f.isBokeh ? strictMarginX(u, i % 2 === 0 ? -1 : 1, width) : edgeWeightedFrac(u) * width;
+            } else if (f.y > height + 20) {
+              f.y = -12;
+            }
+            if (f.x < -20) {
+              f.x = f.isBokeh ? strictMarginX(0.5, -1, width) : (width + 18);
+            } else if (f.x > width + 20) {
+              f.x = f.isBokeh ? strictMarginX(0.5, 1, width) : -18;
             }
             const pulse = 0.45 + 0.55 * Math.pow(0.5 + 0.5 * Math.sin(now * 0.0017 + f.phase), 1.5);
             if (f.isBokeh) {
@@ -2189,8 +2234,11 @@
             if (lf.y > height + 18) {
               lf.y = -16;
               lf.x = edgeWeightedFrac(seededFrac(i + Math.floor(now * 0.0008), 83, 17)) * width;
+            } else if (lf.y < -22) {
+              lf.y = height + 16;
             }
             if (lf.x < -20) lf.x = width + 18;
+            else if (lf.x > width + 20) lf.x = -18;
             drawBambooLeaf(ctx, lf.x, lf.y, lf.r, lf.rot, lf.flip, lf.rgb, lf.alpha, lf.layer);
           }
 
@@ -2277,8 +2325,8 @@
           for (let i = 0; i < floorMist.length; i++) {
             const fm = floorMist[i];
             fm.x += fm.vx * dt;
-            if (fm.vx > 0 && fm.x - fm.rx > width + 20) fm.x = -fm.rx;
-            if (fm.vx < 0 && fm.x + fm.rx < -20) fm.x = width + fm.rx;
+            if (fm.x - fm.rx > width + 20) fm.x = -fm.rx;
+            else if (fm.x + fm.rx < -20) fm.x = width + fm.rx;
             const a = fm.alpha * (0.84 + 0.16 * Math.sin(now * 0.0007 + fm.phase));
             drawVolumetricMistPuff(ctx, fm.x, height * fm.yRatio, fm.rx, fm.ry, fm.rgb, a);
           }
@@ -2288,7 +2336,9 @@
             m.x += (m.vx * mountainDraft + Math.sin(now * 0.0012 + m.phase) * 0.10) * dt;
             m.y += (m.vy + Math.cos(now * 0.0010 + m.phase) * 0.06) * dt;
             if (m.x > width + 14) m.x = -14;
+            else if (m.x < -14) m.x = width + 14;
             if (m.y < -14) m.y = height + 14;
+            else if (m.y > height + 14) m.y = -14;
             const glint = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(now * 0.0020 + m.phase));
             drawGlowMote(ctx, m.x, m.y, m.r, m.rgb, '240, 249, 255', 0.21 * glint, 2.9);
           }
@@ -2302,7 +2352,7 @@
             p.y += (p.vy + sway) * dt;
             p.rot += p.vrot * dt;
             p.flip += p.vflip * dt;
-            if (p.x > width + 22 || p.y > height + 22) {
+            if (p.x > width + 22 || p.y > height + 22 || p.x < -24 || p.y < -24) {
               const u = seededFrac(i + Math.floor(now * 0.0009), 83, 11);
               if (u < 0.5) {
                 p.x = -18;
@@ -2390,6 +2440,13 @@
               e.y = height + 16;
               const u = seededFrac(i + Math.floor(now * 0.001), 79, 17);
               e.x = e.layer === 2 ? strictMarginX(u, i % 2 === 0 ? -1 : 1, width) : edgeWeightedFrac(u) * width;
+            } else if (e.y > height + 24) {
+              e.y = -16;
+            }
+            if (e.x < -20) {
+              e.x = e.layer === 2 ? strictMarginX(0.5, -1, width) : (width + 18);
+            } else if (e.x > width + 20) {
+              e.x = e.layer === 2 ? strictMarginX(0.5, 1, width) : -18;
             }
             const flicker = 0.68 + 0.32 * Math.sin(now * 0.0032 + e.phase);
             const att = centerAttenuation(e.x, width);
@@ -2563,10 +2620,20 @@
           const pool = scene.pools[p];
           for (let i = 0; i < pool.length; i++) {
             const item = pool[i];
-            if (typeof item.x === 'number') item.x *= sx;
-            if (typeof item.y === 'number') item.y *= sy;
-            if (typeof item.baseX === 'number') item.baseX *= sx;
-            if (typeof item.baseY === 'number') item.baseY *= sy;
+            const marginX = Math.max(80, (item.rx || item.r || item.r0 || item.len || 24) * 1.2);
+            const marginY = Math.max(80, (item.ry || item.r || item.r0 || 24) * 1.2);
+            if (typeof item.x === 'number') {
+              item.x = clamp(item.x * sx, -marginX, nw + marginX);
+            }
+            if (typeof item.y === 'number') {
+              item.y = clamp(item.y * sy, -marginY, nh + marginY);
+            }
+            if (typeof item.baseX === 'number') {
+              item.baseX = clamp(item.baseX * sx, -marginX, nw + marginX);
+            }
+            if (typeof item.baseY === 'number') {
+              item.baseY = clamp(item.baseY * sy, -marginY, nh + marginY);
+            }
           }
         }
       }

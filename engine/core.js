@@ -1,7 +1,12 @@
 (() => {
+  if (typeof window !== 'undefined' && typeof window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__ === 'function') {
+    try { window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__(); } catch (_) {}
+  }
+
   const SEC = (typeof __AGY_SEC__ === 'object' && __AGY_SEC__) ? __AGY_SEC__ : {
     getAssetBase: () => '',
     getInitialConfig: () => null,
+    isSyncFromDaemon: () => false,
     saveConfigSecure: () => false,
     escapeHtml: (raw) => String(raw == null ? '' : raw).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])),
     stripProtoKeys: (obj) => obj,
@@ -19,6 +24,10 @@
 
   let transientOverrideState = null;
   let blurSliderDebounceTimer = 0;
+  let prebakeReqSeq = 0;
+  let modalPendingForged = null;
+  let modalPendingForgeName = '';
+  let modalPendingForgeFx = '';
 
   function isValidImageUploadFile(file) {
     return Boolean(
@@ -53,24 +62,19 @@
     const trimmed = raw.trim();
     if (!trimmed) return '';
 
-    // Normalize SVG data URIs through sanitizeSvgMarkup -> strict percent-encoded URI so __AGY_SEC__.sanitizeCssUrl passes 100%
-    if (/^data:image\/svg\+xml,/i.test(trimmed)) {
+    // Normalize SVG data URIs (including ;charset=utf-8 / ;utf8 / ;base64) through sanitizeSvgMarkup -> strict percent-encoded URI
+    const svgDataMatch = trimmed.match(/^data:image\/svg\+xml(?:;charset=[A-Za-z0-9_-]+|;utf8)?(;base64)?,/i);
+    if (svgDataMatch) {
       try {
-        const decoded = decodeURIComponent(trimmed.slice(trimmed.indexOf(',') + 1));
-        const cleanSvg = SEC.sanitizeSvgMarkup(decoded);
-        if (!cleanSvg) return '';
-        return SEC.sanitizeCssUrl(`data:image/svg+xml,${strictPercentEncodeSvg(cleanSvg)}`);
-      } catch (_) {
-        return '';
-      }
-    }
-
-    if (/^data:image\/svg\+xml;base64,/i.test(trimmed)) {
-      try {
-        const b64 = trimmed.slice(trimmed.indexOf(',') + 1);
-        const bin = typeof atob === 'function' ? atob(b64) : '';
-        const utf8 = decodeURIComponent(Array.from(bin).map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join(''));
-        const cleanSvg = SEC.sanitizeSvgMarkup(utf8);
+        const body = trimmed.slice(svgDataMatch[0].length);
+        let decodedSvg = '';
+        if (svgDataMatch[1]) {
+          const bin = typeof atob === 'function' ? atob(body) : '';
+          decodedSvg = decodeURIComponent(Array.from(bin).map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join(''));
+        } else {
+          decodedSvg = decodeURIComponent(body);
+        }
+        const cleanSvg = SEC.sanitizeSvgMarkup(decodedSvg);
         if (!cleanSvg) return '';
         return SEC.sanitizeCssUrl(`data:image/svg+xml,${strictPercentEncodeSvg(cleanSvg)}`);
       } catch (_) {
@@ -148,35 +152,127 @@
     return Math.min(max, Math.max(min, parsed));
   }
 
+  // Multi-window synchronization: when daemon re-injects secondary windows after a config save,
+  // hydrate localStorage from initialConfig before rendering so every open window stays in sync.
+  if (SEC && typeof SEC.isSyncFromDaemon === 'function' && SEC.isSyncFromDaemon()) {
+    try {
+      const syncCfg = SEC.getInitialConfig();
+      if (syncCfg && typeof syncCfg === 'object') {
+        if (typeof syncCfg.themeName === 'string' && THEMES[syncCfg.themeName]) {
+          localStorage.setItem(STORAGE_THEME, syncCfg.themeName);
+        }
+        if (typeof syncCfg.bubbleName === 'string' && THEMES[syncCfg.bubbleName]) {
+          localStorage.setItem(STORAGE_BUBBLE, syncCfg.bubbleName);
+        }
+        if (typeof syncCfg.inputStyle === 'string' && INPUT_STYLES[syncCfg.inputStyle]) {
+          localStorage.setItem(STORAGE_INPUT, syncCfg.inputStyle);
+        }
+        if (typeof syncCfg.dimming === 'number' && Number.isFinite(syncCfg.dimming)) {
+          localStorage.setItem(STORAGE_DIMMING, String(clampInt(syncCfg.dimming, 15, 92, 69)));
+        }
+        if (typeof syncCfg.wpEnabled === 'boolean') {
+          localStorage.setItem(STORAGE_WP_ENABLED, String(syncCfg.wpEnabled));
+        }
+        if (typeof syncCfg.transparentWorld === 'boolean') {
+          localStorage.setItem(STORAGE_TRANSPARENT_WORLD, String(syncCfg.transparentWorld));
+        }
+        if (typeof syncCfg.masterPersona === 'string' && syncCfg.masterPersona) {
+          const cleanP = syncCfg.masterPersona.replace(/[^a-zA-Z0-9_-]/g, '') || 'yoriichi';
+          localStorage.setItem(STORAGE_MASTER_PERSONA, cleanP);
+        }
+        if (typeof syncCfg.userAvatar === 'string') {
+          localStorage.setItem(STORAGE_USER_AVATAR, syncCfg.userAvatar === 'none' ? 'none' : (syncCfg.userAvatar ? resolveAssetUrl(syncCfg.userAvatar) : ''));
+        }
+        if (typeof syncCfg.agentAvatar === 'string') {
+          localStorage.setItem(STORAGE_AGENT_AVATAR, syncCfg.agentAvatar === 'none' ? 'none' : (syncCfg.agentAvatar ? resolveAssetUrl(syncCfg.agentAvatar) : ''));
+        }
+        if (typeof syncCfg.glassBlur === 'number' && Number.isFinite(syncCfg.glassBlur)) {
+          localStorage.setItem(STORAGE_GLASS_BLUR, String(clampInt(syncCfg.glassBlur, 0, 16, 0)));
+        }
+        if (typeof syncCfg.avatarSize === 'number' && Number.isFinite(syncCfg.avatarSize)) {
+          localStorage.setItem(STORAGE_AVATAR_SIZE, String(clampInt(syncCfg.avatarSize, 22, 52, 32)));
+        }
+        if (typeof syncCfg.avatarRadius === 'number' && Number.isFinite(syncCfg.avatarRadius)) {
+          localStorage.setItem(STORAGE_AVATAR_RADIUS, String(clampInt(syncCfg.avatarRadius, 0, 50, 50)));
+        }
+        if (typeof syncCfg.customWp === 'string') {
+          try {
+            localStorage.setItem(STORAGE_CUSTOM_WP, syncCfg.customWp ? resolveAssetUrl(syncCfg.customWp) : '');
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+
   function getState() {
     const init = SEC.getInitialConfig() || {};
-    const rawTheme = localStorage.getItem(STORAGE_THEME) || init.themeName || DEFAULT_THEME_KEY;
+    const storedTheme = localStorage.getItem(STORAGE_THEME);
+    const rawTheme = (storedTheme !== null && storedTheme !== '') ? storedTheme : (init.themeName || DEFAULT_THEME_KEY);
     const themeName = THEMES[rawTheme] ? rawTheme : DEFAULT_THEME_KEY;
-    const rawBubble = localStorage.getItem(STORAGE_BUBBLE) || init.bubbleName || themeName;
+
+    const storedBubble = localStorage.getItem(STORAGE_BUBBLE);
+    const rawBubble = (storedBubble !== null && storedBubble !== '') ? storedBubble : (init.bubbleName || themeName);
     const bubbleName = THEMES[rawBubble] ? rawBubble : themeName;
-    const rawInput = localStorage.getItem(STORAGE_INPUT) || init.inputStyle || 'sync';
+
+    const storedInput = localStorage.getItem(STORAGE_INPUT);
+    const rawInput = (storedInput !== null && storedInput !== '') ? storedInput : (init.inputStyle || 'sync');
     const inputStyle = INPUT_STYLES[rawInput] ? rawInput : 'sync';
-    const presetDefaultDim = THEMES[themeName]?.defaultDimming !== undefined ? THEMES[themeName].defaultDimming : 69;
-    const dimming = clampInt(localStorage.getItem(STORAGE_DIMMING) ?? init.dimming ?? presetDefaultDim, 15, 92, 69);
-    const wpEnabled = localStorage.getItem(STORAGE_WP_ENABLED) !== null
-      ? localStorage.getItem(STORAGE_WP_ENABLED) !== 'false'
+
+    const activeThemeCfg = THEMES[themeName] || {};
+    const presetDefaultDim = activeThemeCfg.defaultDimming !== undefined ? activeThemeCfg.defaultDimming : 69;
+    const storedDim = localStorage.getItem(STORAGE_DIMMING);
+    const rawDim = (storedDim !== null && storedDim !== '') ? storedDim : (init.dimming ?? presetDefaultDim);
+    const dimming = clampInt(rawDim, 15, 92, 69);
+
+    const storedWpEnabled = localStorage.getItem(STORAGE_WP_ENABLED);
+    const wpEnabled = storedWpEnabled !== null
+      ? storedWpEnabled !== 'false'
       : (init.wpEnabled !== undefined ? Boolean(init.wpEnabled) : true);
-    const rawCustomWp = localStorage.getItem(STORAGE_CUSTOM_WP) || init.customWp || '';
+
+    const storedCustomWp = localStorage.getItem(STORAGE_CUSTOM_WP);
+    const rawCustomWp = storedCustomWp !== null ? storedCustomWp : (init.customWp ?? '');
     const customWp = rawCustomWp ? resolveAssetUrl(rawCustomWp) : '';
-    const rawUserAv = localStorage.getItem(STORAGE_USER_AVATAR) ?? init.userAvatar ?? '';
+
+    const storedUserAv = localStorage.getItem(STORAGE_USER_AVATAR);
+    const rawUserAv = storedUserAv !== null ? storedUserAv : (init.userAvatar ?? '');
     const userAvatar = rawUserAv === 'none' ? 'none' : (rawUserAv ? resolveAssetUrl(rawUserAv) : '');
-    const rawAgentAv = localStorage.getItem(STORAGE_AGENT_AVATAR) ?? init.agentAvatar ?? '';
+
+    const storedAgentAv = localStorage.getItem(STORAGE_AGENT_AVATAR);
+    const rawAgentAv = storedAgentAv !== null ? storedAgentAv : (init.agentAvatar ?? '');
     const agentAvatar = rawAgentAv === 'none' ? 'none' : (rawAgentAv ? resolveAssetUrl(rawAgentAv) : '');
-    const rawBlur = localStorage.getItem(STORAGE_GLASS_BLUR) ?? init.glassBlur;
-    const glassBlur = rawBlur !== undefined && rawBlur !== null && rawBlur !== '' ? clampInt(rawBlur, 0, 16, 0) : 0;
-    const rawAvSize = localStorage.getItem(STORAGE_AVATAR_SIZE) ?? init.avatarSize;
+
+    const storedBlur = localStorage.getItem(STORAGE_GLASS_BLUR);
+    let glassBlur;
+    if (storedBlur !== null && storedBlur !== '') {
+      glassBlur = clampInt(storedBlur, 0, 16, 0);
+    } else if (init.glassBlur !== undefined && init.glassBlur !== null && init.glassBlur !== '') {
+      glassBlur = clampInt(init.glassBlur, 0, 16, 0);
+    } else {
+      const parsedHeaderBlur = parseFloat(activeThemeCfg.headerBlur);
+      if (Number.isFinite(parsedHeaderBlur)) {
+        glassBlur = clampInt(Math.round(parsedHeaderBlur), 0, 16, 3);
+      } else {
+        glassBlur = activeThemeCfg.unifiedGlass === false ? 0 : 3;
+      }
+    }
+
+    const storedAvSize = localStorage.getItem(STORAGE_AVATAR_SIZE);
+    const rawAvSize = (storedAvSize !== null && storedAvSize !== '') ? storedAvSize : init.avatarSize;
     const avatarSize = rawAvSize !== undefined && rawAvSize !== null && rawAvSize !== '' ? clampInt(rawAvSize, 22, 52, 32) : 32;
-    const rawAvRad = localStorage.getItem(STORAGE_AVATAR_RADIUS) ?? init.avatarRadius;
+
+    const storedAvRad = localStorage.getItem(STORAGE_AVATAR_RADIUS);
+    const rawAvRad = (storedAvRad !== null && storedAvRad !== '') ? storedAvRad : init.avatarRadius;
     const avatarRadius = rawAvRad !== undefined && rawAvRad !== null && rawAvRad !== '' ? clampInt(rawAvRad, 0, 50, 50) : 50;
-    const transparentWorld = localStorage.getItem(STORAGE_TRANSPARENT_WORLD) !== null
-      ? localStorage.getItem(STORAGE_TRANSPARENT_WORLD) !== 'false'
+
+    const storedTw = localStorage.getItem(STORAGE_TRANSPARENT_WORLD);
+    const transparentWorld = storedTw !== null
+      ? storedTw !== 'false'
       : (init.transparentWorld !== undefined ? Boolean(init.transparentWorld) : true);
-    const masterPersona = String(localStorage.getItem(STORAGE_MASTER_PERSONA) || init.masterPersona || 'yoriichi').replace(/[^a-zA-Z0-9_-]/g, '') || 'yoriichi';
+
+    const storedPersona = localStorage.getItem(STORAGE_MASTER_PERSONA);
+    const rawPersona = (storedPersona !== null && storedPersona !== '') ? storedPersona : (init.masterPersona || 'yoriichi');
+    const masterPersona = String(rawPersona).replace(/[^a-zA-Z0-9_-]/g, '') || 'yoriichi';
+
     return {
       themeName,
       bubbleName,
@@ -235,7 +331,7 @@
     reader.readAsDataURL(file);
   }
 
-  // Validate and re-encode custom wallpaper uploads safely (<= 15MB, PNG/JPEG/WebP/GIF, never passes raw untrusted data URL on error)
+  // Validate and adaptively step-down custom wallpaper uploads (< ~1.1MB Base64, <= 15MB source, PNG/JPEG/WebP/GIF)
   function compressWallpaperFile(file, callback) {
     if (!isValidImageUploadFile(file)) return;
     const reader = new FileReader();
@@ -244,23 +340,46 @@
       const img = new Image();
       img.onload = () => {
         try {
-          const maxW = 2560;
-          const maxH = 1440;
+          if (typeof window !== 'undefined' && window.__AGY_THEME_FORGE__ && typeof window.__AGY_THEME_FORGE__.compressBackdropToDataUrl === 'function') {
+            const forgedCompressed = safeCssUrl(window.__AGY_THEME_FORGE__.compressBackdropToDataUrl(img));
+            if (forgedCompressed) {
+              callback(forgedCompressed);
+              return;
+            }
+          }
           const natW = Math.max(1, img.naturalWidth || 1920);
           const natH = Math.max(1, img.naturalHeight || 1080);
-          const scale = Math.min(1, maxW / natW, maxH / natH);
-          const w = Math.max(64, Math.round(natW * scale));
-          const h = Math.max(64, Math.round(natH * scale));
+          const tiers = [
+            { maxW: 1920, maxH: 1080, quality: 0.82, maxChars: 1150000 },
+            { maxW: 1600, maxH: 900, quality: 0.74, maxChars: 920000 },
+            { maxW: 1280, maxH: 720, quality: 0.68, maxChars: 880000 },
+            { maxW: 1280, maxH: 720, quality: 0.56, maxChars: Infinity }
+          ];
           const canvas = document.createElement('canvas');
-          canvas.width = w;
-          canvas.height = h;
           const ctx = canvas.getContext('2d');
           if (!ctx) return;
-          ctx.drawImage(img, 0, 0, w, h);
-          const out = canvas.toDataURL('image/webp', 0.88);
-          const candidate = out && out.startsWith('data:image/webp') ? out : canvas.toDataURL('image/jpeg', 0.88);
-          const safeUri = safeCssUrl(candidate);
-          if (safeUri) callback(safeUri);
+          let fallbackUri = '';
+          for (let i = 0; i < tiers.length; i++) {
+            const tier = tiers[i];
+            const scale = Math.min(1, tier.maxW / natW, tier.maxH / natH);
+            const w = Math.max(64, Math.round(natW * scale));
+            const h = Math.max(64, Math.round(natH * scale));
+            canvas.width = w;
+            canvas.height = h;
+            ctx.clearRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+            const out = canvas.toDataURL('image/webp', tier.quality);
+            const candidate = out && out.startsWith('data:image/webp') ? out : canvas.toDataURL('image/jpeg', tier.quality);
+            const safeUri = safeCssUrl(candidate);
+            if (safeUri) {
+              fallbackUri = safeUri;
+              if (safeUri.length <= tier.maxChars) {
+                callback(safeUri);
+                return;
+              }
+            }
+          }
+          if (fallbackUri) callback(fallbackUri);
         } catch (_) {}
       };
       img.onerror = () => {};
@@ -271,6 +390,7 @@
 
   // Pre-bake L-shaped header/sidebar glass blur once per theme/dimming change to avoid per-frame GPU backdrop readback
   function syncPrebakedGlass(wpUrl, overlayRgb, overlayAlpha, tintBg, blurStr) {
+    const reqSeq = ++prebakeReqSeq;
     const shell = document.querySelector('.agy-shell');
     const safeWp = safeCssUrl(wpUrl || '');
     const pxMatch = String(blurStr !== undefined ? blurStr : '0px').match(/(\d+(?:\.\d+)?)/);
@@ -290,11 +410,22 @@
       if (shell) shell.style.setProperty('--agy-l-glass-bg', 'url("' + cached + '")');
       return;
     }
+
+    const applyTaintedFileFallback = () => {
+      if (reqSeq !== prebakeReqSeq) return;
+      const curShell = document.querySelector('.agy-shell');
+      if (!curShell || !safeWp) return;
+      const safeTint = tintBg ? `linear-gradient(180deg, ${tintBg}, ${tintBg}), ` : '';
+      const fallbackBg = `${safeTint}linear-gradient(180deg, rgba(${overlayRgb}, ${overlayAlpha}), rgba(${overlayRgb}, ${overlayAlpha})), url("${safeWp}")`;
+      curShell.style.setProperty('--agy-l-glass-bg', fallbackBg);
+    };
+
     const img = new Image();
     if (/^https?:\/\//i.test(safeWp)) {
       img.crossOrigin = 'anonymous';
     }
     img.onload = () => {
+      if (reqSeq !== prebakeReqSeq) return;
       try {
         const w = 1920;
         const h = Math.max(360, Math.round((img.naturalHeight || 2160) * (w / (img.naturalWidth || 3840))));
@@ -314,8 +445,12 @@
           ctx.fillRect(0, 0, w, h);
         }
         const rawBaked = canvas.toDataURL('image/webp', 0.92);
+        if (reqSeq !== prebakeReqSeq) return;
         const baked = safeCssUrl(rawBaked);
-        if (!baked) return;
+        if (!baked) {
+          applyTaintedFileFallback();
+          return;
+        }
         const store = window.__AGY_BLUR_CACHE__ || (window.__AGY_BLUR_CACHE__ = {});
         if (key in store) delete store[key];
         const existingKeys = Object.keys(store);
@@ -326,9 +461,30 @@
         store[key] = baked;
         const curShell = document.querySelector('.agy-shell');
         if (curShell) curShell.style.setProperty('--agy-l-glass-bg', 'url("' + baked + '")');
-      } catch (e) {}
+      } catch (_) {
+        // SecurityError on file:///.../preview.html with local relative assets -> crisp tinted original URL fallback
+        applyTaintedFileFallback();
+      }
+    };
+    img.onerror = () => {
+      applyTaintedFileFallback();
     };
     img.src = safeWp;
+  }
+
+  const FALLBACK_KNOWN_PERSONAS = new Set([
+    'yoriichi', 'shadow_monarch', 'six_eyes', 'great_sage',
+    'ubuyashiki', 'shinobu', 'giyu', 'rengoku', 'uzui', 'muichiro',
+    'mitsuri', 'obanai', 'sanemi', 'gyomei', 'tanjiro', 'nezuko', 'zenitsu', 'inosuke'
+  ]);
+
+  function hasValidMasterPersona(personaId) {
+    if (typeof personaId !== 'string' || !personaId.trim()) return false;
+    const clean = personaId.trim();
+    if (typeof window !== 'undefined' && window.__AGY_THEME_FORGE__ && typeof window.__AGY_THEME_FORGE__.hasPersona === 'function') {
+      return window.__AGY_THEME_FORGE__.hasPersona(clean);
+    }
+    return FALLBACK_KNOWN_PERSONAS.has(clean);
   }
 
   function getActiveMasterPersona(stOverride) {
@@ -338,6 +494,7 @@
     }
     return {
       id: 'yoriichi',
+      group: 'origin',
       tagLabel: 'Khai Tổ Hỏa Thần (Anh)',
       skillId: 'yoriichi',
       ringColor: '#fde047',
@@ -373,9 +530,6 @@
         localStorage.setItem(STORAGE_WP_ENABLED, String(st.wpEnabled));
         localStorage.setItem(STORAGE_TRANSPARENT_WORLD, String(st.transparentWorld));
         localStorage.setItem(STORAGE_MASTER_PERSONA, st.masterPersona);
-        if (overrides.customWp !== undefined) {
-          localStorage.setItem(STORAGE_CUSTOM_WP, overrides.customWp ? safeCssUrl(overrides.customWp) : '');
-        }
         if (overrides.userAvatar !== undefined) {
           localStorage.setItem(STORAGE_USER_AVATAR, overrides.userAvatar === 'none' ? 'none' : safeCssUrl(overrides.userAvatar));
         }
@@ -393,8 +547,38 @@
         }
       } catch (e) {}
 
+      if (overrides.customWp !== undefined) {
+        const cleanWp = overrides.customWp ? safeCssUrl(overrides.customWp) : '';
+        try {
+          localStorage.setItem(STORAGE_CUSTOM_WP, cleanWp);
+        } catch (_) {
+          // If 5MB localStorage is full, evict oldest forged theme if needed and retry once
+          try {
+            const rawForged = localStorage.getItem('agy_forged_themes_v2');
+            if (rawForged) {
+              const map = JSON.parse(rawForged);
+              if (map && typeof map === 'object') {
+                const keys = Object.keys(map).filter((k) => k !== st.themeName);
+                if (keys.length > 0) {
+                  delete map[keys[0]];
+                  localStorage.setItem('agy_forged_themes_v2', JSON.stringify(map));
+                  localStorage.setItem(STORAGE_CUSTOM_WP, cleanWp);
+                }
+              }
+            }
+          } catch (__) {}
+        }
+      }
+
       if (!skipSaveDisk) {
-        SEC.saveConfigSecure(st);
+        const activeThForDisk = THEMES[st.themeName];
+        const diskPayload = {
+          ...st,
+          activeForgedTheme: (activeThForDisk && activeThForDisk.isForged)
+            ? { ...activeThForDisk, name: st.themeName }
+            : null
+        };
+        SEC.saveConfigSecure(diskPayload);
       }
     }
     if (typeof syncTransparentWorldSetting === 'function') {
@@ -488,6 +672,11 @@
         transition: background-color 0.25s ease;
       }
       /* Browser split-pane hole cutout: keep wallpaper & L-glass visible outside [data-browser-hole] without covering live BrowserView */
+      body[data-has-browser-hole="true"] .agy-shell[data-agy-hole-active="1"] {
+        background: transparent !important;
+        background-color: transparent !important;
+        background-image: none !important;
+      }
       body[data-has-browser-hole="true"] .agy-shell[data-agy-hole-active="1"]::after {
         content: "";
         position: absolute;
@@ -526,12 +715,25 @@
 
     const defaultCornerSvg = 'data:image/svg+xml,' + strictPercentEncodeSvg('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M2 20 L2 6 Q2 2 6 2 L20 2" stroke="#fbbf24" stroke-width="1.5" fill="none" opacity="0.65"/><circle cx="6" cy="6" r="2" fill="#fbbf24" opacity="0.75"/></svg>');
     const cornerFiligreeUrl = safeCssUrl(bubbleTheme.cornerSvg || '') || defaultCornerSvg;
-    const personaOverrideActive = st.masterPersona && st.masterPersona !== 'yoriichi';
+    const personaValid = hasValidMasterPersona(st.masterPersona);
+    const personaExplicitOverride = Boolean(st.masterPersona && st.masterPersona !== 'yoriichi');
+    const isMinimalZeroStickerTheme = bubbleTheme.isOrnament === false && !bubbleTheme.sticker;
+
     const userCornerFiligreeUrl = safeCssUrl(
-      (personaOverrideActive ? persona.userCornerSvg : (bubbleTheme.userCornerSvg || persona.userCornerSvg)) || ''
+      (personaValid ? (persona.userCornerSvg || bubbleTheme.userCornerSvg) : (bubbleTheme.userCornerSvg || persona.userCornerSvg)) || ''
     ) || cornerFiligreeUrl;
-    const userBubbleStickerUrl = safeCssUrl(
-      (personaOverrideActive ? persona.userSticker : (bubbleTheme.userSticker || persona.userSticker || bubbleTheme.sticker)) || ''
+
+    const rawUserBubbleSticker = (isMinimalZeroStickerTheme && !personaExplicitOverride)
+      ? ''
+      : (personaValid
+        ? (persona.userSticker || bubbleTheme.userSticker || bubbleTheme.sticker || '')
+        : (bubbleTheme.userSticker || persona.userSticker || bubbleTheme.sticker || ''));
+    const userBubbleStickerUrl = safeCssUrl(rawUserBubbleSticker);
+    const usingPersonaBubbleSticker = Boolean(
+      personaValid &&
+      persona.userSticker &&
+      userBubbleStickerUrl &&
+      userBubbleStickerUrl === safeCssUrl(persona.userSticker)
     );
     const composerStickerUrl = safeCssUrl(bubbleTheme.sticker || '');
 
@@ -540,22 +742,29 @@
     const sW = Number(bubbleTheme.stickerW) || 136;
     const sH = Number(bubbleTheme.stickerH) || 64;
 
-    const bubblePadTop = Math.max(18, Math.abs(sTop) + 8);
-    const bubbleStickerCss = userBubbleStickerUrl ? (bubbleTheme.isOrnament ? `
+    const uTop = usingPersonaBubbleSticker ? -56 : sTop;
+    const uRight = usingPersonaBubbleSticker ? 10 : sRight;
+    const uW = usingPersonaBubbleSticker ? 136 : sW;
+    const uH = usingPersonaBubbleSticker ? 64 : sH;
+    const uIsChibi = usingPersonaBubbleSticker || Boolean(bubbleTheme.isChibiNpc);
+    const uIsOrnament = usingPersonaBubbleSticker || Boolean(bubbleTheme.isOrnament);
+
+    const bubblePadTop = Math.max(18, Math.abs(uTop) + 8);
+    const bubbleStickerCss = userBubbleStickerUrl ? (uIsOrnament ? `
       .group\\/user-input-step {
-        padding-top: ${bubbleTheme.isChibiNpc ? bubblePadTop : 18}px !important;
+        padding-top: ${uIsChibi ? bubblePadTop : 18}px !important;
         overflow: visible !important;
       }
       .agy-user-bubble-frame::before {
         content: "";
         position: absolute;
-        top: ${sTop}px;
-        right: ${sRight}px;
-        width: ${sW}px;
-        height: ${sH}px;
+        top: ${uTop}px;
+        right: ${uRight}px;
+        width: ${uW}px;
+        height: ${uH}px;
         background-image: url("${userBubbleStickerUrl}");
         background-size: contain;
-        background-position: ${bubbleTheme.isChibiNpc ? 'bottom center' : 'center'};
+        background-position: ${uIsChibi ? 'bottom center' : 'center'};
         background-repeat: no-repeat;
         z-index: 25;
         pointer-events: none;
@@ -567,15 +776,15 @@
       }
     ` : `
       .group\\/user-input-step {
-        padding-top: ${Math.max(36, Math.abs(sTop) + 8)}px !important;
+        padding-top: ${Math.max(36, Math.abs(uTop) + 8)}px !important;
       }
       .agy-user-bubble-frame::before {
         content: "";
         position: absolute;
-        top: ${sTop}px;
-        right: ${sRight}px;
-        width: ${sW}px;
-        height: ${sH}px;
+        top: ${uTop}px;
+        right: ${uRight}px;
+        width: ${uW}px;
+        height: ${uH}px;
         background-image: url("${userBubbleStickerUrl}");
         background-size: contain;
         background-position: bottom center;
@@ -686,7 +895,7 @@
 
     const rawEffUserAvatar = st.userAvatar === 'none'
       ? ''
-      : (st.userAvatar || (personaOverrideActive ? persona.userAvatar : (mainTheme.userAvatar || persona.userAvatar)) || '');
+      : (st.userAvatar || (personaValid ? (persona.userAvatar || mainTheme.userAvatar) : (mainTheme.userAvatar || persona.userAvatar)) || '');
     const effectiveUserAvatar = safeCssUrl(rawEffUserAvatar);
     const effectiveAgentAvatar = safeCssUrl(st.agentAvatar === 'none' ? '' : (st.agentAvatar || mainTheme.agentAvatar || ''));
     const personaRingColor = SEC.sanitizeCssValue(persona.ringColor, '#fde047');
@@ -1263,6 +1472,14 @@
       clearTimeout(blurSliderDebounceTimer);
       blurSliderDebounceTimer = 0;
     }
+    if (twIdleTimerId) {
+      clearTimeout(twIdleTimerId);
+      twIdleTimerId = 0;
+    }
+    if (twLerpRafId) {
+      cancelAnimationFrame(twLerpRafId);
+      twLerpRafId = 0;
+    }
     teardownLiveWallpaperFx();
     teardownShinobuNpc();
     if (typeof teardownTransparentWorldFlow === 'function') {
@@ -1318,12 +1535,17 @@
     }
   }
 
+  const captureSnapshot = () => ({ ...getState() });
   window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__ = applyTheme;
   window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__ = removeCustomTheme;
   window.__ANTIGRAVITY_OPEN_THEME_MODAL__ = openCustomThemeModal;
   window.__AGY_THEME_CORE__ = {
+    applyTheme,
+    getState,
+    getEffectiveState,
     getThemeKeys: () => [...THEME_KEYS],
-    getSnapshot: () => ({ ...getState() }),
+    captureSnapshot,
+    getSnapshot: captureSnapshot,
     applyTransientTheme: (themeKey) => {
       const q = String(themeKey || '').trim();
       if (!q) return false;
@@ -1411,21 +1633,31 @@
   }
 
   function renderThemePanels(container) {
+    const prevInnerScroller = container.querySelector('#agy-theme-scroll-container');
+    const savedInnerScrollTop = prevInnerScroller ? prevInnerScroller.scrollTop : 0;
+    const savedOuterScrollTop = container.scrollTop || 0;
+    if (modalPendingForged) {
+      const prevForgeNameEl = container.querySelector('#agy-forge-name');
+      const prevForgeFxEl = container.querySelector('#agy-forge-fx');
+      if (prevForgeNameEl && prevForgeNameEl.value) modalPendingForgeName = prevForgeNameEl.value;
+      if (prevForgeFxEl && prevForgeFxEl.value) modalPendingForgeFx = prevForgeFxEl.value;
+    }
+
     const st = getState();
     const mainTheme = THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
     const forge = typeof window !== 'undefined' ? window.__AGY_THEME_FORGE__ : null;
     const activePersona = getActiveMasterPersona(st);
+    const personaValid = hasValidMasterPersona(st.masterPersona);
 
     const safeMainPrimary = SEC.sanitizeCssValue(mainTheme.primary, '#c084fc');
     const safeMainAccent = SEC.sanitizeCssValue(mainTheme.accent || mainTheme.secondary, safeMainPrimary);
     const safeMainBorder = SEC.sanitizeCssValue(mainTheme.borderColor, 'rgba(255, 255, 255, 0.16)');
     const safeCardBg = SEC.sanitizeCssValue(mainTheme.cardBg, 'rgba(22, 16, 14, 0.72)');
 
-    const personaOverrideActive = st.masterPersona && st.masterPersona !== 'yoriichi';
     const effUserAv = safeCssUrl(
       st.userAvatar === 'none'
         ? ''
-        : (st.userAvatar || (personaOverrideActive ? activePersona.userAvatar : (mainTheme.userAvatar || activePersona.userAvatar)) || '')
+        : (st.userAvatar || (personaValid ? (activePersona.userAvatar || mainTheme.userAvatar) : (mainTheme.userAvatar || activePersona.userAvatar)) || '')
     );
     const effAgentAv = safeCssUrl(
       st.agentAvatar === 'none' ? '' : (st.agentAvatar || mainTheme.agentAvatar || '')
@@ -1830,7 +2062,8 @@
       const cleanId = String(pid || 'yoriichi').replace(/[^a-zA-Z0-9_-]/g, '') || 'yoriichi';
       // Clear manual userAvatar override if it was 'none' or empty so persona emblem shows immediately
       const nextOverrides = { masterPersona: cleanId };
-      if (!localStorage.getItem(STORAGE_USER_AVATAR)) {
+      const curAv = localStorage.getItem(STORAGE_USER_AVATAR);
+      if (!curAv || curAv === 'none') {
         nextOverrides.userAvatar = '';
       }
       applyTheme(nextOverrides);
@@ -1845,7 +2078,6 @@
 
     // Multiverse AI Theme Forge handlers
     if (forge) {
-      let pendingForged = null;
       const forgeFile = container.querySelector('#agy-forge-file');
       const forgeDrop = container.querySelector('#agy-forge-dropzone');
       const forgeBench = container.querySelector('#agy-forge-workbench');
@@ -1881,15 +2113,36 @@
         forgeSwatches.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:5px;">${swHtml}</div><span style="color:#fef08a;font-weight:600;">WCAG AA/AAA: ${SEC.escapeHtml(String(ratio))}:1 ✓</span>`;
       };
 
+      // Restore workbench draft if user switched Master Persona mid-forge
+      if (modalPendingForged && modalPendingForged.theme) {
+        if (forgeBench) forgeBench.style.display = 'flex';
+        if (forgeName) forgeName.value = modalPendingForgeName || modalPendingForged.suggestedName || '';
+        if (forgeFx) forgeFx.value = modalPendingForgeFx || modalPendingForged.fxMode || 'wisteria';
+        renderSwatchesPreview(modalPendingForged.theme);
+      }
+
+      if (forgeName) {
+        forgeName.addEventListener('input', () => {
+          modalPendingForgeName = forgeName.value;
+        });
+      }
+      if (forgeFx) {
+        forgeFx.addEventListener('change', () => {
+          modalPendingForgeFx = forgeFx.value;
+        });
+      }
+
       const handleForgeFile = (file) => {
         if (!file) return;
         const activePersonaId = getState().masterPersona || 'yoriichi';
         showForgeStatus('⏳ Đang quét histogram 64×64 & giải phương trình màu OKLCH...', false);
         forge.forgeFromWallpaperFile(file, { personaId: activePersonaId }).then((res) => {
-          pendingForged = res;
+          modalPendingForged = res;
+          modalPendingForgeName = res.suggestedName || '';
+          modalPendingForgeFx = res.fxMode || 'wisteria';
           if (forgeBench) forgeBench.style.display = 'flex';
-          if (forgeName) forgeName.value = res.suggestedName;
-          if (forgeFx) forgeFx.value = res.fxMode;
+          if (forgeName) forgeName.value = modalPendingForgeName;
+          if (forgeFx) forgeFx.value = modalPendingForgeFx;
           renderSwatchesPreview(res.theme);
           showForgeStatus('✨ Đã trích xuất đủ 14 biến màu kính mờ OKLCH đạt chuẩn tương phản đọc code WCAG AA!', false);
         }).catch((err) => {
@@ -1924,12 +2177,19 @@
       }
       if (forgeCommit) {
         forgeCommit.addEventListener('click', () => {
-          if (!pendingForged || !pendingForged.theme) return;
-          const chosenName = (forgeName && forgeName.value.trim()) || pendingForged.suggestedName || '⚒️ Forged Universe';
-          const chosenFx = (forgeFx && forgeFx.value) || pendingForged.fxMode || 'wisteria';
-          pendingForged.theme.fxMode = chosenFx;
-          const saved = forge.registerThemeIntoRegistry(THEMES, THEME_KEYS, chosenName, pendingForged.theme);
+          if (!modalPendingForged || !modalPendingForged.theme) return;
+          const chosenName = (forgeName && forgeName.value.trim()) || modalPendingForged.suggestedName || '⚒️ Forged Universe';
+          const chosenFx = (forgeFx && forgeFx.value) || modalPendingForged.fxMode || 'wisteria';
+          if (typeof forge.applyCompanionForFxMode === 'function') {
+            forge.applyCompanionForFxMode(modalPendingForged.theme, chosenFx);
+          } else {
+            modalPendingForged.theme.fxMode = chosenFx;
+          }
+          const saved = forge.registerThemeIntoRegistry(THEMES, THEME_KEYS, chosenName, modalPendingForged.theme);
           if (saved) {
+            modalPendingForged = null;
+            modalPendingForgeName = '';
+            modalPendingForgeFx = '';
             const badgeEl = document.getElementById('agy-custom-theme-badge');
             if (badgeEl) badgeEl.textContent = `${THEME_KEYS.length} Presets`;
             applyTheme({
@@ -1940,6 +2200,14 @@
               wpEnabled: true
             });
             renderThemePanels(container);
+            if (saved.quotaExceeded) {
+              const nextStatusEl = container.querySelector('#agy-forge-status');
+              if (nextStatusEl) {
+                nextStatusEl.style.display = 'block';
+                nextStatusEl.style.color = '#fde047';
+                nextStatusEl.textContent = '⚠️ Bộ nhớ trình duyệt đã đầy — Theme mới đã được kích hoạt và đồng bộ trực tiếp vào cấu hình chính.';
+              }
+            }
           }
         });
       }
@@ -2211,6 +2479,11 @@
 
     const resetBtn = container.querySelector('#agy-reset-btn');
     resetBtn.addEventListener('click', () => {
+      clearTimeout(blurSliderDebounceTimer);
+      blurSliderDebounceTimer = 0;
+      modalPendingForged = null;
+      modalPendingForgeName = '';
+      modalPendingForgeFx = '';
       localStorage.removeItem(STORAGE_CUSTOM_WP);
       localStorage.removeItem(STORAGE_USER_AVATAR);
       localStorage.removeItem(STORAGE_AGENT_AVATAR);
@@ -2224,16 +2497,20 @@
       localStorage.removeItem(STORAGE_WP_ENABLED);
       localStorage.removeItem(STORAGE_TRANSPARENT_WORLD);
       localStorage.removeItem(STORAGE_MASTER_PERSONA);
+      const defTh = THEMES[DEFAULT_THEME_KEY] || {};
+      const defDim = defTh.defaultDimming ?? 24;
+      const defBlurParsed = parseFloat(defTh.headerBlur);
+      const defBlur = Number.isFinite(defBlurParsed) ? clampInt(Math.round(defBlurParsed), 0, 16, 3) : (defTh.unifiedGlass === false ? 0 : 3);
       applyTheme({
         themeName: DEFAULT_THEME_KEY,
         bubbleName: DEFAULT_THEME_KEY,
         inputStyle: 'sync',
-        dimming: 69,
+        dimming: defDim,
         wpEnabled: true,
         customWp: '',
         userAvatar: '',
         agentAvatar: '',
-        glassBlur: 3,
+        glassBlur: defBlur,
         avatarSize: 32,
         avatarRadius: 50,
         transparentWorld: true,
@@ -2263,14 +2540,16 @@
         const name = card.dataset.name;
         if (!THEMES[name]) return;
         const pickedTh = THEMES[name] || {};
-        const nextDim = pickedTh.defaultDimming !== undefined ? pickedTh.defaultDimming : 42;
-        applyTheme({ themeName: name, bubbleName: name, dimming: nextDim, customWp: '' });
+        const nextDim = pickedTh.defaultDimming !== undefined ? pickedTh.defaultDimming : 36;
+        applyTheme({ themeName: name, bubbleName: name, dimming: nextDim, customWp: '', wpEnabled: true });
+        if (wpToggle) wpToggle.checked = true;
         if (slider) slider.value = nextDim;
         if (valLabel) valLabel.textContent = nextDim + '%';
         if (!localStorage.getItem(STORAGE_USER_AVATAR)) {
-          const curP = getActiveMasterPersona();
-          const pOverride = getState().masterPersona !== 'yoriichi';
-          syncAvPreview(userAvPreview, pOverride ? curP.userAvatar : (pickedTh.userAvatar || curP.userAvatar || ''), 'U');
+          const curSt = getState();
+          const curP = getActiveMasterPersona(curSt);
+          const pValid = hasValidMasterPersona(curSt.masterPersona);
+          syncAvPreview(userAvPreview, pValid ? (curP.userAvatar || pickedTh.userAvatar || '') : (pickedTh.userAvatar || curP.userAvatar || ''), 'U');
         }
         if (!localStorage.getItem(STORAGE_AGENT_AVATAR)) {
           syncAvPreview(agentAvPreview, pickedTh.agentAvatar || '', 'AI');
@@ -2331,6 +2610,14 @@
         });
       });
     });
+
+    const nextInnerScroller = container.querySelector('#agy-theme-scroll-container');
+    if (nextInnerScroller && savedInnerScrollTop > 0) {
+      nextInnerScroller.scrollTop = savedInnerScrollTop;
+    }
+    if (savedOuterScrollTop > 0) {
+      container.scrollTop = savedOuterScrollTop;
+    }
   }
 
   function injectMainSidebarButton() {
@@ -2439,38 +2726,12 @@
           `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${l}px ${t}px, ${r}px ${t}px, ${r}px ${b}px, ${l}px ${b}px, ${l}px ${t}px)`
         );
         shell.dataset.agyHoleActive = '1';
-        delete shell.dataset.agySideGlass;
         return;
       }
     }
     window.__AGY_HOLE_EL__ = null;
     delete shell.dataset.agyHoleActive;
     shell.style.removeProperty('--agy-hole-clip');
-
-    const sideBody = shell.querySelector('[data-side-panel-body="true"]');
-    if (sideBody) {
-      if (window.__AGY_SHELL_RO__ && window.__AGY_SIDE_EL__ !== sideBody) {
-        try { window.__AGY_SHELL_RO__.observe(sideBody); } catch (e) {}
-        window.__AGY_SIDE_EL__ = sideBody;
-      }
-      const sRect = sideBody.getBoundingClientRect();
-      const hasContent = sideBody.children.length > 0;
-      if (hasContent && sRect.width > 24 && sRect.height > 24 && sRect.left < shellRect.right - 8 && sRect.right > shellRect.left + 8) {
-        const sl = Math.max(sw, Math.round(sRect.left - shellRect.left));
-        const st = Math.max(hdrBottom, Math.round(sRect.top - shellRect.top));
-        const sr = Math.min(Math.round(shellRect.width), Math.max(sl, Math.round(sRect.right - shellRect.left)));
-        const sb = Math.min(Math.round(shellRect.height), Math.max(st, Math.round(sRect.bottom - shellRect.top)));
-        if (sr - sl > 20 && sb - st > 20) {
-          shell.style.setProperty('--agy-side-l', sl + 'px');
-          shell.style.setProperty('--agy-side-t', st + 'px');
-          shell.style.setProperty('--agy-side-r', sr + 'px');
-          shell.style.setProperty('--agy-side-b', sb + 'px');
-          shell.dataset.agySideGlass = '1';
-          return;
-        }
-      }
-    }
-    delete shell.dataset.agySideGlass;
   }
 
   function hookShellMetrics() {
@@ -2587,24 +2848,31 @@
 
   function bindTransparentWorldListeners(signal) {
     twEnabledFlag = getState().transparentWorld !== false;
-    window.addEventListener('keydown', (e) => {
-      if (!e || e.isComposing || e.keyCode === 229) return;
-      if (!twEnabledFlag || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key === 'Shift' || e.key === 'CapsLock' || e.key === 'Tab' || e.key === 'Escape') return;
-      const t = e.target;
-      if (!t || !t.tagName) return;
-      if (t.closest && t.closest('#agy-custom-theme-modal-backdrop')) return;
-      const tag = t.tagName.toUpperCase();
+
+    const recordFlowKeystroke = (targetEl) => {
+      if (!twEnabledFlag || !targetEl || !targetEl.tagName) return;
+      if (targetEl.closest && targetEl.closest('#agy-custom-theme-modal-backdrop')) return;
+      const tag = targetEl.tagName.toUpperCase();
+      if (tag === 'INPUT') {
+        const inpType = String(targetEl.type || 'text').toLowerCase();
+        if (inpType === 'range' || inpType === 'checkbox' || inpType === 'radio' || inpType === 'file' || inpType === 'button' || inpType === 'color') {
+          return;
+        }
+      }
       const isCodingOrTyping =
         tag === 'TEXTAREA' ||
         tag === 'INPUT' ||
-        t.isContentEditable ||
-        Boolean(t.closest && t.closest('.monaco-editor, .cm-editor, .surface-composer, [contenteditable="true"]'));
+        targetEl.isContentEditable ||
+        Boolean(targetEl.closest && targetEl.closest('.monaco-editor, .cm-editor, .surface-composer, [contenteditable="true"]'));
       if (!isCodingOrTyping) return;
 
       const now = performance.now();
       if (twTargetVal === 1) {
         pulseTransparentWorldActivity();
+        return;
+      }
+      // Deduplicate paired keydown + input events generated within the same 18ms keystroke tick
+      if (twKeyRing.length > 0 && now - twKeyRing[twKeyRing.length - 1] < 18) {
         return;
       }
       twKeyRing.push(now);
@@ -2623,7 +2891,52 @@
       if (firstSecCount >= 4 && secondSecCount >= 4) {
         pulseTransparentWorldActivity();
       }
+    };
+
+    window.addEventListener('keydown', (e) => {
+      if (!e || !twEnabledFlag || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (
+        e.key === 'Shift' ||
+        e.key === 'CapsLock' ||
+        e.key === 'Tab' ||
+        e.key === 'Escape' ||
+        e.key === 'Control' ||
+        e.key === 'Alt' ||
+        e.key === 'Meta'
+      ) {
+        return;
+      }
+      // Intentionally allow IME composition keystrokes (Vietnamese Telex/VNI & CJK) to count toward Deep Coding flow
+      recordFlowKeystroke(e.target);
     }, { capture: true, passive: true, signal });
+
+    window.addEventListener('input', (e) => {
+      if (!e || !twEnabledFlag) return;
+      recordFlowKeystroke(e.target);
+    }, { capture: true, passive: true, signal });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        clearTimeout(twIdleTimerId);
+        twIdleTimerId = 0;
+        if (twLerpRafId) {
+          cancelAnimationFrame(twLerpRafId);
+          twLerpRafId = 0;
+        }
+        twTargetVal = 0;
+        twLastFrameMs = 0;
+        twKeyRing.length = 0;
+        twScrollRing.length = 0;
+        commitTransparentWorldDom(0);
+      } else if (twTargetVal === 0 && twCurrentVal !== 0) {
+        if (twLerpRafId) {
+          cancelAnimationFrame(twLerpRafId);
+          twLerpRafId = 0;
+        }
+        twLastFrameMs = 0;
+        commitTransparentWorldDom(0);
+      }
+    }, { signal });
 
     const onFlowScroll = (e) => {
       if (!twEnabledFlag) return;
@@ -2679,6 +2992,7 @@
       rt.fxFocusPaused = false;
       rt.activeFxMode = '';
       rt.fxDrawer = null;
+      rt.fxResumeOrPause = null;
       if (Array.isArray(rt.fxCleanups)) {
         rt.fxCleanups.forEach(fn => { try { fn(); } catch (_) {} });
         rt.fxCleanups = [];
@@ -2700,7 +3014,8 @@
 
     const rt = getShinobuRuntime();
     let host = document.getElementById('agy-live-fx-host');
-    if (host && host.parentElement === shell && rt.activeFxMode === fxMode && (rt.fxRaf || rt.fxPaused || rt.fxFocusPaused)) {
+    if (host && host.parentElement === shell && rt.activeFxMode === fxMode && rt.fxDrawer) {
+      if (typeof rt.fxResumeOrPause === 'function') rt.fxResumeOrPause();
       return;
     }
 
@@ -2758,8 +3073,8 @@
 
     if (drawerFactory) {
       drawer = drawerFactory(fxMode, { width, height });
-      rt.fxDrawer = drawer;
     }
+    rt.fxDrawer = drawer || { noop: true };
 
     function shouldAnimate() {
       if (document.hidden || viewSkipped || rt.fxPaused || rt.fxFocusPaused) return false;
@@ -2804,6 +3119,7 @@
         drawStaticGlowFrame();
       }
     }
+    rt.fxResumeOrPause = resumeOrPause;
 
     // Single-Active-Window GPU Arbitration: 800ms after losing focus -> 0 FPS static 4K frame; instant 60fps on focus/mouseenter
     const scheduleBlurArbitration = () => {
@@ -2829,6 +3145,12 @@
       resumeOrPause();
     };
 
+    const onMouseLeave = () => {
+      if (typeof document.hasFocus === 'function' && !document.hasFocus()) {
+        scheduleBlurArbitration();
+      }
+    };
+
     const onResize = () => resize();
     const onVis = () => {
       if (document.hidden) {
@@ -2846,6 +3168,10 @@
     window.addEventListener('blur', scheduleBlurArbitration, { passive: true });
     window.addEventListener('focus', wakeFromFocusOrHover, { passive: true });
     window.addEventListener('mouseenter', wakeFromFocusOrHover, { passive: true });
+    window.addEventListener('mouseleave', onMouseLeave, { passive: true });
+    if (document.documentElement) {
+      document.documentElement.addEventListener('mouseleave', onMouseLeave, { passive: true });
+    }
     document.addEventListener('visibilitychange', onVis);
 
     rt.fxCleanups.push(() => { clearTimeout(blurPauseTimer); blurPauseTimer = 0; });
@@ -2853,6 +3179,12 @@
     rt.fxCleanups.push(() => window.removeEventListener('blur', scheduleBlurArbitration));
     rt.fxCleanups.push(() => window.removeEventListener('focus', wakeFromFocusOrHover));
     rt.fxCleanups.push(() => window.removeEventListener('mouseenter', wakeFromFocusOrHover));
+    rt.fxCleanups.push(() => window.removeEventListener('mouseleave', onMouseLeave));
+    rt.fxCleanups.push(() => {
+      if (document.documentElement) {
+        document.documentElement.removeEventListener('mouseleave', onMouseLeave);
+      }
+    });
     rt.fxCleanups.push(() => document.removeEventListener('visibilitychange', onVis));
 
     let dprMediaCleanup = null;
@@ -3404,53 +3736,100 @@
     const st = stOverride || getEffectiveState();
     const activeBubbleKey = st.bubbleName || st.themeName || DEFAULT_THEME_KEY;
     const bTheme = bubbleThemeOverride || THEMES[activeBubbleKey] || THEMES[DEFAULT_THEME_KEY] || {};
+    const persona = getActiveMasterPersona(st);
+    const personaValid = hasValidMasterPersona(st.masterPersona);
+    const personaExplicitOverride = Boolean(st.masterPersona && st.masterPersona !== 'yoriichi');
+    const isMinimalZeroSticker = bTheme.isOrnament === false && !bTheme.sticker;
+    const hasBubblePersonaSticker = Boolean(
+      (!isMinimalZeroSticker || personaExplicitOverride) &&
+      ((personaValid && persona.userSticker) || bTheme.userSticker || bTheme.sticker)
+    );
+
+    if (hasBubblePersonaSticker) {
+      ensureShinobuNpcStyles();
+      const rtBubble = getShinobuRuntime();
+      document.querySelectorAll('.agy-user-bubble-frame').forEach(frame => {
+        let hit = frame.querySelector(':scope > .agy-chibi-hitbox');
+        if (!hit) {
+          hit = document.createElement('button');
+          hit.type = 'button';
+          hit.className = 'agy-chibi-hitbox';
+          // CRITICAL ANTIGRAVITY 2.0 DOM GUARD: Never leave :empty inside .agy-user-bubble-frame (prevents [&:has(>.agy-user-bubble-frame>:empty)]:hidden)
+          hit.innerHTML = '<i aria-hidden="true"></i>';
+          hit.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const curSt = getEffectiveState();
+            const curBubbleKey = curSt.bubbleName || curSt.themeName || DEFAULT_THEME_KEY;
+            const curBTheme = THEMES[curBubbleKey] || THEMES[DEFAULT_THEME_KEY] || {};
+            const curPersona = getActiveMasterPersona(curSt);
+            const curPValid = hasValidMasterPersona(curSt.masterPersona);
+            const skillCharId = (curPersona && curPersona.skillId) || 'yoriichi';
+            const isMvNoSprite = Boolean(curPersona && curPersona.group === 'multiverse' && !curPersona.actionSticker);
+            const actSticker = isMvNoSprite
+              ? ''
+              : (curPValid
+                ? ((curPersona && curPersona.actionSticker) || curBTheme.userActionSticker || '')
+                : (curBTheme.userActionSticker || (curPersona && curPersona.actionSticker) || ''));
+            if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.castSkill === 'function') {
+              const curRt = getShinobuRuntime();
+              if (curRt.lastBubbleSkillCharId !== skillCharId) {
+                curRt.yoriBubbleCombo = 0;
+                curRt.lastBubbleSkillCharId = skillCharId;
+              }
+              const comboIdx = curRt.yoriBubbleCombo || 0;
+              curRt.yoriBubbleCombo = (comboIdx + 1) % 4;
+              window.__AGY_KNY_SKILLS__.castSkill(skillCharId, comboIdx, {
+                charId: skillCharId,
+                originRect: e.currentTarget.getBoundingClientRect(),
+                sourceFrameEl: frame,
+                composerEl: null,
+                actionSticker: actSticker,
+                noActionSprite: isMvNoSprite
+              });
+              return;
+            }
+            triggerChibiBounce(frame);
+          });
+          frame.appendChild(hit);
+        }
+        const personaTitle = `${persona.tagLabel || 'Khai Tổ Hỏa Thần (Anh)'} — Nhấn để xuất chiêu Hơi Thở!`;
+        hit.title = personaTitle;
+        hit.setAttribute('aria-label', personaTitle);
+        if (hit.children.length === 0) hit.innerHTML = '<i aria-hidden="true"></i>';
+      });
+      if (rtBubble.lastBubbleSkillCharId && rtBubble.lastBubbleSkillCharId !== (persona.skillId || 'yoriichi')) {
+        rtBubble.yoriBubbleCombo = 0;
+        rtBubble.lastBubbleSkillCharId = persona.skillId || 'yoriichi';
+      }
+    } else {
+      document.querySelectorAll('.agy-user-bubble-frame > .agy-chibi-hitbox').forEach(el => el.remove());
+    }
+
     if (st.inputStyle === 'minimal' || !bTheme.isChibiNpc) {
-      teardownShinobuNpc();
+      // Tear down only composer NPC & Chibi Aura while keeping User Bubble persona hitboxes intact if active
+      const rtClean = window.__AGY_SHINOBU_RT__;
+      if (rtClean) {
+        if (rtClean.typeTimer) { clearInterval(rtClean.typeTimer); rtClean.typeTimer = 0; }
+        if (rtClean.remindTimer) { clearInterval(rtClean.remindTimer); rtClean.remindTimer = 0; }
+        rtClean.activeNpcKey = '';
+      }
+      if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.teardown === 'function') {
+        try { window.__AGY_KNY_CHIBI_AURA__.teardown(); } catch (_) {}
+      }
+      const wrapOld = document.getElementById('agy-shinobu-npc-wrap');
+      if (wrapOld) wrapOld.remove();
+      document.querySelectorAll('.surface-composer > .agy-chibi-hitbox').forEach(el => el.remove());
+      document.querySelectorAll('[data-agy-npc-key-bound]').forEach(el => delete el.dataset.agyNpcKeyBound);
+      if (!hasBubblePersonaSticker) {
+        const npcStyle = document.getElementById('antigravity-shinobu-npc-style');
+        if (npcStyle) npcStyle.remove();
+      }
       return;
     }
 
     ensureShinobuNpcStyles();
     const rt = getShinobuRuntime();
     const prof = getActiveNpcProfile(bTheme);
-    const persona = getActiveMasterPersona(st);
-    const personaOverrideActive = st.masterPersona && st.masterPersona !== 'yoriichi';
-
-    document.querySelectorAll('.agy-user-bubble-frame').forEach(frame => {
-      let hit = frame.querySelector(':scope > .agy-chibi-hitbox');
-      if (!hit) {
-        hit = document.createElement('button');
-        hit.type = 'button';
-        hit.className = 'agy-chibi-hitbox';
-        // CRITICAL ANTIGRAVITY 2.0 DOM GUARD: Never leave :empty inside .agy-user-bubble-frame (prevents [&:has(>.agy-user-bubble-frame>:empty)]:hidden)
-        hit.innerHTML = '<i aria-hidden="true"></i>';
-        hit.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const curSt = getEffectiveState();
-          const curPersona = getActiveMasterPersona(curSt);
-          const skillCharId = curPersona.skillId || 'yoriichi';
-          const actSticker = (curSt.masterPersona && curSt.masterPersona !== 'yoriichi')
-            ? curPersona.actionSticker
-            : (bTheme.userActionSticker || curPersona.actionSticker);
-          if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.castSkill === 'function') {
-            rt.yoriBubbleCombo = ((rt.yoriBubbleCombo || 0) + 1) % 4;
-            window.__AGY_KNY_SKILLS__.castSkill(skillCharId, rt.yoriBubbleCombo, {
-              charId: skillCharId,
-              originRect: e.currentTarget.getBoundingClientRect(),
-              sourceFrameEl: frame,
-              composerEl: frame,
-              actionSticker: actSticker
-            });
-            return;
-          }
-          triggerChibiBounce(frame);
-        });
-        frame.appendChild(hit);
-      }
-      const personaTitle = `${persona.tagLabel || 'Khai Tổ Hỏa Thần (Anh)'} — Nhấn để xuất chiêu Hơi Thở!`;
-      hit.title = personaTitle;
-      hit.setAttribute('aria-label', personaTitle);
-      if (hit.children.length === 0) hit.innerHTML = '<i aria-hidden="true"></i>';
-    });
 
     const composer = document.querySelector('.surface-composer');
     if (!composer) return;
@@ -3539,7 +3918,7 @@
       const safePlaceholder = SEC.escapeHtml(prof.placeholder || '');
       const safePersonaTag = SEC.escapeHtml(persona.tagLabel || 'Khai Tổ Hỏa Thần (Anh)');
       const safeNpcUserAv = safeCssUrl(
-        (personaOverrideActive ? persona.userAvatar : (bTheme.userAvatar || persona.userAvatar)) || ''
+        (personaValid ? (persona.userAvatar || bTheme.userAvatar) : (bTheme.userAvatar || persona.userAvatar)) || ''
       );
 
       wrap.innerHTML = `
@@ -3685,9 +4064,17 @@
 
     if (window.__AGY_KNY_CHIBI_AURA__) {
       const charHint = bTheme.fxMode || activeBubbleKey;
+      const auraThemeCfg = {
+        ...bTheme,
+        masterPersonaId: persona ? persona.id : 'yoriichi',
+        personaRingColor: SEC.sanitizeCssValue(persona.ringColor, '#fde047'),
+        personaGlowColor: SEC.sanitizeCssValue(persona.glowColor, 'rgba(239, 68, 68, 0.52)'),
+        personaSkillId: (persona && persona.skillId) || 'yoriichi',
+        isMultiversePersona: Boolean(persona && persona.group === 'multiverse')
+      };
       try {
-        window.__AGY_KNY_CHIBI_AURA__.mountChibiAura(composer, bTheme, charHint);
-        window.__AGY_KNY_CHIBI_AURA__.mountSkillTriggerUi(composer, wrap, bTheme, charHint, (skill, _idx, castOpts) => {
+        window.__AGY_KNY_CHIBI_AURA__.mountChibiAura(composer, auraThemeCfg, charHint);
+        window.__AGY_KNY_CHIBI_AURA__.mountSkillTriggerUi(composer, wrap, auraThemeCfg, charHint, (skill, _idx, castOpts) => {
           const line = (skill && (skill.voiceLine || skill.quote)) || pickRandomLine('act1', '', prof);
           if (line) {
             // Keep stage uncluttered when clicking Chibi directly unless NPC dialog is already open
@@ -3716,17 +4103,24 @@
     const activeKey = st.bubbleName || st.themeName || DEFAULT_THEME_KEY;
     const bTheme = THEMES[activeKey] || mainTheme;
     const persona = getActiveMasterPersona(st);
+    const personaValid = hasValidMasterPersona(st.masterPersona);
     const personaOverrideActive = Boolean(st.masterPersona && st.masterPersona !== 'yoriichi');
+    const isMvPersona = Boolean(persona && persona.group === 'multiverse');
+    const isMvNoSprite = Boolean(isMvPersona && !persona.actionSticker);
 
     const rawEffUserAvatar = st.userAvatar === 'none'
       ? ''
-      : (st.userAvatar || (personaOverrideActive ? persona.userAvatar : (mainTheme.userAvatar || persona.userAvatar)) || '');
+      : (st.userAvatar || (personaValid ? (persona.userAvatar || mainTheme.userAvatar) : (mainTheme.userAvatar || persona.userAvatar)) || '');
     const effectiveUserAvatar = safeCssUrl(rawEffUserAvatar);
-    const userActionSticker = safeCssUrl(
-      (personaOverrideActive ? persona.actionSticker : (bTheme.userActionSticker || persona.actionSticker)) || ''
-    );
+    const userActionSticker = isMvNoSprite
+      ? ''
+      : safeCssUrl(
+        (personaValid ? (persona.actionSticker || bTheme.userActionSticker) : (bTheme.userActionSticker || persona.actionSticker)) || ''
+      );
     const personaSkillId = persona.skillId || 'yoriichi';
     const personaLabel = persona.tagLabel || 'Khai Tổ Hỏa Thần (Anh)';
+    const personaRingColor = SEC.sanitizeCssValue(persona.ringColor, '#fde047');
+    const personaGlowColor = SEC.sanitizeCssValue(persona.glowColor, 'rgba(239, 68, 68, 0.52)');
 
     const composer = document.querySelector('.surface-composer') || document.querySelector('[data-testid="composer"]');
     if (composer && window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.mountTokenHud === 'function') {
@@ -3734,12 +4128,15 @@
         const hudThemeCfg = {
           ...bTheme,
           effectiveUserAvatar,
-          userAvatar: effectiveUserAvatar || bTheme.userAvatar || persona.userAvatar,
+          userAvatar: effectiveUserAvatar || persona.userAvatar || bTheme.userAvatar,
           userActionSticker,
+          masterPersonaId: persona ? persona.id : 'yoriichi',
           personaSkillId,
           personaLabel,
-          personaRingColor: SEC.sanitizeCssValue(persona.ringColor, '#fde047'),
-          personaGlowColor: SEC.sanitizeCssValue(persona.glowColor, 'rgba(239, 68, 68, 0.52)')
+          personaRingColor,
+          personaGlowColor,
+          isMultiversePersona: isMvPersona,
+          noActionSprite: isMvNoSprite
         };
         window.__AGY_TOKEN_HUD__.mountTokenHud(composer, hudThemeCfg, activeKey);
       } catch (_) {}
@@ -3750,6 +4147,15 @@
       document.querySelectorAll('.agy-yoriichi-msg-hit').forEach((el) => el.remove());
       return;
     }
+
+    const rt = getShinobuRuntime();
+    if (rt.lastMsgSkillCharId && rt.lastMsgSkillCharId !== personaSkillId) {
+      rt.yoriMsgCombo = 0;
+      rt.lastMsgSkillCharId = personaSkillId;
+    }
+
+    const avSize = Math.min(52, Math.max(22, Number(st.avatarSize) || 32));
+    const avRadius = Math.min(50, Math.max(0, Number.isFinite(Number(st.avatarRadius)) ? Number(st.avatarRadius) : 50));
 
     const isDefaultYoriichi = personaSkillId === 'yoriichi' && (!personaOverrideActive || /Yoriichi|Hỏa Thần/i.test(personaLabel));
     const hitTitle = isDefaultYoriichi
@@ -3763,7 +4169,7 @@
         btn.type = 'button';
         btn.className = 'agy-yoriichi-msg-hit';
         btn.innerHTML = '<i aria-hidden="true"></i>';
-        btn.style.cssText = 'position:absolute;right:0;bottom:6px;width:34px;height:34px;border-radius:50%;background:transparent;border:none;cursor:pointer;z-index:5;padding:0;';
+        btn.style.cssText = `position:absolute;right:0;bottom:6px;width:${avSize}px;height:${avSize}px;border-radius:${avRadius}%;background:transparent;border:none;cursor:pointer;z-index:5;padding:0;`;
         btn.addEventListener('click', (ev) => {
           ev.stopPropagation();
           if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.castYoriichiSunBreathing === 'function') {
@@ -3771,20 +4177,39 @@
             return;
           }
           const curSt = getEffectiveState();
+          const curBubbleKey = curSt.bubbleName || curSt.themeName || DEFAULT_THEME_KEY;
+          const curBTheme = THEMES[curBubbleKey] || THEMES[DEFAULT_THEME_KEY] || {};
           const curP = getActiveMasterPersona(curSt);
-          const sId = curP.skillId || 'yoriichi';
+          const curPValid = hasValidMasterPersona(curSt.masterPersona);
+          const sId = (curP && curP.skillId) || 'yoriichi';
+          const curMvNoSprite = Boolean(curP && curP.group === 'multiverse' && !curP.actionSticker);
+          const actSticker = curMvNoSprite
+            ? ''
+            : (curPValid
+              ? ((curP && curP.actionSticker) || curBTheme.userActionSticker || '')
+              : (curBTheme.userActionSticker || (curP && curP.actionSticker) || ''));
           if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.castSkill === 'function') {
-            const rt = getShinobuRuntime();
-            rt.yoriMsgCombo = ((rt.yoriMsgCombo || 0) + 1) % 4;
-            window.__AGY_KNY_SKILLS__.castSkill(sId, rt.yoriMsgCombo, {
+            const curRt = getShinobuRuntime();
+            if (curRt.lastMsgSkillCharId !== sId) {
+              curRt.yoriMsgCombo = 0;
+              curRt.lastMsgSkillCharId = sId;
+            }
+            const comboIdx = curRt.yoriMsgCombo || 0;
+            curRt.yoriMsgCombo = (comboIdx + 1) % 4;
+            window.__AGY_KNY_SKILLS__.castSkill(sId, comboIdx, {
               charId: sId,
               originRect: btn.getBoundingClientRect(),
-              actionSticker: curP.actionSticker || '',
+              actionSticker: actSticker,
+              noActionSprite: curMvNoSprite,
               composerEl: null
             });
           }
         });
         um.appendChild(btn);
+      } else {
+        btn.style.width = `${avSize}px`;
+        btn.style.height = `${avSize}px`;
+        btn.style.borderRadius = `${avRadius}%`;
       }
       btn.title = hitTitle;
       btn.setAttribute('aria-label', hitTitle);
@@ -3846,13 +4271,47 @@
     }, { signal: window.__AGY_SCROLL_AC__.signal });
   }
 
+  const INTERNAL_ENGINE_MUTATION_SELECTOR =
+    '#agy-token-context-bar, #agy-yoriichi-msg-echo, #agy-shinobu-npc-wrap, #agy-chibi-skill-bar, agy-chibi-aura, agy-hashira-squad, agy-skill-vfx, agy-live-fx, #agy-live-fx-host';
+
+  function isInternalEngineMutation(m) {
+    const t = m && m.target;
+    if (!t) return false;
+    const el = t.nodeType === 1 ? t : t.parentElement;
+    if (!el || typeof el.closest !== 'function') return false;
+    if (el.closest(INTERNAL_ENGINE_MUTATION_SELECTOR)) return true;
+    if (m.type === 'childList') {
+      const nodes = [];
+      if (m.addedNodes && m.addedNodes.length) {
+        for (let i = 0; i < m.addedNodes.length; i++) nodes.push(m.addedNodes[i]);
+      }
+      if (m.removedNodes && m.removedNodes.length) {
+        for (let i = 0; i < m.removedNodes.length; i++) nodes.push(m.removedNodes[i]);
+      }
+      if (nodes.length > 0 && nodes.every((n) => {
+        const ne = n.nodeType === 1 ? n : n.parentElement;
+        return Boolean(ne && typeof ne.matches === 'function' && (ne.matches(INTERNAL_ENGINE_MUTATION_SELECTOR) || ne.closest(INTERNAL_ENGINE_MUTATION_SELECTOR)));
+      })) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   window.__AGY_HOLE_EL__ = null;
   window.__AGY_SIDE_EL__ = null;
   if (window.__AGY_MODAL_OBSERVER__) {
     window.__AGY_MODAL_OBSERVER__.disconnect();
   }
-  applyTheme();
-  window.__AGY_MODAL_OBSERVER__ = new MutationObserver(scheduleTick);
+  applyTheme({}, { skipSaveDisk: true });
+  window.__AGY_MODAL_OBSERVER__ = new MutationObserver((mutations) => {
+    for (let i = 0; i < mutations.length; i++) {
+      if (!isInternalEngineMutation(mutations[i])) {
+        scheduleTick();
+        return;
+      }
+    }
+  });
   window.__AGY_MODAL_OBSERVER__.observe(document.body, {
     childList: true,
     subtree: true,

@@ -173,6 +173,24 @@
       secondary: '#e2e8f0',
       rgb1: '96, 165, 250',
       rgb2: '226, 232, 240'
+    },
+    yoriichi: {
+      charId: 'yoriichi',
+      auraMode: 'sun',
+      styleTitle: 'Nhật Chi Hô Hấp • 日の呼吸',
+      primary: '#ef4444',
+      secondary: '#fde047',
+      rgb1: '239, 68, 68',
+      rgb2: '253, 224, 71'
+    },
+    moon: {
+      charId: 'moon',
+      auraMode: 'moon',
+      styleTitle: 'Nguyệt Ảnh Hô Hấp • 月の呼吸',
+      primary: '#a855f7',
+      secondary: '#38bdf8',
+      rgb1: '168, 85, 247',
+      rgb2: '56, 189, 248'
     }
   };
 
@@ -183,16 +201,19 @@
     wisteria: 'shinobu',
     insect: 'shinobu',
     shinobu: 'shinobu',
+    kanao: 'shinobu',
     water: 'giyu',
     giyu: 'giyu',
     flame: 'rengoku',
     fire: 'rengoku',
     rengoku: 'rengoku',
+    akaza: 'rengoku',
     sound: 'uzui',
     tengen: 'uzui',
     uzui: 'uzui',
     mist: 'muichiro',
     muichiro: 'muichiro',
+    six_eyes: 'muichiro',
     love: 'mitsuri',
     mitsuri: 'mitsuri',
     serpent: 'obanai',
@@ -205,11 +226,21 @@
     gyomei: 'gyomei',
     sun_water: 'tanjiro',
     hinokami: 'tanjiro',
-    sun: 'tanjiro',
     tanjiro: 'tanjiro',
+    sun: 'yoriichi',
+    solar: 'yoriichi',
+    sun_origin: 'yoriichi',
+    yoriichi: 'yoriichi',
+    tsugikuni: 'yoriichi',
+    great_sage: 'yoriichi',
+    moon: 'moon',
+    shadow: 'moon',
+    shadow_monarch: 'moon',
+    kokushibo: 'moon',
     nezuko: 'nezuko',
     blood_blossom: 'nezuko',
     exploding_blood: 'nezuko',
+    muzan: 'nezuko',
     thunder: 'zenitsu',
     lightning: 'zenitsu',
     zenitsu: 'zenitsu',
@@ -301,17 +332,50 @@
       { form: 'Nanh III', name: 'Thực Liệt', kanji: '参ノ牙 喰い裂き', color: '#93c5fd', quote: 'Haha!! Nanh thứ Ba: Thực Liệt! Chém chéo xé toạc mọi con bug dám ngáng đường Đấng Inosuke! 🐗💥' },
       { form: 'Nanh V', name: 'Cuồng Liệt', kanji: '伍ノ牙 狂い裂き', color: '#38bdf8', quote: 'Tấn công tứ phương tám hướng!! Nanh thứ Năm: Cuồng Liệt! Không một góc khuất nào thoát khỏi song đao! 🐗🌪️' },
       { form: 'Thức VII', name: 'Không Gian Thức Giác', kanji: '漆ノ型 空間識覚', color: '#e2e8f0', quote: 'Hơi thở của Quái Thú — Thức thứ Bảy: Không Gian Thức Giác! Cảm nhận từng luồng gió nhỏ nhất để truy tận ổ lỗi! 🐗✨' }
+    ],
+    yoriichi: [
+      { form: 'Nhất Thức', name: 'Viên Vũ Nhất Thiểm', kanji: '日の呼吸 円舞一閃', color: '#ef4444', quote: 'Nhật Chi Hô Hấp: Viên Vũ Nhất Thiểm! Một đường thái dương khép vòng hoàn mỹ định đoạt tất cả! ☀️🗡️' },
+      { form: 'Lục Thức', name: 'Chước Cốt Viêm Dương', kanji: '日の呼吸 灼骨炎陽', color: '#f97316', quote: 'Hách Đao rực đỏ thiêu rụi mọi tà chướng trong chớp mắt — Chước Cốt Viêm Dương! 🔥☀️' },
+      { form: 'Thập Nhất', name: 'Nhật Vựng Chi Long', kanji: '日暈の龍・頭舞い', color: '#fde047', quote: 'Thái Dương Chi Long uốn lượn khai sáng vạn vật!! 🐉☀️' },
+      { form: 'Bí Kỹ', name: 'Thập Tam Thức Khởi Nguyên', kanji: '日の呼吸 拾参ノ型', color: '#facc15', quote: 'Mười hai thức nối liền thành vòng Thái Dương vĩnh hằng — Thập Tam Thức!! ☀️⚡' }
+    ],
+    moon: [
+      { form: 'Thức I', name: 'Ám Nguyệt • Tiêu Chi Cung', kanji: '壱ノ型 闇月・宵の宮', color: '#a855f7', quote: 'Nguyệt Chi Hô Hấp — Thức thứ Nhất: Ám Nguyệt • Tiêu Chi Cung! Lưỡi trăng khuyết rút kiếm trảm đứt màn đêm! 🌙⚔️' },
+      { form: 'Thức II', name: 'Châu Hoa Lộng Nguyệt', kanji: '弐ノ型 珠華ノ弄月', color: '#c084fc', quote: 'Thức thứ Hai: Châu Hoa Lộng Nguyệt! Muôn vàn mảnh trăng lưỡi liềm tím–lam xoay lốc! 🌙✨' },
+      { form: 'Thức VI', name: 'Thường Dạ Cô Nguyệt • Vô Gian', kanji: '陸ノ型 常夜孤月・無間', color: '#38bdf8', quote: 'Thức thứ Sáu: Thường Dạ Cô Nguyệt • Vô Gian! Bão trăng khuyết chém dồn dập xuyên không gian! 🌌🗡️' },
+      { form: 'Thức XVI', name: 'Nguyệt Hồng • Phiến Đạo Nguyệt', kanji: '拾陸ノ型 月虹・片割れ月', color: '#e879f9', quote: 'Tuyệt kỹ tối thượng — Nguyệt Hồng • Phiến Đạo Nguyệt!! Cầu vồng ánh trăng giáng thẳng từ bầu trời đêm! 🌙⚡' }
     ]
   };
 
+  const EXPLICIT_HERO_KEYS = [
+    'yoriichi',
+    'ubuyashiki',
+    'shinobu',
+    'giyu',
+    'rengoku',
+    'uzui',
+    'muichiro',
+    'mitsuri',
+    'obanai',
+    'sanemi',
+    'gyomei',
+    'tanjiro',
+    'nezuko',
+    'zenitsu',
+    'inosuke'
+  ];
+
   function inferCharKeyFromRaw(rawStr) {
-    if (!rawStr) return '';
-    const s = String(rawStr).trim().toLowerCase();
+    if (!rawStr || typeof rawStr !== 'string') return '';
+    const trimmed = rawStr.trim();
+    if (!trimmed || /^data:/i.test(trimmed)) return '';
+    const s = trimmed.toLowerCase();
     if (MODE_TO_CHAR[s]) return MODE_TO_CHAR[s];
-    const keys = Object.keys(CHAR_META);
-    for (let i = 0; i < keys.length; i++) {
-      if (s.includes(keys[i])) return keys[i];
+    for (let i = 0; i < EXPLICIT_HERO_KEYS.length; i++) {
+      if (s.includes(EXPLICIT_HERO_KEYS[i])) return EXPLICIT_HERO_KEYS[i];
     }
+    if (/(?:^|[^a-z0-9])(moon|shadow_monarch|kokushibo)(?:$|[^a-z0-9])/.test(s)) return 'moon';
+    if (/(?:^|[^a-z0-9])(sun_origin|solar|great_sage|tsugikuni)(?:$|[^a-z0-9])/.test(s)) return 'yoriichi';
     if (s.includes('chúa công') || s.includes('kagaya') || s.includes('amane')) return 'ubuyashiki';
     if (s.includes('trùng trụ')) return 'shinobu';
     if (s.includes('thủy trụ')) return 'giyu';
@@ -322,6 +386,8 @@
     if (s.includes('xà trụ') || s.includes('iguro')) return 'obanai';
     if (s.includes('phong trụ') || s.includes('shinazugawa')) return 'sanemi';
     if (s.includes('nham trụ') || s.includes('himejima')) return 'gyomei';
+    if (s.includes('khai tổ') || s.includes('hỏa thần khởi nguyên')) return 'yoriichi';
+    if (s.includes('nguyệt') || s.includes('bóng tối')) return 'moon';
     if (s.includes('nhật luân') || s.includes('kamado')) return 'tanjiro';
     if (s.includes('hồng liên')) return 'nezuko';
     if (s.includes('lôi minh') || s.includes('agatsuma')) return 'zenitsu';
@@ -334,8 +400,9 @@
     const key =
       inferCharKeyFromRaw(charId) ||
       inferCharKeyFromRaw(cfg.charId || cfg.id) ||
-      inferCharKeyFromRaw(cfg.fxMode) ||
       inferCharKeyFromRaw(cfg.sticker) ||
+      inferCharKeyFromRaw(cfg.actionSticker) ||
+      inferCharKeyFromRaw(cfg.fxMode) ||
       inferCharKeyFromRaw(cfg.npc && cfg.npc.title) ||
       inferCharKeyFromRaw(cfg.npc && cfg.npc.badgeLabel) ||
       'shinobu';
@@ -447,7 +514,6 @@
       if (raw === '1' || raw === 'true') return true;
       if (typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__) {
         const bio = window.__AGY_BIO_AUDIO__;
-        if (typeof bio.isEnabled === 'function' && !bio.isEnabled()) return true;
         if (typeof bio.getPrefs === 'function') {
           const prefs = bio.getPrefs();
           if (prefs && prefs.swordSfxEnabled === false) return true;
@@ -466,6 +532,10 @@
     try {
       localStorage.setItem(SFX_MUTE_STORAGE_KEY, next ? '1' : '0');
     } catch (_) {}
+    const bio = typeof window !== 'undefined' ? window.__AGY_BIO_AUDIO__ : null;
+    if (bio && typeof bio.setSwordSfxEnabled === 'function') {
+      try { bio.setSwordSfxEnabled(!next); } catch (_) {}
+    }
     const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
     if (ext) {
       try {
@@ -1211,6 +1281,90 @@
           const starR = (1.8 + (i % 3) * 0.95) * Math.min(1.3, boost);
           drawFourPointStar(ctx, sx, sy, starR, rot, jewelColors[i % jewelColors.length], tw * 0.92 * boost);
         }
+      } else if (mode === 'sun') {
+        // Primordial Sun Breathing crimson-gold solar halo & ascending solar embers (Yoriichi / Sun themes)
+        const pulse = 0.92 + 0.08 * Math.sin(t * 0.0032);
+        drawAmbientBacklight(ctx, cx, 44, 47 * pulse, 33 * pulse, '239, 68, 68', 0.30 * boost);
+        drawAmbientBacklight(ctx, cx, 42, 34 * pulse, 24 * pulse, '253, 224, 71', 0.24 * boost);
+
+        ctx.save();
+        ctx.translate(cx, 44);
+        ctx.rotate(t * 0.00042);
+        ctx.strokeStyle = `rgba(253, 224, 71, ${Math.min(1, 0.72 * boost).toFixed(3)})`;
+        ctx.lineWidth = 1.45;
+        ctx.beginPath();
+        ctx.arc(0, 0, 32 * pulse, Math.PI * 0.94, Math.PI * 2.06);
+        ctx.stroke();
+
+        ctx.strokeStyle = `rgba(239, 68, 68, ${Math.min(1, 0.58 * boost).toFixed(3)})`;
+        ctx.lineWidth = 1.0;
+        for (let r = 0; r < 7; r++) {
+          const a = Math.PI * (1.02 + (r / 6) * 0.96);
+          const r1 = 33 * pulse;
+          const r2 = (38 + (r % 2) * 3.5) * pulse;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1 * 0.85);
+          ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2 * 0.85);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        for (let i = 0; i < 14; i++) {
+          const p = particles[i];
+          if (!isStatic) {
+            p.v -= 0.0068 * p.speed * dt * boost;
+            if (p.v < 0) p.v = 1;
+          }
+          const sx = 66 + p.u * 84 + Math.sin(t * 0.0042 + p.phase) * 3.8;
+          const sy = 12 + p.v * 58;
+          const alpha = Math.sin(p.v * Math.PI) * 0.88 * boost;
+          const rgb = i % 3 === 0 ? '254, 240, 138' : (i % 3 === 1 ? '249, 115, 22' : '239, 68, 68');
+          drawOrb(ctx, sx, sy, p.r * 0.75, rgb, alpha);
+        }
+      } else if (mode === 'moon') {
+        // Abyssal violet-cyan Moon / Shadow Monarch halo & drifting crescent shards
+        const pulse = 0.93 + 0.07 * Math.sin(t * 0.0025);
+        drawAmbientBacklight(ctx, cx, 44, 46 * pulse, 31 * pulse, '168, 85, 247', 0.28 * boost);
+        drawAmbientBacklight(ctx, cx, 41, 33 * pulse, 23 * pulse, '56, 189, 248', 0.19 * boost);
+
+        // Glowing crescent moon arc behind Chibi
+        ctx.save();
+        ctx.translate(cx + 2, 41);
+        ctx.rotate(-0.22 + Math.sin(t * 0.0014) * 0.05);
+        ctx.fillStyle = `rgba(216, 180, 254, ${Math.min(0.88, 0.42 * boost).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(0, 0, 29 * pulse, -Math.PI * 0.85, Math.PI * 0.35, false);
+        ctx.quadraticCurveTo(8, -6, 29 * pulse * Math.cos(-Math.PI * 0.85), 29 * pulse * Math.sin(-Math.PI * 0.85));
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        for (let i = 0; i < 12; i++) {
+          const p = particles[i];
+          if (!isStatic) {
+            p.v -= 0.0044 * p.speed * dt * boost;
+            if (p.v < 0) p.v = 1;
+          }
+          const mx = 66 + p.u * 84 + Math.sin(t * 0.0028 + p.phase) * 4.2;
+          const my = 12 + p.v * 58;
+          const alpha = Math.sin(p.v * Math.PI) * 0.84 * boost;
+          const rgb = i % 2 === 0 ? '192, 132, 252' : '56, 189, 248';
+          if (i % 3 === 0) {
+            ctx.save();
+            ctx.translate(mx, my);
+            ctx.rotate(t * 0.003 + p.phase);
+            ctx.fillStyle = `rgba(${rgb}, ${Math.min(1, alpha).toFixed(3)})`;
+            const cr = 2.4 + (i % 2) * 0.8;
+            ctx.beginPath();
+            ctx.arc(0, 0, cr, -0.75 * Math.PI, 0.75 * Math.PI, false);
+            ctx.quadraticCurveTo(cr * 0.2, 0, cr * Math.cos(-0.75 * Math.PI), cr * Math.sin(-0.75 * Math.PI));
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          } else {
+            drawFourPointStar(ctx, mx, my, 1.5 + (i % 2) * 0.5, t * 0.0025 + p.phase, rgb, alpha * 0.88);
+          }
+        }
       }
 
       if (surgeProgress > 0.01) {
@@ -1493,6 +1647,7 @@
 
   const state = {
     // Aura state
+    themeCfg: null,
     auraComposer: null,
     auraHost: null,
     auraCanvas: null,
@@ -1527,6 +1682,23 @@
     uiCleanups: []
   };
 
+  function colorToAlphaRgba(rawColor, targetAlpha, fallbackRgba) {
+    if (!rawColor || typeof rawColor !== 'string') return fallbackRgba;
+    const c = rawColor.trim();
+    const hexMatch = c.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+      let h = hexMatch[1];
+      if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+      const n = parseInt(h, 16);
+      return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${targetAlpha})`;
+    }
+    const rgbMatch = c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (rgbMatch) {
+      return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${targetAlpha})`;
+    }
+    return fallbackRgba;
+  }
+
   function isMotionPaused() {
     if (typeof document === 'undefined') return true;
     if (document.hidden) return true;
@@ -1537,18 +1709,31 @@
       if (localStorage.getItem(FX_PAUSE_STORAGE_KEY) === '1') return true;
     } catch (_) {}
     const rt = typeof window !== 'undefined' ? window.__AGY_SHINOBU_RT__ : null;
-    if (rt && rt.fxPaused) return true;
+    if (rt && (rt.fxPaused || rt.fxFocusPaused)) return true;
     return false;
   }
 
   function syncBubbleFrames() {
     if (typeof document === 'undefined' || !state.auraMeta) return;
-    const meta = state.auraMeta;
     const paused = isMotionPaused();
     if (document.body) {
       if (paused) document.body.dataset.agyFxPaused = '1';
       else delete document.body.dataset.agyFxPaused;
     }
+
+    const cfg = state.themeCfg || state.uiThemeCfg || {};
+    const masterId = typeof cfg.masterPersonaId === 'string' ? cfg.masterPersonaId.trim().toLowerCase() : '';
+    const isCustomMaster = Boolean(masterId && masterId !== 'yoriichi' && (cfg.personaGlowColor || cfg.personaRingColor));
+
+    const bwaveC1 = isCustomMaster
+      ? colorToAlphaRgba(cfg.personaGlowColor || cfg.personaRingColor, 0.48, 'rgba(239, 68, 68, 0.48)')
+      : 'rgba(239, 68, 68, 0.48)';
+    const bwaveC2 = isCustomMaster
+      ? colorToAlphaRgba(cfg.personaRingColor || cfg.personaGlowColor, 0.24, 'rgba(253, 224, 71, 0.24)')
+      : 'rgba(253, 224, 71, 0.24)';
+    const bwaveLine = isCustomMaster
+      ? (cfg.personaRingColor || cfg.personaGlowColor || '#fde047')
+      : '#fde047';
 
     document.querySelectorAll('.agy-user-bubble-frame').forEach((frame) => {
       let wave = frame.querySelector(':scope > .agy-user-chibi-aura-wave');
@@ -1562,9 +1747,9 @@
       } else if (wave.children.length === 0) {
         wave.innerHTML = '<i aria-hidden="true"></i>';
       }
-      wave.style.setProperty('--agy-bwave-c1', 'rgba(239, 68, 68, 0.48)');
-      wave.style.setProperty('--agy-bwave-c2', 'rgba(253, 224, 71, 0.24)');
-      wave.style.setProperty('--agy-bwave-line', '#fde047');
+      wave.style.setProperty('--agy-bwave-c1', bwaveC1);
+      wave.style.setProperty('--agy-bwave-c2', bwaveC2);
+      wave.style.setProperty('--agy-bwave-line', bwaveLine);
     });
   }
 
@@ -1686,6 +1871,9 @@
     }
 
     ensureStyles();
+    if (themeCfg && typeof themeCfg === 'object') {
+      state.themeCfg = themeCfg;
+    }
     const meta = resolveCharacterMeta(themeCfg, charId);
 
     // Preload Full-Body Action Chibi PNG sprite into memory so 1st click leaps with 0ms latency!
@@ -1709,6 +1897,9 @@
     }
 
     teardownAura();
+    if (themeCfg && typeof themeCfg === 'object') {
+      state.themeCfg = themeCfg;
+    }
 
     const host = document.createElement('agy-chibi-aura');
     host.setAttribute('aria-hidden', 'true');
@@ -1741,6 +1932,7 @@
     state.auraScene = createChibiAuraScene(meta.auraMode, meta);
 
     const onVis = () => resumeOrPauseAura();
+    const onFocusArbiterSync = () => setTimeout(resumeOrPauseAura, 0);
     const onResizeDpr = () => {
       syncAuraCanvasDpr();
       if (isMotionPaused()) drawStaticAuraFrame();
@@ -1749,7 +1941,18 @@
     state.auraCleanups.push(() => document.removeEventListener('visibilitychange', onVis));
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', onResizeDpr, { passive: true });
+      window.addEventListener('blur', onFocusArbiterSync, { passive: true });
+      window.addEventListener('focus', onFocusArbiterSync, { passive: true });
       state.auraCleanups.push(() => window.removeEventListener('resize', onResizeDpr));
+      state.auraCleanups.push(() => window.removeEventListener('blur', onFocusArbiterSync));
+      state.auraCleanups.push(() => window.removeEventListener('focus', onFocusArbiterSync));
+    }
+    if (document.documentElement) {
+      const docEl = document.documentElement;
+      docEl.addEventListener('mouseleave', onFocusArbiterSync, { passive: true });
+      docEl.addEventListener('mouseenter', onFocusArbiterSync, { passive: true });
+      state.auraCleanups.push(() => docEl.removeEventListener('mouseleave', onFocusArbiterSync));
+      state.auraCleanups.push(() => docEl.removeEventListener('mouseenter', onFocusArbiterSync));
     }
 
     const reducedMq = typeof window !== 'undefined' && window.matchMedia
@@ -1914,8 +2117,10 @@
     const safeIdx = ((skillIdx % skills.length) + skills.length) % skills.length;
     const skill = skills[safeIdx];
 
-    // Advance sequential combo pointer for next Chibi click or "⚡ Xuất Chiêu" click
-    state.comboIdxByChar[charId] = (safeIdx + 1) % skills.length;
+    // Advance sequential combo pointer for next Chibi click (do NOT overwrite user combo progress during automated Finisher!)
+    if (!opts.fromFinisher) {
+      state.comboIdxByChar[charId] = (safeIdx + 1) % skills.length;
+    }
 
     const composer = state.uiComposer || state.auraComposer || (typeof document !== 'undefined' ? document.querySelector('.surface-composer') : null);
     const muted = isSfxMuted();
@@ -2203,20 +2408,19 @@
       (!requestedHero && !hostHero);
 
     if (useYoriichi) {
+      const fIdx = typeof opts.skillIndex === 'number' ? ((opts.skillIndex % 4) + 4) % 4 : 3;
+      const crestBtn = typeof document !== 'undefined' ? document.querySelector('.agy-yoriichi-crest-btn') : null;
+      const yoriOriginNode = opts.originEl || opts.fallbackOriginEl || crestBtn || null;
       const hud = typeof window !== 'undefined' ? window.__AGY_TOKEN_HUD__ : null;
-      if (hud && typeof hud.castYoriichiSunBreathing === 'function' && typeof opts.skillIndex !== 'number') {
-        const crestBtn = typeof document !== 'undefined' ? document.querySelector('.agy-yoriichi-crest-btn') : null;
-        hud.castYoriichiSunBreathing(opts.originEl || crestBtn || null);
-        return { ok: true, charId: 'yoriichi', mode: 'sun_crest' };
+      if (hud && typeof hud.castYoriichiSunBreathing === 'function') {
+        hud.castYoriichiSunBreathing(fIdx, yoriOriginNode);
+        return { ok: true, charId: 'yoriichi', skillIndex: fIdx, mode: 'sun_crest' };
       }
       const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
       if (ext && typeof ext.castSkill === 'function') {
         const muted = isSfxMuted();
-        const fIdx = typeof opts.skillIndex === 'number' ? ((opts.skillIndex % 4) + 4) % 4 : 3;
-        const crestBtn = typeof document !== 'undefined' ? document.querySelector('.agy-yoriichi-crest-btn') : null;
-        const originNode = opts.originEl || crestBtn || null;
-        const originRect = originNode && typeof originNode.getBoundingClientRect === 'function'
-          ? originNode.getBoundingClientRect()
+        const originRect = yoriOriginNode && typeof yoriOriginNode.getBoundingClientRect === 'function'
+          ? yoriOriginNode.getBoundingClientRect()
           : null;
         ext.castSkill('yoriichi', fIdx, {
           charId: 'yoriichi',
@@ -2236,8 +2440,9 @@
       if (ext && typeof ext.castSkill === 'function') {
         const muted = isSfxMuted();
         const fIdx = typeof opts.skillIndex === 'number' ? ((opts.skillIndex % 4) + 4) % 4 : 3;
-        const originRect = opts.originEl && typeof opts.originEl.getBoundingClientRect === 'function'
-          ? opts.originEl.getBoundingClientRect()
+        const reqOrigin = opts.originEl || opts.fallbackOriginEl || null;
+        const originRect = reqOrigin && typeof reqOrigin.getBoundingClientRect === 'function'
+          ? reqOrigin.getBoundingClientRect()
           : null;
         ext.castSkill(requestedHero, fIdx, {
           charId: requestedHero,
@@ -2250,6 +2455,7 @@
       }
     }
 
+    // Active hostHero on right composer corner: never pass left-corner fallbackOriginEl so Chibi leaps & lands on right corner!
     const finIdx = typeof opts.skillIndex === 'number' ? opts.skillIndex : 3;
     const castSkillObj = executeSkillCast(finIdx, {
       fromFinisher: true,

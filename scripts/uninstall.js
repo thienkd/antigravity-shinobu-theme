@@ -94,7 +94,7 @@ function isVerifiedDaemonProcess(pid) {
                     '-NoProfile',
                     '-NonInteractive',
                     '-Command',
-                    `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" -ErrorAction SilentlyContinue; if ($p) { "$($p.Name)|$($p.CommandLine)" }`,
+                    `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" -ErrorAction Stop; if ($p) { "$($p.Name)|$($p.CommandLine)" }`,
                 ],
                 { encoding: 'utf8', windowsHide: true, timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
             ).trim();
@@ -102,13 +102,13 @@ function isVerifiedDaemonProcess(pid) {
             return NODE_PROC_RE.test(out) && DAEMON_SCRIPT_RE.test(out);
         } catch (_) {
             try {
-                const tl = execFileSync('tasklist.exe', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], {
-                    encoding: 'utf8',
-                    windowsHide: true,
-                    timeout: 4000,
-                    stdio: ['ignore', 'pipe', 'ignore'],
-                }).trim();
-                return NODE_PROC_RE.test(tl);
+                const wmicOut = execFileSync(
+                    'wmic.exe',
+                    ['process', 'where', `ProcessId=${pid}`, 'get', 'Name,CommandLine', '/FORMAT:LIST'],
+                    { encoding: 'utf8', windowsHide: true, timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] }
+                ).trim();
+                if (!wmicOut) return false;
+                return NODE_PROC_RE.test(wmicOut) && DAEMON_SCRIPT_RE.test(wmicOut);
             } catch (__) {
                 return false;
             }
@@ -206,6 +206,47 @@ function unpatchLinuxDesktopLaunchers() {
     }
 }
 
+function unpatchWindowsShortcuts() {
+    if (process.platform !== 'win32') return;
+    const psScript = `
+$WshShell = New-Object -ComObject WScript.Shell
+$Dirs = @(
+  [Environment]::GetFolderPath('DesktopDirectory'),
+  [Environment]::GetFolderPath('Programs'),
+  [Environment]::GetFolderPath('Startup'),
+  (Join-Path $env:APPDATA 'Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar')
+) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+foreach ($d in $Dirs) {
+  Get-ChildItem -LiteralPath $d -Recurse -Filter '*.lnk' -ErrorAction SilentlyContinue | ForEach-Object {
+    try {
+      $sc = $WshShell.CreateShortcut($_.FullName)
+      if ($sc.TargetPath -and ($sc.TargetPath -imatch '\\\\Antigravity\\.exe$')) {
+        if ($sc.Arguments -and ($sc.Arguments -match '--remote-debugging-port')) {
+          $sc.Arguments = (($sc.Arguments -replace '\\s*--remote-debugging-port(?:=\\S+)?', '') -replace '\\s{2,}', ' ').Trim()
+          $sc.Save()
+          Write-Output $_.FullName
+        }
+      }
+    } catch {}
+  }
+}
+`;
+    try {
+        const out = execFileSync(
+            'powershell.exe',
+            ['-NoProfile', '-NonInteractive', '-Command', psScript],
+            { encoding: 'utf8', windowsHide: true, timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }
+        ).trim();
+        if (out) {
+            for (const line of out.split(/\r?\n/)) {
+                if (line.trim()) {
+                    console.log(`[uninstall] Removed CDP flag from Windows shortcut: ${line.trim()}`);
+                }
+            }
+        }
+    } catch (_) {}
+}
+
 async function stopDaemonAndCleanRuntimeFiles(prePid, preVerified) {
     const currentPid = readRecordedPid();
     const pid = currentPid || prePid;
@@ -247,6 +288,7 @@ async function stopDaemonAndCleanRuntimeFiles(prePid, preVerified) {
                 console.log(`[uninstall] Purged build directory: ${DIST_DIR}`);
             }
         } catch (_) {}
+        unpatchWindowsShortcuts();
         unpatchLinuxDesktopLaunchers();
     }
 }
@@ -311,7 +353,7 @@ function isCandidateAntigravityUrl(rawUrl) {
     try {
         const u = new URL(trimmed);
         if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-        if (u.hostname !== '127.0.0.1' && u.hostname !== 'localhost') return false;
+        if (u.hostname !== '127.0.0.1' && u.hostname !== 'localhost' && u.hostname !== '[::1]') return false;
         const p = u.pathname || '/';
         return (
             p === '/' ||
@@ -352,51 +394,80 @@ function cleanupPage(wsUrl) {
             resolve(false);
             return;
         }
+        let settled = false;
         const ws = new globalThis.WebSocket(wsUrl);
+        const finish = (val) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(Boolean(val));
+        };
         const timer = setTimeout(() => {
             try {
                 ws.close();
             } catch (_) {}
-            resolve(false);
+            finish(false);
         }, 2500);
 
         ws.addEventListener('open', () => {
-            ws.send(
-                JSON.stringify({
-                    id: 1,
-                    method: 'Runtime.evaluate',
-                    params: {
-                        returnByValue: true,
-                        expression: `(() => {
-                            const isAgy = Boolean(
-                                document.getElementById('antigravity-custom-theme-active') ||
-                                document.querySelector('.agy-shell, .monaco-workbench, [data-launchpad]')
-                            );
-                            if (!isAgy) return false;
-                            if (typeof window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__ === 'function') {
-                                window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__();
-                                return true;
-                            }
-                            return false;
-                        })()`,
-                    },
-                })
-            );
+            try {
+                ws.send(
+                    JSON.stringify({
+                        id: 1,
+                        method: 'Runtime.evaluate',
+                        params: {
+                            returnByValue: true,
+                            expression: `(() => {
+                                const purgeStorage = ${JSON.stringify(PURGE)};
+                                const isAgy = Boolean(
+                                    document.getElementById('antigravity-custom-theme-active') ||
+                                    document.querySelector('.agy-shell, .monaco-workbench, [data-launchpad], #workbench\\\\.parts\\\\.editor')
+                                );
+                                if (!isAgy) return false;
+                                let cleaned = false;
+                                if (typeof window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__ === 'function') {
+                                    window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__();
+                                    cleaned = true;
+                                }
+                                if (purgeStorage) {
+                                    try {
+                                        const keys = [];
+                                        for (let i = 0; i < localStorage.length; i++) {
+                                            const k = localStorage.key(i);
+                                            if (k && k.startsWith('agy_')) keys.push(k);
+                                        }
+                                        for (const k of keys) {
+                                            localStorage.removeItem(k);
+                                        }
+                                        if (keys.length > 0) cleaned = true;
+                                    } catch (_) {}
+                                }
+                                return cleaned;
+                            })()`,
+                        },
+                    })
+                );
+            } catch (_) {
+                finish(false);
+            }
         });
         ws.addEventListener('message', (event) => {
             try {
                 const msg = JSON.parse(String(event.data));
                 if (msg.id === 1) {
-                    clearTimeout(timer);
                     const removed = Boolean(msg.result && msg.result.result && msg.result.result.value);
-                    ws.close();
-                    resolve(removed);
+                    finish(removed);
+                    try {
+                        ws.close();
+                    } catch (_) {}
                 }
             } catch (_) {}
         });
+        ws.addEventListener('close', () => {
+            finish(false);
+        });
         ws.addEventListener('error', () => {
-            clearTimeout(timer);
-            resolve(false);
+            finish(false);
         });
     });
 }

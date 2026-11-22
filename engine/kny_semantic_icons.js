@@ -48,8 +48,8 @@
       archetype = 'forge';
     }
 
-    // Extract clean monogram initial for fallback crest
-    const alphaMatch = projectName.match(/[A-Za-zÀ-ỹ0-9]/);
+    // Extract clean Unicode letter/number monogram initial (supports CJK & Vietnamese, excludes × / ÷)
+    const alphaMatch = projectName.match(/[\p{L}\p{N}]/u);
     const initial = alphaMatch ? alphaMatch[0].toUpperCase() : 'A';
 
     const PALETTES = [
@@ -129,19 +129,20 @@
 
   function normalizeElementKey(raw) {
     const s = String(raw || '').trim().toLowerCase();
-    if (!s) return 'sun';
-    if (s.includes('water') || s.includes('giyu') || s.includes('thủy trụ')) return 'water';
-    if (s.includes('flame') || s.includes('rengoku') || s.includes('viêm trụ')) return 'flame';
+    if (!s) return 'yoriichi';
+    if (s.includes('sun_water') || s.includes('tanjiro') || s.includes('nhật luân')) return 'sun_water';
     if (s.includes('royal') || s.includes('ubuyashiki') || s.includes('chúa công')) return 'royal_wisteria';
     if (s.includes('wisteria') || s.includes('insect') || s.includes('shinobu') || s.includes('trùng trụ')) return 'wisteria';
+    if (s.includes('moon') || s.includes('shadow') || s.includes('nguyệt') || s.includes('kokushibo')) return 'moon';
+    if (s.includes('water') || s.includes('giyu') || s.includes('thủy trụ')) return 'water';
+    if (s.includes('flame') || s.includes('rengoku') || s.includes('viêm trụ')) return 'flame';
     if (s.includes('sound') || s.includes('uzui') || s.includes('âm trụ')) return 'sound';
     if (s.includes('mist') || s.includes('muichiro') || s.includes('hà trụ')) return 'mist';
     if (s.includes('love') || s.includes('mitsuri') || s.includes('luyến trụ')) return 'love';
     if (s.includes('serpent') || s.includes('snake') || s.includes('obanai') || s.includes('xà trụ')) return 'serpent';
     if (s.includes('wind') || s.includes('sanemi') || s.includes('phong trụ')) return 'wind';
     if (s.includes('stone') || s.includes('rock') || s.includes('gyomei') || s.includes('nham trụ')) return 'stone';
-    if (s.includes('sun_water') || s.includes('tanjiro') || s.includes('nhật luân')) return 'sun_water';
-    if (s.includes('blood') || s.includes('nezuko') || s.includes('hồng liên')) return 'nezuko';
+    if (s.includes('blood') || s.includes('nezuko') || s.includes('hồng liên') || s.includes('huyết quỷ')) return 'nezuko';
     if (s.includes('thunder') || s.includes('zenitsu') || s.includes('lôi minh')) return 'thunder';
     if (s.includes('beast') || s.includes('inosuke') || s.includes('dã thú')) return 'beast';
     if (s.includes('cosmic') || s.includes('wlop')) return 'cosmic';
@@ -277,6 +278,14 @@
         body = `
           <polygon points="12,2.5 19,8.5 16.2,20.5 7.8,20.5 5,8.5" fill="rgba(148,163,184,0.28)" stroke="#cbd5e1" stroke-width="1.7" stroke-linejoin="round"/>
           <polyline points="12,2.5 12,20.5 19,8.5" stroke="#f8fafc" stroke-width="1.15" fill="none"/>
+        `;
+        break;
+
+      case 'moon': // Nguyệt Hô Hấp / Đế Vương Bóng Tối: Sharp Violet-Azure crescent moon & astral blade glint
+        body = `
+          <path d="M15.8 3.4a8.8 8.8 0 1 0 4.8 14.9A7.4 7.4 0 0 1 15.8 3.4Z" fill="rgba(168,85,247,0.34)" stroke="#c084fc" stroke-width="1.75" stroke-linejoin="round"/>
+          <path d="M17.2 6.2l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9Z" fill="#38bdf8"/>
+          <circle cx="14.2" cy="13.2" r="1.15" fill="#e0f2fe"/>
         `;
         break;
 

@@ -7,6 +7,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DAEMON_JS="$REPO_ROOT/daemon/theme_daemon.js"
 PAYLOAD_JS="$REPO_ROOT/dist/theme_payload.js"
 BUILD_NODE="$REPO_ROOT/scripts/build_payload.js"
+BUILD_PY="$REPO_ROOT/scripts/build_payload.py"
 PID_FILE="$REPO_ROOT/daemon.pid"
 LOG_FILE="$REPO_ROOT/daemon.log"
 
@@ -66,11 +67,18 @@ find_node() {
 
 ensure_payload() {
     local node_bin="$1"
-    if [ -f "$PAYLOAD_JS" ]; then
+    echo "[install-unix] Building fresh dist/theme_payload.js via Node.js..."
+    if "$node_bin" "$BUILD_NODE"; then
         return 0
     fi
-    echo "[install-unix] Building dist/theme_payload.js via Node.js..."
-    "$node_bin" "$BUILD_NODE"
+    if command -v python3 >/dev/null 2>&1 && [ -f "$BUILD_PY" ]; then
+        echo "[install-unix] Node build failed; falling back to python3 scripts/build_payload.py..."
+        if python3 "$BUILD_PY"; then
+            return 0
+        fi
+    fi
+    echo "[install-unix] Error: Failed to build dist/theme_payload.js." >&2
+    exit 1
 }
 
 is_theme_daemon_pid() {
@@ -216,10 +224,10 @@ EOF
             echo "[install-unix] LaunchAgent loaded via bootstrap (retry): $plist_path"
         else
             launchctl load -w "$plist_path" 2>/dev/null || true
-            echo "[install-unix] LaunchAgent registered: $plist_path"
+            launchctl kickstart -kp "gui/$uid_num/$SERVICE_LABEL" 2>/dev/null || true
+            echo "[install-unix] LaunchAgent registered (fallback kickstart): $plist_path"
         fi
     fi
-    launchctl kickstart -kp "gui/$uid_num/$SERVICE_LABEL" 2>/dev/null || true
 
     local port_upper="$HOME/Library/Application Support/Antigravity/DevToolsActivePort"
     local port_lower="$HOME/Library/Application Support/antigravity/DevToolsActivePort"
@@ -254,6 +262,9 @@ start_nohup_daemon() {
 
 install_linux() {
     local node_bin="$1"
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user stop "$SYSTEMD_UNIT" 2>/dev/null || true
+    fi
     stop_existing_pid
     ensure_private_log
     patch_linux_desktop_launcher "$node_bin"
@@ -303,6 +314,9 @@ case "$cmd" in
     --foreground|foreground|run)
         NODE_BIN="$(find_node)"
         ensure_payload "$NODE_BIN"
+        if [ "$(uname -s)" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then
+            systemctl --user stop "$SYSTEMD_UNIT" 2>/dev/null || true
+        fi
         stop_existing_pid
         ensure_private_log
         exec "$NODE_BIN" "$DAEMON_JS"

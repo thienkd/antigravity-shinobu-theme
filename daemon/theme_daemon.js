@@ -31,7 +31,10 @@ const EPHEMERAL_TOKEN_BUF = Buffer.from(EPHEMERAL_TOKEN, 'utf8');
 const ROOT_DIR = path.resolve(__dirname, '..');
 const PID_FILE = path.join(ROOT_DIR, 'daemon.pid');
 const CONFIG_FILE = process.env.AGY_CONFIG_PATH || path.join(ROOT_DIR, 'theme_config.json');
-const BACKUP_CONFIG_FILE = path.join(os.homedir(), '.gemini', 'antigravity', 'custom_theme_backup.json');
+const BACKUP_CONFIG_FILE =
+    process.env.AGY_BACKUP_CONFIG_PATH ||
+    path.join(os.homedir(), '.gemini', 'antigravity', 'custom_theme_backup.json');
+const SURVIVAL_BACKUP_FILE = BACKUP_CONFIG_FILE;
 const THEMES_DIR = path.join(ROOT_DIR, 'themes');
 const ASSETS_DIR = path.join(THEMES_DIR, 'assets');
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
@@ -40,17 +43,24 @@ const BUILD_SCRIPT_JS = path.join(ROOT_DIR, 'scripts', 'build_payload.js');
 const LOG_FILE = path.join(ROOT_DIR, 'daemon.log');
 const DEFAULT_CONFIG = {};
 
-const MAX_BINDING_PAYLOAD_BYTES = 2 * 1024 * 1024;
+const MAX_BINDING_PAYLOAD_BYTES = 4 * 1024 * 1024;
+const MAX_ACTIVE_FORGED_THEME_BYTES = Math.floor(1.8 * 1024 * 1024);
 const MAX_TRACKED_CONVERSATIONS = 16;
 const MAX_TRACKED_CHILDREN = 32;
 const MAX_ACTIVE_SUBAGENTS_TAILED = 8;
 const MAX_RECENT_COMPLETED_SUBAGENTS = 6;
 const COMPLETED_SUBAGENT_TTL_MS = 12000;
+const SUBAGENT_IDLE_COMPLETE_MS = 2500;
+const LATEST_CID_CACHE_TTL_MS = 1500;
 const MAX_LINE_BYTES = 2 * 1024 * 1024;
 const READ_CHUNK_BYTES = 64 * 1024;
-const MAX_SSE_CLIENTS = 8;
+const MAX_SSE_CLIENTS = 32;
 const SSE_POLL_INTERVAL_MS = 350;
 const SSE_PING_INTERVAL_MS = 15000;
+const MAX_LOG_BYTES = 512 * 1024;
+const LOG_STAT_INTERVAL = 40;
+const CDP_SEND_TIMEOUT_MS = 6000;
+const CONFIG_BROADCAST_DEBOUNCE_MS = 120;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -163,13 +173,41 @@ function redactLog(msg) {
     return text;
 }
 
+let logWriteCounter = LOG_STAT_INTERVAL - 1;
+
+function rotateLogKeepingTailIfNeeded() {
+    if (++logWriteCounter < LOG_STAT_INTERVAL) return;
+    logWriteCounter = 0;
+    if (!fs.existsSync(LOG_FILE)) return;
+    const st = fs.statSync(LOG_FILE);
+    if (st.size <= MAX_LOG_BYTES) return;
+
+    const keepBytes = Math.floor(MAX_LOG_BYTES / 2);
+    let fd = -1;
+    let tailSlice = Buffer.alloc(0);
+    try {
+        fd = fs.openSync(LOG_FILE, 'r');
+        const buf = Buffer.allocUnsafe(keepBytes);
+        const readPos = Math.max(0, st.size - keepBytes);
+        const bytesRead = fs.readSync(fd, buf, 0, keepBytes, readPos);
+        const rawSlice = buf.subarray(0, bytesRead);
+        const firstNl = rawSlice.indexOf(0x0a);
+        tailSlice = firstNl >= 0 && firstNl + 1 < rawSlice.length ? rawSlice.subarray(firstNl + 1) : rawSlice;
+    } finally {
+        if (fd !== -1) {
+            try {
+                fs.closeSync(fd);
+            } catch (_) {}
+        }
+    }
+    fs.writeFileSync(LOG_FILE, tailSlice, { mode: 0o600 });
+}
+
 function log(msg) {
     const safeMsg = redactLog(msg);
     const line = `[${new Date().toISOString()}] ${safeMsg}\n`;
     try {
-        if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size > 512 * 1024) {
-            fs.writeFileSync(LOG_FILE, '', { encoding: 'utf8', mode: 0o600 });
-        }
+        rotateLogKeepingTailIfNeeded();
         fs.appendFileSync(LOG_FILE, line, { encoding: 'utf8', mode: 0o600 });
     } catch (_) {}
     if (process.stdout.isTTY || process.env.AGY_DAEMON_STDOUT === '1') {
@@ -183,6 +221,11 @@ function log(msg) {
 
 const conversationTrackers = new Map();
 const childSubagentTrackers = new Map();
+let latestCidCache = { cid: null, expiresAt: 0 };
+
+const GIT_PUSH_CMD_RE = /\bgit(?:\s+(?:-C|-c|--git-dir|--work-tree)(?:=|\s+)(?:"[^"]*"|'[^']*'|\S+)|\s+--[a-z-]+)*\s+push\b|\bgh\s+repo\s+create\b[\s\S]*?--push\b/i;
+const OVERSIZE_GIT_PUSH_RE = /\bgit(?:\s+(?:-C|-c|--git-dir|--work-tree)(?:=|\s+)(?:\\"[^"]*\\"|"[^"]*"|'[^']*'|\S+)|\s+--[a-z-]+)*\s+push\b|\bgh\s+repo\s+create\b.{0,240}?--push\b/i;
+const READ_FILE_OUTPUT_PREFIX_RE = /^\s*Created At:[^\r\n]*\r?\n(?:Completed At:[^\r\n]*\r?\n)?Showing lines\s+\d+/i;
 
 function resolveBrainDir() {
     if (process.env.AGY_BRAIN_DIR) return process.env.AGY_BRAIN_DIR;
@@ -210,6 +253,59 @@ function resolveSafeTranscriptPath(cid) {
         return null;
     }
     return realFile;
+}
+
+function isDynamicCidAlias(cid) {
+    return cid === 'latest' || cid === 'active';
+}
+
+function resolveLatestConversationId() {
+    const now = Date.now();
+    if (now < latestCidCache.expiresAt) {
+        return latestCidCache.cid;
+    }
+
+    let bestCid = null;
+    let bestMtimeMs = -1;
+    try {
+        const realBrain = fs.realpathSync(resolveBrainDir());
+        const entries = fs.readdirSync(realBrain, { withFileTypes: true });
+        for (let i = 0; i < entries.length; i++) {
+            const entry = entries[i];
+            if (!entry || !entry.isDirectory()) continue;
+            const candidateCid = String(entry.name || '').trim().toLowerCase();
+            if (!UUID_RE.test(candidateCid)) continue;
+            const transcriptPath = path.join(realBrain, entry.name, '.system_generated', 'logs', 'transcript.jsonl');
+            try {
+                const st = fs.statSync(transcriptPath);
+                if (st.isFile() && st.mtimeMs > bestMtimeMs) {
+                    bestMtimeMs = st.mtimeMs;
+                    bestCid = candidateCid;
+                }
+            } catch (_) {}
+        }
+    } catch (_) {}
+
+    if (bestCid && !resolveSafeTranscriptPath(bestCid)) {
+        bestCid = null;
+    }
+
+    latestCidCache = {
+        cid: bestCid,
+        expiresAt: now + LATEST_CID_CACHE_TTL_MS,
+    };
+    return bestCid;
+}
+
+function extractCommandExitCode(stepType, contentStr) {
+    if (stepType !== 'GENERIC' && stepType !== 'SYSTEM_MESSAGE') return null;
+    if (typeof contentStr !== 'string' || !contentStr) return null;
+    if (READ_FILE_OUTPUT_PREFIX_RE.test(contentStr)) return null;
+    const headerSection = contentStr.split(/\r?\nCommand output:/)[0];
+    const m = /(?:^|\r?\n)Command exited with code (\d+)\b/.exec(headerSection);
+    if (!m) return null;
+    const code = parseInt(m[1], 10);
+    return Number.isFinite(code) ? code : null;
 }
 
 function sanitizeDisplayLabel(raw, maxLen = 90) {
@@ -267,6 +363,7 @@ function createParentTracker(cid) {
         cacheReadTokens: 0,
         contextTokens: 0,
         prevTurnContextTokens: 0,
+        awaitingPostCheckpointBaseline: false,
         outputTokens: 0,
         turnOutputTokens: 0,
         lastStepInFlightEst: 0,
@@ -285,6 +382,7 @@ function createParentTracker(cid) {
         slashSeq: 0,
         slashReason: '',
         pendingGitPushCount: 0,
+        pendingCommandQueue: [],
 
         pendingSubagentQueue: [],
         subagentsMap: new Map(),
@@ -300,9 +398,13 @@ function createChildTracker(cid) {
         lastMtimeMs: -1,
         remainder: '',
         decoder: new StringDecoder('utf8'),
-        oversizeDropping: false,
+        oversizeScan: null,
         stepCount: 0,
         lastTool: '',
+        lastStepType: '',
+        lastStepStatus: '',
+        lastHasToolCalls: false,
+        revivedAtMs: 0,
     };
 }
 
@@ -314,6 +416,10 @@ function resetParentTrackerState(tracker) {
 function createOversizeScanner() {
     return {
         carry: '',
+        totalChars: 0,
+        lastInvokeEndOffset: -1,
+        isReadFileHeader: false,
+        seenCommandOutputMarker: false,
         stepIndex: null,
         stepType: '',
         stepStatus: '',
@@ -330,8 +436,12 @@ function createOversizeScanner() {
     };
 }
 
-function feedOversizeChunk(scan, textChunk) {
+function feedOversizeChunk(scan, textChunk, isFinalChunk = false) {
+    if (!textChunk && !isFinalChunk) return;
+    const carryLen = scan.carry.length;
+    const windowBaseOffset = scan.totalChars - carryLen;
     const windowStr = scan.carry + textChunk;
+    scan.totalChars += textChunk.length;
     scan.carry = windowStr.slice(-320);
 
     const idxMatch = windowStr.match(/"step_index"\s*:\s*(\d+)/);
@@ -352,14 +462,43 @@ function feedOversizeChunk(scan, textChunk) {
     const outMatch = windowStr.match(/"output_tokens"\s*:\s*(\d+)/);
     if (outMatch) scan.outTok = parseInt(outMatch[1], 10) || scan.outTok;
 
-    if (windowStr.includes('"tool_calls":[{')) scan.hasToolCalls = true;
-    if (/Command exited with code [1-9]\d*/.test(windowStr)) scan.nonZeroExit = true;
-    if (/Command exited with code 0\b/.test(windowStr)) scan.zeroExit = true;
-    if (/\bgit\s+push\b/i.test(windowStr)) scan.hasGitPush = true;
+    if (windowStr.includes('"tool_calls":[{') || /"tool_calls"\s*:\s*\[\s*\{/.test(windowStr)) {
+        scan.hasToolCalls = true;
+    }
 
-    if (windowStr.includes('"invoke_subagent"')) {
-        const roleMatch = windowStr.match(/"Role"\s*:\s*"((?:\\.|[^"\\]){1,120})"/);
-        const typeNameMatch = windowStr.match(/"TypeName"\s*:\s*"((?:\\.|[^"\\]){1,60})"/);
+    if (!scan.isReadFileHeader && /"content"\s*:\s*"\s*Created At:[^"]*\\n(?:Completed At:[^"]*\\n)?Showing lines\s+\d+/i.test(windowStr)) {
+        scan.isReadFileHeader = true;
+    }
+
+    if (!scan.seenCommandOutputMarker && !scan.isReadFileHeader) {
+        const preOutput = windowStr.split(/\\r?\\nCommand output:/)[0];
+        if (/(?:^|"|\\n)Command exited with code [1-9]\d*\b/.test(preOutput)) {
+            scan.nonZeroExit = true;
+        }
+        if (/(?:^|"|\\n)Command exited with code 0\b/.test(preOutput)) {
+            scan.zeroExit = true;
+        }
+        if (/\\r?\\nCommand output:/.test(windowStr)) {
+            scan.seenCommandOutputMarker = true;
+        }
+    }
+
+    if (OVERSIZE_GIT_PUSH_RE.test(windowStr)) scan.hasGitPush = true;
+
+    const invokeRe = /"name"\s*:\s*"invoke_subagent"/g;
+    let im;
+    while ((im = invokeRe.exec(windowStr)) !== null) {
+        const matchEndInWindow = im.index + im[0].length;
+        const absEnd = windowBaseOffset + matchEndInWindow;
+        if (absEnd <= scan.lastInvokeEndOffset) continue;
+        if (!isFinalChunk && windowStr.length - matchEndInWindow < 180) {
+            // Defer to next chunk so Role & TypeName trailing fields are inside windowStr
+            break;
+        }
+        scan.lastInvokeEndOffset = absEnd;
+        const around = windowStr.slice(Math.max(0, im.index - 220), Math.min(windowStr.length, matchEndInWindow + 260));
+        const roleMatch = around.match(/"(?:Role|role)"\s*:\s*"((?:\\.|[^"\\]){1,120})"/);
+        const typeNameMatch = around.match(/"(?:TypeName|typeName)"\s*:\s*"((?:\\.|[^"\\]){1,60})"/);
         const role = roleMatch ? sanitizeDisplayLabel(roleMatch[1], 90) : 'Subagent';
         const typeName = typeNameMatch ? sanitizeDisplayLabel(typeNameMatch[1], 40) : 'self';
         if (scan.invokedSubagents.length < 8) {
@@ -402,6 +541,7 @@ function recordCompletedSubagent(tracker, childCid, eventTimestampMs, isLiveDelt
 }
 
 function applyStepSignals(tracker, step, isLiveDelta) {
+    tracker.justSlashedBug = false;
     tracker.stepCount++;
     if (typeof step.step_index === 'number') tracker.latestStepIndex = step.step_index;
 
@@ -415,11 +555,16 @@ function applyStepSignals(tracker, step, isLiveDelta) {
 
     if (stepType === 'USER_INPUT') {
         tracker.turnCount++;
-        tracker.prevTurnContextTokens = tracker.contextTokens;
+        if (!tracker.awaitingPostCheckpointBaseline && tracker.contextTokens > 0) {
+            tracker.prevTurnContextTokens = tracker.contextTokens;
+        }
         tracker.turnOutputTokens = 0;
         tracker.lastStepInFlightEst = 0;
         tracker.turnSteps = 0;
-        tracker.justSlashedBug = false;
+        tracker.crisisState = false;
+        tracker.pendingGitPushCount = 0;
+        tracker.pendingCommandQueue = [];
+        tracker.pendingSubagentQueue = [];
     }
 
     const inTok = Number(step.input_tokens) || 0;
@@ -427,7 +572,25 @@ function applyStepSignals(tracker, step, isLiveDelta) {
     const outTok = Number(step.output_tokens) || 0;
     const ctxSum = inTok + cTok;
 
-    if (ctxSum > 0) {
+    if (stepType === 'CHECKPOINT') {
+        if (ctxSum > 0) {
+            tracker.inputTokens = inTok;
+            tracker.cacheReadTokens = cTok;
+            tracker.contextTokens = ctxSum;
+            tracker.prevTurnContextTokens = ctxSum;
+            tracker.awaitingPostCheckpointBaseline = false;
+        } else {
+            tracker.awaitingPostCheckpointBaseline = true;
+        }
+    } else if (ctxSum > 0) {
+        if (
+            tracker.prevTurnContextTokens === 0 ||
+            tracker.awaitingPostCheckpointBaseline ||
+            ctxSum < tracker.prevTurnContextTokens * 0.7
+        ) {
+            tracker.prevTurnContextTokens = ctxSum;
+            tracker.awaitingPostCheckpointBaseline = false;
+        }
         tracker.inputTokens = inTok;
         tracker.cacheReadTokens = cTok;
         tracker.contextTokens = ctxSum;
@@ -445,6 +608,7 @@ function applyStepSignals(tracker, step, isLiveDelta) {
 
     if (stepType === 'PLANNER_RESPONSE') {
         tracker.turnSteps++;
+        tracker.pendingSubagentQueue = [];
     }
 
     const toolCalls = Array.isArray(step.tool_calls) ? step.tool_calls : [];
@@ -475,12 +639,24 @@ function applyStepSignals(tracker, step, isLiveDelta) {
                 } else if (tracker.subagentsMap.has(recipient)) {
                     tracker.subagentsMap.get(recipient).status = 'working';
                 }
+                const cTrk = childSubagentTrackers.get(recipient);
+                if (cTrk) {
+                    cTrk.revivedAtMs = stepTsMs || Date.now();
+                    cTrk.lastStepStatus = 'WORKING';
+                }
             }
         } else if (tc.name === 'run_command') {
-            const cmdLine = sanitizeDisplayLabel(String(args.CommandLine || args.commandLine || ''), 300);
-            if (/\bgit\s+push\b/i.test(cmdLine)) {
-                tracker.pendingGitPushCount++;
+            const rawCmdLine = String(args.CommandLine || args.commandLine || '');
+            const isGitPush = GIT_PUSH_CMD_RE.test(rawCmdLine);
+            const callId = typeof tc.id === 'string' ? tc.id : '';
+            tracker.pendingCommandQueue.push({ id: callId, isGitPush });
+            if (tracker.pendingCommandQueue.length > 32) {
+                tracker.pendingCommandQueue.shift();
             }
+            tracker.pendingGitPushCount = tracker.pendingCommandQueue.reduce(
+                (acc, item) => acc + (item.isGitPush ? 1 : 0),
+                0
+            );
         }
     }
 
@@ -517,34 +693,70 @@ function applyStepSignals(tracker, step, isLiveDelta) {
         }
     }
 
-    const nonZeroExit = /Command exited with code [1-9]\d*/.test(contentStr);
-    const zeroExit = /Command exited with code 0\b/.test(contentStr);
+    const cmdExitCode = extractCommandExitCode(stepType, contentStr);
+    const nonZeroExit = cmdExitCode !== null && cmdExitCode > 0;
+    const zeroExit = cmdExitCode === 0;
     const isStepError = stepStatus === 'ERROR' || stepType === 'ERROR_MESSAGE';
+
+    let matchedGitPush = false;
+    if (cmdExitCode !== null) {
+        const stepCallId = typeof step.tool_call_id === 'string' ? step.tool_call_id : '';
+        let matchedIdx = -1;
+        if (stepCallId) {
+            matchedIdx = tracker.pendingCommandQueue.findIndex((c) => c.id === stepCallId);
+        }
+        if (matchedIdx < 0 && tracker.pendingCommandQueue.length > 0) {
+            matchedIdx = 0;
+        }
+        if (matchedIdx >= 0) {
+            const [cmdEntry] = tracker.pendingCommandQueue.splice(matchedIdx, 1);
+            matchedGitPush = Boolean(cmdEntry && cmdEntry.isGitPush);
+        } else if (tracker.pendingGitPushCount > 0) {
+            matchedGitPush = true;
+            tracker.pendingGitPushCount--;
+        }
+        if (tracker.pendingCommandQueue.length > 0 || matchedIdx >= 0) {
+            tracker.pendingGitPushCount = tracker.pendingCommandQueue.reduce(
+                (acc, item) => acc + (item.isGitPush ? 1 : 0),
+                0
+            );
+        }
+    }
 
     if (nonZeroExit || isStepError) {
         tracker.crisisState = true;
         tracker.justSlashedBug = false;
-        if (nonZeroExit && tracker.pendingGitPushCount > 0) {
-            tracker.pendingGitPushCount--;
-        }
     } else if (zeroExit) {
-        if (tracker.pendingGitPushCount > 0) {
-            tracker.pendingGitPushCount--;
+        if (matchedGitPush) {
             tracker.crisisState = false;
-            tracker.justSlashedBug = true;
-            tracker.slashSeq++;
-            tracker.slashReason = 'git_pushed';
+            if (isLiveDelta) {
+                tracker.justSlashedBug = true;
+                tracker.slashSeq++;
+                tracker.slashReason = 'git_pushed';
+            }
         } else if (tracker.crisisState === true) {
             tracker.crisisState = false;
-            tracker.justSlashedBug = true;
-            tracker.slashSeq++;
-            tracker.slashReason = 'bug_slashed';
+            if (isLiveDelta) {
+                tracker.justSlashedBug = true;
+                tracker.slashSeq++;
+                tracker.slashReason = 'bug_slashed';
+            }
         }
     }
 
     const isPlannerIdleDone = stepType === 'PLANNER_RESPONSE' && stepStatus === 'DONE' && toolCalls.length === 0;
-    const isTerminalStop = stepStatus === 'ERROR' || stepStatus === 'CANCELED' || stepType === 'ERROR_MESSAGE';
-    const nextIsWorking = !(isPlannerIdleDone || isTerminalStop);
+    const isCheckpointDone = stepType === 'CHECKPOINT' && stepStatus === 'DONE';
+    const isTerminalStop =
+        stepStatus === 'CANCELED' ||
+        stepType === 'ERROR_MESSAGE' ||
+        (stepStatus === 'ERROR' && stepType !== 'GENERIC');
+    const nextIsWorking = !(isPlannerIdleDone || isCheckpointDone || isTerminalStop);
+
+    if (isPlannerIdleDone && !isStepError) {
+        tracker.crisisState = false;
+        tracker.pendingGitPushCount = 0;
+        tracker.pendingCommandQueue = [];
+    }
 
     if (tracker.isWorking && !nextIsWorking) {
         tracker.turnFinishedSeq++;
@@ -553,26 +765,34 @@ function applyStepSignals(tracker, step, isLiveDelta) {
 }
 
 function applyOversizeScanSignals(tracker, scan, isLiveDelta) {
+    const resolvedType = scan.stepType || tracker.lastStepType;
+    const syntheticToolCalls = [];
+    for (const sub of scan.invokedSubagents) {
+        syntheticToolCalls.push({
+            name: 'invoke_subagent',
+            args: { Role: sub.role, TypeName: sub.typeName },
+        });
+    }
+    if (scan.hasGitPush) {
+        syntheticToolCalls.push({
+            name: 'run_command',
+            args: { CommandLine: 'git push' },
+        });
+    } else if (scan.hasToolCalls && syntheticToolCalls.length === 0) {
+        syntheticToolCalls.push({ name: '_oversize_tool_call' });
+    }
+
     const syntheticStep = {
         step_index: typeof scan.stepIndex === 'number' ? scan.stepIndex : tracker.latestStepIndex,
-        type: scan.stepType || tracker.lastStepType,
+        type: resolvedType,
         status: scan.stepStatus || 'DONE',
         input_tokens: scan.inTok,
         cache_read_tokens: scan.cacheTok,
         output_tokens: scan.outTok,
-        tool_calls: scan.hasToolCalls ? [{ name: '_oversize_tool_call' }] : [],
+        tool_calls: syntheticToolCalls,
         content: '',
     };
-    for (const sub of scan.invokedSubagents) {
-        tracker.pendingSubagentQueue.push({
-            role: sub.role,
-            typeName: sub.typeName,
-            startedAt: Date.now(),
-        });
-    }
-    if (scan.hasGitPush) {
-        tracker.pendingGitPushCount++;
-    }
+
     const contentParts = [];
     if (scan.createdChildCid) {
         contentParts.push(`Created the following subagent: {"conversationId": "${scan.createdChildCid}"}`);
@@ -580,8 +800,10 @@ function applyOversizeScanSignals(tracker, scan, isLiveDelta) {
     for (const scid of scan.senderCids) {
         contentParts.push(`sender=${scid}`);
     }
-    if (scan.nonZeroExit) contentParts.push('Command exited with code 1.');
-    else if (scan.zeroExit) contentParts.push('Command exited with code 0.');
+    if (!scan.isReadFileHeader && (resolvedType === 'GENERIC' || resolvedType === 'SYSTEM_MESSAGE')) {
+        if (scan.nonZeroExit) contentParts.push('Command exited with code 1');
+        else if (scan.zeroExit) contentParts.push('Command exited with code 0');
+    }
     syntheticStep.content = contentParts.join('\n');
 
     applyStepSignals(tracker, syntheticStep, isLiveDelta);
@@ -593,7 +815,7 @@ function processParentLine(tracker, rawLine, isLiveDelta) {
 
     if (trimmed.length > MAX_LINE_BYTES) {
         const scan = createOversizeScanner();
-        feedOversizeChunk(scan, trimmed);
+        feedOversizeChunk(scan, trimmed, true);
         applyOversizeScanSignals(tracker, scan, isLiveDelta);
         return;
     }
@@ -640,12 +862,12 @@ function advanceParentTracker(tracker, filePath, st) {
                 if (nlIdx === -1) {
                     const tail = decoded.slice(cursor);
                     if (tracker.oversizeScan) {
-                        feedOversizeChunk(tracker.oversizeScan, tail);
+                        feedOversizeChunk(tracker.oversizeScan, tail, false);
                     } else if (tracker.remainder.length + tail.length > MAX_LINE_BYTES) {
                         tracker.oversizeScan = createOversizeScanner();
-                        feedOversizeChunk(tracker.oversizeScan, tracker.remainder);
+                        feedOversizeChunk(tracker.oversizeScan, tracker.remainder, false);
                         tracker.remainder = '';
-                        feedOversizeChunk(tracker.oversizeScan, tail);
+                        feedOversizeChunk(tracker.oversizeScan, tail, false);
                     } else {
                         tracker.remainder += tail;
                     }
@@ -656,14 +878,14 @@ function advanceParentTracker(tracker, filePath, st) {
                 cursor = nlIdx + 1;
 
                 if (tracker.oversizeScan) {
-                    feedOversizeChunk(tracker.oversizeScan, piece);
+                    feedOversizeChunk(tracker.oversizeScan, piece, true);
                     applyOversizeScanSignals(tracker, tracker.oversizeScan, isLiveDelta);
                     tracker.oversizeScan = null;
                 } else if (tracker.remainder.length + piece.length > MAX_LINE_BYTES) {
                     const scan = createOversizeScanner();
-                    feedOversizeChunk(scan, tracker.remainder);
+                    feedOversizeChunk(scan, tracker.remainder, false);
                     tracker.remainder = '';
-                    feedOversizeChunk(scan, piece);
+                    feedOversizeChunk(scan, piece, true);
                     applyOversizeScanSignals(tracker, scan, isLiveDelta);
                 } else {
                     const fullLine = tracker.remainder + piece;
@@ -671,6 +893,8 @@ function advanceParentTracker(tracker, filePath, st) {
                     processParentLine(tracker, fullLine, isLiveDelta);
                 }
             }
+
+            tracker.byteOffset = pos;
         }
 
         tracker.byteOffset = pos;
@@ -688,24 +912,69 @@ function advanceParentTracker(tracker, filePath, st) {
     }
 }
 
+function createChildOversizeScanner() {
+    return {
+        carry: '',
+        stepType: '',
+        stepStatus: '',
+        hasToolCalls: false,
+        lastTool: '',
+    };
+}
+
+function feedChildOversizeChunk(scan, textChunk) {
+    if (!textChunk) return;
+    const windowStr = scan.carry + textChunk;
+    scan.carry = windowStr.slice(-320);
+
+    if (!scan.stepType) {
+        const tm = windowStr.match(/"type"\s*:\s*"([A-Z_]+)"/);
+        if (tm) scan.stepType = tm[1];
+    }
+    if (!scan.stepStatus) {
+        const sm = windowStr.match(/"status"\s*:\s*"([A-Z_]+)"/);
+        if (sm) scan.stepStatus = sm[1];
+    }
+    if (windowStr.includes('"tool_calls":[{') || /"tool_calls"\s*:\s*\[\s*\{/.test(windowStr)) {
+        scan.hasToolCalls = true;
+    }
+
+    const sumRe = /"toolSummary"\s*:\s*"((?:\\.|[^"\\]){1,120})"/g;
+    let m;
+    while ((m = sumRe.exec(windowStr)) !== null) {
+        const label = sanitizeDisplayLabel(m[1], 90);
+        if (label) scan.lastTool = label;
+    }
+}
+
+function applyChildOversizeScan(childTracker, scan) {
+    childTracker.stepCount++;
+    if (scan.stepType) childTracker.lastStepType = scan.stepType;
+    if (scan.stepStatus) childTracker.lastStepStatus = scan.stepStatus;
+    childTracker.lastHasToolCalls = Boolean(scan.hasToolCalls);
+    if (scan.lastTool) childTracker.lastTool = scan.lastTool;
+}
+
 function processChildLine(childTracker, rawLine) {
     const trimmed = stripBom(rawLine).trim();
     if (!trimmed) return;
-    childTracker.stepCount++;
 
     if (trimmed.length > MAX_LINE_BYTES) {
-        const sumMatch = trimmed.match(/"toolSummary"\s*:\s*"((?:\\.|[^"\\]){1,120})"/);
-        if (sumMatch) {
-            const label = sanitizeDisplayLabel(sumMatch[1], 90);
-            if (label) childTracker.lastTool = label;
-        }
+        const scan = createChildOversizeScanner();
+        feedChildOversizeChunk(scan, trimmed);
+        applyChildOversizeScan(childTracker, scan);
         return;
     }
 
     try {
         const step = JSON.parse(trimmed);
         if (!step || typeof step !== 'object') return;
-        if (Array.isArray(step.tool_calls) && step.tool_calls.length > 0) {
+        childTracker.stepCount++;
+        if (typeof step.type === 'string' && step.type) childTracker.lastStepType = step.type;
+        if (typeof step.status === 'string' && step.status) childTracker.lastStepStatus = step.status;
+        const hasTools = Array.isArray(step.tool_calls) && step.tool_calls.length > 0;
+        childTracker.lastHasToolCalls = hasTools;
+        if (hasTools) {
             const lastTc = step.tool_calls[step.tool_calls.length - 1];
             if (lastTc && typeof lastTc === 'object') {
                 const args = parseToolArgs(lastTc);
@@ -719,16 +988,35 @@ function processChildLine(childTracker, rawLine) {
     } catch (_) {}
 }
 
-function syncChildSubagentMetrics(childCid, parentEntry) {
+function isChildTrackerIdleCompleted(cTracker, mtimeMs, nowMs) {
+    if (!cTracker) return false;
+    if (cTracker.revivedAtMs > 0 && mtimeMs <= cTracker.revivedAtMs) {
+        return false;
+    }
+    if (cTracker.lastStepType === 'ERROR_MESSAGE' || cTracker.lastStepStatus === 'CANCELED') {
+        return true;
+    }
+    if (
+        cTracker.lastStepType === 'PLANNER_RESPONSE' &&
+        cTracker.lastStepStatus === 'DONE' &&
+        !cTracker.lastHasToolCalls &&
+        nowMs - (mtimeMs || 0) >= SUBAGENT_IDLE_COMPLETE_MS
+    ) {
+        return true;
+    }
+    return false;
+}
+
+function syncChildSubagentMetrics(parentTracker, childCid, parentEntry) {
     const childPath = resolveSafeTranscriptPath(childCid);
-    if (!childPath) return;
+    if (!childPath) return false;
 
     let st;
     try {
         st = fs.statSync(childPath);
-        if (!st.isFile()) return;
+        if (!st.isFile()) return false;
     } catch (_) {
-        return;
+        return false;
     }
 
     let cTracker = childSubagentTrackers.get(childCid);
@@ -741,7 +1029,10 @@ function syncChildSubagentMetrics(childCid, parentEntry) {
         Object.assign(cTracker, createChildTracker(childCid));
     }
 
-    if (st.size > cTracker.byteOffset) {
+    if (st.size === cTracker.byteOffset) {
+        cTracker.lastSeenSize = st.size;
+        cTracker.lastMtimeMs = st.mtimeMs;
+    } else if (st.size > cTracker.byteOffset) {
         let fd = -1;
         try {
             fd = fs.openSync(childPath, 'r');
@@ -761,12 +1052,13 @@ function syncChildSubagentMetrics(childCid, parentEntry) {
                     const nlIdx = decoded.indexOf('\n', cursor);
                     if (nlIdx === -1) {
                         const tail = decoded.slice(cursor);
-                        if (cTracker.oversizeDropping) {
-                            // Wait for newline
+                        if (cTracker.oversizeScan) {
+                            feedChildOversizeChunk(cTracker.oversizeScan, tail);
                         } else if (cTracker.remainder.length + tail.length > MAX_LINE_BYTES) {
-                            processChildLine(cTracker, cTracker.remainder);
+                            cTracker.oversizeScan = createChildOversizeScanner();
+                            feedChildOversizeChunk(cTracker.oversizeScan, cTracker.remainder);
                             cTracker.remainder = '';
-                            cTracker.oversizeDropping = true;
+                            feedChildOversizeChunk(cTracker.oversizeScan, tail);
                         } else {
                             cTracker.remainder += tail;
                         }
@@ -776,17 +1068,24 @@ function syncChildSubagentMetrics(childCid, parentEntry) {
                     const piece = decoded.slice(cursor, nlIdx);
                     cursor = nlIdx + 1;
 
-                    if (cTracker.oversizeDropping) {
-                        cTracker.oversizeDropping = false;
+                    if (cTracker.oversizeScan) {
+                        feedChildOversizeChunk(cTracker.oversizeScan, piece);
+                        applyChildOversizeScan(cTracker, cTracker.oversizeScan);
+                        cTracker.oversizeScan = null;
                     } else if (cTracker.remainder.length + piece.length > MAX_LINE_BYTES) {
-                        processChildLine(cTracker, cTracker.remainder);
+                        const scan = createChildOversizeScanner();
+                        feedChildOversizeChunk(scan, cTracker.remainder);
                         cTracker.remainder = '';
+                        feedChildOversizeChunk(scan, piece);
+                        applyChildOversizeScan(cTracker, scan);
                     } else {
                         const fullLine = cTracker.remainder + piece;
                         cTracker.remainder = '';
                         processChildLine(cTracker, fullLine);
                     }
                 }
+
+                cTracker.byteOffset = pos;
             }
 
             cTracker.byteOffset = pos;
@@ -802,15 +1101,34 @@ function syncChildSubagentMetrics(childCid, parentEntry) {
         }
     }
 
+    if (cTracker.revivedAtMs > 0 && st.mtimeMs > cTracker.revivedAtMs) {
+        cTracker.revivedAtMs = 0;
+    }
+
     parentEntry.stepCount = cTracker.stepCount;
     if (cTracker.lastTool) {
         parentEntry.lastTool = cTracker.lastTool;
     }
+
+    const now = Date.now();
+    if (parentTracker && isChildTrackerIdleCompleted(cTracker, st.mtimeMs, now)) {
+        recordCompletedSubagent(parentTracker, childCid, Math.floor(st.mtimeMs || now), Boolean(parentTracker.initialized));
+        return true;
+    }
+
+    return false;
 }
 
 function getConversationSnapshot(rawCid) {
-    const cid = String(rawCid || '').trim().toLowerCase();
-    if (!UUID_RE.test(cid)) {
+    const requested = String(rawCid || '').trim().toLowerCase();
+    let cid = requested;
+    if (isDynamicCidAlias(requested)) {
+        const resolved = resolveLatestConversationId();
+        if (!resolved) {
+            return { ok: false, reason: 'not_found', cid: requested };
+        }
+        cid = resolved;
+    } else if (!UUID_RE.test(cid)) {
         return { ok: false, reason: 'invalid_cid' };
     }
 
@@ -835,16 +1153,12 @@ function getConversationSnapshot(rawCid) {
 
     advanceParentTracker(tracker, transcriptPath, st);
 
-    const now = Date.now();
-    tracker.recentCompletedSubagents = tracker.recentCompletedSubagents
-        .filter((item) => now - (item.completedAt || 0) <= COMPLETED_SUBAGENT_TTL_MS)
-        .slice(-MAX_RECENT_COMPLETED_SUBAGENTS);
-
     const activeSubagents = [];
-    for (const entry of tracker.subagentsMap.values()) {
+    for (const entry of Array.from(tracker.subagentsMap.values())) {
         if (entry.status !== 'working') continue;
         if (activeSubagents.length < MAX_ACTIVE_SUBAGENTS_TAILED) {
-            syncChildSubagentMetrics(entry.cid, entry);
+            const autoCompleted = syncChildSubagentMetrics(tracker, entry.cid, entry);
+            if (autoCompleted) continue;
             activeSubagents.push({
                 cid: entry.cid,
                 role: entry.role,
@@ -856,6 +1170,11 @@ function getConversationSnapshot(rawCid) {
             });
         }
     }
+
+    const now = Date.now();
+    tracker.recentCompletedSubagents = tracker.recentCompletedSubagents
+        .filter((item) => now - (item.completedAt || 0) <= COMPLETED_SUBAGENT_TTL_MS)
+        .slice(-MAX_RECENT_COMPLETED_SUBAGENTS);
 
     const recentCompletedSubagents = tracker.recentCompletedSubagents.map((entry) => ({
         cid: entry.cid,
@@ -873,7 +1192,7 @@ function getConversationSnapshot(rawCid) {
 
     const turnContextDelta = tracker.prevTurnContextTokens > 0
         ? Math.max(0, effectiveCtx - tracker.prevTurnContextTokens)
-        : effectiveCtx;
+        : 0;
 
     const inFlightOut = tracker.isWorking ? tracker.lastStepInFlightEst : 0;
     const turnOutputTokens = tracker.turnOutputTokens + inFlightOut;
@@ -885,6 +1204,7 @@ function getConversationSnapshot(rawCid) {
         cid,
         contextTokens: effectiveCtx,
         inputTokens: tracker.inputTokens,
+        uncachedInputTokens: tracker.inputTokens,
         cacheReadTokens: tracker.cacheReadTokens,
         cacheTokens: tracker.cacheReadTokens,
         outputTokens: totalOutputTokens,
@@ -927,8 +1247,8 @@ function hasConversationActivity(cid) {
         return false;
     }
 
+    const now = Date.now();
     if (tracker.recentCompletedSubagents.length > 0) {
-        const now = Date.now();
         if (tracker.recentCompletedSubagents.some((s) => now - (s.completedAt || 0) > COMPLETED_SUBAGENT_TTL_MS)) {
             return true;
         }
@@ -946,6 +1266,9 @@ function hasConversationActivity(cid) {
             if (!cTracker || cst.size !== cTracker.lastSeenSize || cst.mtimeMs !== cTracker.lastMtimeMs) {
                 return true;
             }
+            if (isChildTrackerIdleCompleted(cTracker, cst.mtimeMs, now)) {
+                return true;
+            }
         } catch (_) {}
     }
 
@@ -960,29 +1283,45 @@ function isLoopbackAddress(addr) {
     return addr === '127.0.0.1' || addr === '::ffff:127.0.0.1' || addr === '::1';
 }
 
+function hasVerifiedOpaqueOriginSession() {
+    for (const s of sessions.values()) {
+        if (!s || !s.verified) continue;
+        const u = String(s.currentUrl || (s.target && s.target.url) || '').trim().toLowerCase();
+        if (u.startsWith('file:') || u.startsWith('vscode-file:')) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function isOriginAllowedForApi(originHeader) {
     if (originHeader === undefined || originHeader === '') return true;
     const origin = String(originHeader).trim();
     if (origin === 'vscode-file://vscode-app') return true;
+    if (origin === 'null') return hasVerifiedOpaqueOriginSession();
     return trustedOrigins.has(origin);
 }
 
-function buildApiCorsHeaders(originHeader) {
+function buildApiCorsHeaders(originHeader, req) {
     const headers = {
         'Access-Control-Allow-Headers': 'X-Agy-Token',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Vary': 'Origin',
+        'Vary': 'Origin, Access-Control-Request-Private-Network',
         'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'no-store',
     };
     if (originHeader) {
         headers['Access-Control-Allow-Origin'] = String(originHeader).trim();
     }
+    if (req && req.headers && req.headers['access-control-request-private-network']) {
+        headers['Access-Control-Allow-Private-Network'] = 'true';
+    }
     return headers;
 }
 
-function handleSseEventsRequest(req, res, cid, apiHeaders) {
-    if (!UUID_RE.test(cid)) {
+function handleSseEventsRequest(req, res, rawCid, apiHeaders) {
+    const isDynamic = isDynamicCidAlias(rawCid);
+    if (!isDynamic && !UUID_RE.test(rawCid)) {
         const body = JSON.stringify({ ok: false, reason: 'invalid_cid' });
         res.writeHead(400, {
             ...apiHeaders,
@@ -1008,11 +1347,12 @@ function handleSseEventsRequest(req, res, cid, apiHeaders) {
 
     let closed = false;
     let lastJson = '';
+    let lastResolvedCid = isDynamic ? resolveLatestConversationId() : rawCid;
 
-    const pushSnapshot = () => {
+    const pushSnapshot = (targetCid) => {
         if (closed) return;
         try {
-            const snap = getConversationSnapshot(cid);
+            const snap = getConversationSnapshot(targetCid || rawCid);
             const json = JSON.stringify(snap);
             if (json !== lastJson) {
                 lastJson = json;
@@ -1021,12 +1361,20 @@ function handleSseEventsRequest(req, res, cid, apiHeaders) {
         } catch (_) {}
     };
 
-    pushSnapshot();
+    pushSnapshot(lastResolvedCid || rawCid);
 
     const pollTimer = setInterval(() => {
         if (closed) return;
-        if (hasConversationActivity(cid)) {
-            pushSnapshot();
+        if (isDynamic) {
+            const nextCid = resolveLatestConversationId();
+            if (nextCid !== lastResolvedCid || (nextCid && hasConversationActivity(nextCid))) {
+                lastResolvedCid = nextCid;
+                pushSnapshot(nextCid || rawCid);
+            }
+            return;
+        }
+        if (hasConversationActivity(rawCid)) {
+            pushSnapshot(rawCid);
         }
     }, SSE_POLL_INTERVAL_MS);
 
@@ -1105,7 +1453,7 @@ function startAssetServer() {
                     return;
                 }
 
-                const apiHeaders = buildApiCorsHeaders(originHdr);
+                const apiHeaders = buildApiCorsHeaders(originHdr, req);
 
                 if (req.method === 'OPTIONS') {
                     res.writeHead(204, apiHeaders);
@@ -1152,6 +1500,9 @@ function startAssetServer() {
                 'Content-Security-Policy': ASSET_CSP,
                 'Cache-Control': 'no-cache',
             };
+            if (req.headers['access-control-request-private-network']) {
+                assetBaseHeaders['Access-Control-Allow-Private-Network'] = 'true';
+            }
 
             if (!rawPathname.startsWith('/assets/')) {
                 res.writeHead(403, { ...assetBaseHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
@@ -1338,7 +1689,7 @@ function isVerifiedDaemonProcess(pid) {
                     '-NoProfile',
                     '-NonInteractive',
                     '-Command',
-                    `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" -ErrorAction SilentlyContinue; if ($p) { "$($p.Name)|$($p.CommandLine)" }`,
+                    `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" -ErrorAction Stop; if ($p) { "$($p.Name)|$($p.CommandLine)" }`,
                 ],
                 { encoding: 'utf8', windowsHide: true, timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
             ).trim();
@@ -1346,13 +1697,13 @@ function isVerifiedDaemonProcess(pid) {
             return NODE_PROC_RE.test(out) && DAEMON_SCRIPT_RE.test(out);
         } catch (_) {
             try {
-                const tl = execFileSync('tasklist.exe', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], {
-                    encoding: 'utf8',
-                    windowsHide: true,
-                    timeout: 4000,
-                    stdio: ['ignore', 'pipe', 'ignore'],
-                }).trim();
-                return NODE_PROC_RE.test(tl);
+                const wmicOut = execFileSync(
+                    'wmic.exe',
+                    ['process', 'where', `ProcessId=${pid}`, 'get', 'Name,CommandLine', '/FORMAT:LIST'],
+                    { encoding: 'utf8', windowsHide: true, timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] }
+                ).trim();
+                if (!wmicOut) return false;
+                return NODE_PROC_RE.test(wmicOut) && DAEMON_SCRIPT_RE.test(wmicOut);
             } catch (__) {
                 return false;
             }
@@ -1402,15 +1753,100 @@ function removePidLock() {
     } catch (_) {}
 }
 
+function isPlainObject(val) {
+    return Boolean(val && typeof val === 'object' && !Array.isArray(val));
+}
+
+function sortKeysDeep(val, depth = 0) {
+    if (depth > 10 || !val || typeof val !== 'object') return val;
+    if (Array.isArray(val)) {
+        return val.map((item) => sortKeysDeep(item, depth + 1));
+    }
+    const sorted = {};
+    for (const k of Object.keys(val).sort()) {
+        if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+        if (val[k] === undefined) continue;
+        sorted[k] = sortKeysDeep(val[k], depth + 1);
+    }
+    return sorted;
+}
+
+const LARGE_ASSET_CONFIG_KEYS = new Set(['customWp', 'userAvatar', 'agentAvatar']);
+
+function sanitizeConfigServerSide(raw) {
+    const src = stripProtoKeys(raw);
+    if (!isPlainObject(src)) return null;
+
+    const clean = {};
+    for (const key of Object.keys(src)) {
+        if (!/^[a-zA-Z0-9_.-]{1,64}$/.test(key)) continue;
+        if (key === '__agyToken' || key === 'authToken' || key === 'token' || key === 'config') continue;
+        const val = src[key];
+        if (val === undefined) continue;
+
+        if (key === 'activeForgedTheme') {
+            if (val === null) {
+                clean.activeForgedTheme = null;
+            } else if (isPlainObject(val)) {
+                try {
+                    const serializedForged = JSON.stringify(val);
+                    if (
+                        serializedForged &&
+                        Buffer.byteLength(serializedForged, 'utf8') <= MAX_ACTIVE_FORGED_THEME_BYTES
+                    ) {
+                        clean.activeForgedTheme = val;
+                    }
+                } catch (_) {}
+            }
+            continue;
+        }
+
+        if (LARGE_ASSET_CONFIG_KEYS.has(key)) {
+            if (
+                typeof val === 'string' &&
+                !/["'()\\\r\n\0<>`{}]/.test(val) &&
+                Buffer.byteLength(val, 'utf8') <= 3.5 * 1024 * 1024
+            ) {
+                clean[key] = val.trim();
+            }
+            continue;
+        }
+
+        if (typeof val === 'boolean') {
+            clean[key] = val;
+        } else if (typeof val === 'number' && Number.isFinite(val)) {
+            clean[key] = val;
+        } else if (typeof val === 'string' && val.length <= 8192 && !val.includes('\0')) {
+            clean[key] = val;
+        } else if (val === null) {
+            clean[key] = null;
+        } else if (typeof val === 'object') {
+            try {
+                const subJson = JSON.stringify(val);
+                if (subJson && Buffer.byteLength(subJson, 'utf8') <= 512 * 1024) {
+                    clean[key] = val;
+                }
+            } catch (_) {}
+        }
+    }
+    return clean;
+}
+
 function readConfig() {
-    for (const candidate of [CONFIG_FILE, BACKUP_CONFIG_FILE]) {
+    for (const candidate of [CONFIG_FILE, SURVIVAL_BACKUP_FILE]) {
         try {
             if (fs.existsSync(candidate)) {
-                const parsed = stripProtoKeys(parseJsonFileSync(candidate));
-                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.keys(parsed).length > 0) {
-                    if (candidate === BACKUP_CONFIG_FILE && !fs.existsSync(CONFIG_FILE)) {
+                const parsed = sanitizeConfigServerSide(parseJsonFileSync(candidate));
+                if (parsed && Object.keys(parsed).length > 0) {
+                    if (parsed.activeForgedTheme === null) {
+                        delete parsed.activeForgedTheme;
+                    }
+                    if (candidate === SURVIVAL_BACKUP_FILE && !fs.existsSync(CONFIG_FILE)) {
                         try {
-                            fs.writeFileSync(CONFIG_FILE, JSON.stringify(parsed, null, 2), { encoding: 'utf8', mode: 0o600 });
+                            fs.writeFileSync(CONFIG_FILE, JSON.stringify(sortKeysDeep(parsed), null, 2), {
+                                encoding: 'utf8',
+                                mode: 0o600,
+                            });
                             log('Restored theme_config.json from immutable backup after update.');
                         } catch (_) {}
                     }
@@ -1424,20 +1860,36 @@ function readConfig() {
     return { ...DEFAULT_CONFIG };
 }
 
-function saveConfig(nextRaw) {
+function saveConfig(incoming) {
     try {
-        const cleanedNext = stripProtoKeys(nextRaw);
-        if (!cleanedNext || typeof cleanedNext !== 'object' || Array.isArray(cleanedNext)) {
+        const cleanedNext = sanitizeConfigServerSide(incoming);
+        if (!cleanedNext) {
             return null;
         }
-        const merged = stripProtoKeys({ ...readConfig(), ...cleanedNext });
+        const prevRaw = { ...DEFAULT_CONFIG, ...(sanitizeConfigServerSide(readConfig()) || {}) };
+        if (prevRaw.activeForgedTheme === null) {
+            delete prevRaw.activeForgedTheme;
+        }
+        const prevNormalized = sortKeysDeep(prevRaw);
+        const prevSerialized = JSON.stringify(prevNormalized, null, 2);
+
+        const mergedRaw = { ...prevNormalized, ...cleanedNext };
+        if (mergedRaw.activeForgedTheme === null) {
+            delete mergedRaw.activeForgedTheme;
+        }
+        const merged = sortKeysDeep(mergedRaw);
         const serialized = JSON.stringify(merged, null, 2);
+
+        if (prevSerialized === serialized) {
+            return { changed: false, config: merged };
+        }
+
         fs.writeFileSync(CONFIG_FILE, serialized, { encoding: 'utf8', mode: 0o600 });
         try {
-            fs.mkdirSync(path.dirname(BACKUP_CONFIG_FILE), { recursive: true, mode: 0o700 });
-            fs.writeFileSync(BACKUP_CONFIG_FILE, serialized, { encoding: 'utf8', mode: 0o600 });
+            fs.mkdirSync(path.dirname(SURVIVAL_BACKUP_FILE), { recursive: true, mode: 0o700 });
+            fs.writeFileSync(SURVIVAL_BACKUP_FILE, serialized, { encoding: 'utf8', mode: 0o600 });
         } catch (_) {}
-        return merged;
+        return { changed: true, config: merged };
     } catch (err) {
         log(`Failed saving theme_config.json: ${err.message}`);
         return null;
@@ -1544,7 +1996,7 @@ function checkAntigravityUpdateAndHeal() {
  * ========================================================================== */
 
 let missingPayloadLogged = false;
-function buildInjectedSource() {
+function buildRuntimeWrappedSource(opts = {}) {
     if (!fs.existsSync(PAYLOAD_PATH)) {
         checkAntigravityUpdateAndHeal();
     }
@@ -1558,13 +2010,17 @@ function buildInjectedSource() {
     missingPayloadLogged = false;
 
     const payloadCode = stripBom(fs.readFileSync(PAYLOAD_PATH, 'utf8'));
+    const currentCfg = readConfig();
     const bootObj = JSON.stringify({
-        assetBase: assetPort > 0 ? `http://127.0.0.1:${assetPort}/` : '',
+        token: EPHEMERAL_TOKEN,
         authToken: EPHEMERAL_TOKEN,
-        initialConfig: readConfig(),
+        assetBase: assetPort > 0 ? `http://127.0.0.1:${assetPort}/` : '',
+        initialConfig: currentCfg,
+        syncFromDaemon: Boolean(opts && opts.syncFromDaemon),
     });
-    return `(() => {\nconst __AGY_INJECT_BOOT__ = ${bootObj};\n${payloadCode}\n})();`;
+    return `(() => {\nconst __AGY_INJECT_BOOT__ = Object.freeze(${bootObj});\n${payloadCode}\n})();`;
 }
+const buildInjectedSource = buildRuntimeWrappedSource;
 
 function isCandidateAntigravityUrl(rawUrl) {
     if (typeof rawUrl !== 'string') return false;
@@ -1596,7 +2052,7 @@ function isCandidateAntigravityUrl(rawUrl) {
     if (u.protocol !== 'http:' && u.protocol !== 'https:') {
         return false;
     }
-    if (u.hostname !== '127.0.0.1' && u.hostname !== 'localhost') {
+    if (u.hostname !== '127.0.0.1' && u.hostname !== 'localhost' && u.hostname !== '[::1]') {
         return false;
     }
 
@@ -1614,7 +2070,10 @@ function isCandidateAntigravityUrl(rawUrl) {
 function recordTrustedOriginFromUrl(rawUrl) {
     try {
         const u = new URL(String(rawUrl || ''));
-        if ((u.protocol === 'http:' || u.protocol === 'https:') && (u.hostname === '127.0.0.1' || u.hostname === 'localhost')) {
+        if (
+            (u.protocol === 'http:' || u.protocol === 'https:') &&
+            (u.hostname === '127.0.0.1' || u.hostname === 'localhost' || u.hostname === '[::1]')
+        ) {
             trustedOrigins.add(u.origin);
         } else if (u.protocol === 'vscode-file:') {
             trustedOrigins.add(`${u.protocol}//${u.host || 'vscode-app'}`);
@@ -1675,12 +2134,42 @@ function fetchJson(url) {
 const sessions = new Map();
 let lastPort = null;
 let reloadTimer = null;
+let configBroadcastTimer = null;
+let pendingBroadcastSourceId = null;
+
+function scheduleCrossWindowConfigSync(sourceTargetId) {
+    pendingBroadcastSourceId = sourceTargetId;
+    clearTimeout(configBroadcastTimer);
+    configBroadcastTimer = setTimeout(() => {
+        const srcId = pendingBroadcastSourceId;
+        pendingBroadcastSourceId = null;
+        configBroadcastTimer = null;
+        for (const other of sessions.values()) {
+            if (!other.verified) continue;
+            if (other.id === srcId) {
+                other.reinject({ onlyUpdateNewDoc: true });
+            } else {
+                other.reinject({ syncFromDaemon: true });
+            }
+        }
+    }, CONFIG_BROADCAST_DEBOUNCE_MS);
+}
 
 function createSession(target) {
     const ws = new globalThis.WebSocket(target.webSocketDebuggerUrl);
     let nextId = 1;
     const pending = new Map();
-    const session = { id: target.id, ws, target, verified: false };
+    const session = {
+        id: target.id,
+        ws,
+        target,
+        currentUrl: String(target.url || ''),
+        verified: false,
+        injecting: false,
+        queuedReinjectOpts: null,
+        evalScriptId: null,
+        lastRegisteredDocSource: '',
+    };
     sessions.set(target.id, session);
 
     function send(method, params = {}) {
@@ -1690,13 +2179,38 @@ function createSession(target) {
                 return;
             }
             const id = nextId++;
-            pending.set(id, { resolve, reject });
-            ws.send(JSON.stringify({ id, method, params }));
+            const timer = setTimeout(() => {
+                if (pending.has(id)) {
+                    pending.delete(id);
+                    reject(new Error(`CDP timeout (${method})`));
+                }
+            }, CDP_SEND_TIMEOUT_MS);
+            pending.set(id, {
+                resolve(val) {
+                    clearTimeout(timer);
+                    resolve(val);
+                },
+                reject(err) {
+                    clearTimeout(timer);
+                    reject(err);
+                },
+            });
+            try {
+                ws.send(JSON.stringify({ id, method, params }));
+            } catch (err) {
+                clearTimeout(timer);
+                pending.delete(id);
+                reject(err);
+            }
         });
     }
 
-    async function verifyDomIsAntigravity() {
-        for (let attempt = 0; attempt < 2; attempt++) {
+    async function verifyDomIsAntigravity(opts = {}) {
+        const maxAttempts = Number.isInteger(opts.maxAttempts) && opts.maxAttempts > 0 ? opts.maxAttempts : 2;
+        const delayMs = Number.isFinite(opts.delayMs) && opts.delayMs > 0 ? opts.delayMs : 300;
+        const ignoreReadyState = Boolean(opts.ignoreReadyState);
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
             const evalRes = await send('Runtime.evaluate', {
                 expression: DOM_VERIFICATION_PROBE_EXPR,
                 returnByValue: true,
@@ -1707,11 +2221,11 @@ function createSession(target) {
                 if (val.origin && val.origin !== 'null') {
                     recordTrustedOriginFromUrl(val.origin);
                 }
-                recordTrustedOriginFromUrl(target.url);
+                recordTrustedOriginFromUrl(session.currentUrl || target.url);
                 return true;
             }
-            if (attempt === 0 && val && val.readyState === 'loading') {
-                await new Promise((r) => setTimeout(r, 300));
+            if (attempt + 1 < maxAttempts && (ignoreReadyState || (val && val.readyState === 'loading'))) {
+                await new Promise((r) => setTimeout(r, delayMs));
                 continue;
             }
             break;
@@ -1719,13 +2233,68 @@ function createSession(target) {
         return false;
     }
 
-    session.reinject = async () => {
-        if (!session.verified) return;
-        const src = buildInjectedSource();
-        if (!src) return;
+    async function refreshNewDocumentScript() {
+        const docSrc = buildRuntimeWrappedSource({ syncFromDaemon: false });
+        if (!docSrc) return false;
+        if (docSrc === session.lastRegisteredDocSource && session.evalScriptId) {
+            return true;
+        }
+        if (session.evalScriptId) {
+            const oldId = session.evalScriptId;
+            session.evalScriptId = null;
+            try {
+                await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: oldId });
+            } catch (_) {}
+        }
+        const addRes = await send('Page.addScriptToEvaluateOnNewDocument', { source: docSrc });
+        session.evalScriptId = addRes && addRes.identifier ? String(addRes.identifier) : null;
+        session.lastRegisteredDocSource = docSrc;
+        return true;
+    }
+
+    session.reinject = async (opts = {}) => {
+        const allowUnverified = Boolean(opts && opts.initialAttach);
+        if (!session.verified && !allowUnverified) return;
+
+        const normalizedOpts = {
+            syncFromDaemon: Boolean(opts && opts.syncFromDaemon),
+            onlyUpdateNewDoc: Boolean(opts && opts.onlyUpdateNewDoc),
+        };
+
+        if (session.injecting) {
+            if (!session.queuedReinjectOpts) {
+                session.queuedReinjectOpts = normalizedOpts;
+            } else {
+                if (!normalizedOpts.onlyUpdateNewDoc) {
+                    if (session.queuedReinjectOpts.onlyUpdateNewDoc) {
+                        session.queuedReinjectOpts = normalizedOpts;
+                    } else if (!normalizedOpts.syncFromDaemon) {
+                        session.queuedReinjectOpts.syncFromDaemon = false;
+                    }
+                }
+            }
+            return;
+        }
+
+        session.injecting = true;
+        let cur = normalizedOpts;
         try {
-            await send('Runtime.evaluate', { expression: src, awaitPromise: false });
-        } catch (_) {}
+            while (cur) {
+                await refreshNewDocumentScript();
+                if (!cur.onlyUpdateNewDoc) {
+                    const evalSrc = buildRuntimeWrappedSource({ syncFromDaemon: cur.syncFromDaemon });
+                    if (evalSrc) {
+                        await send('Runtime.evaluate', { expression: evalSrc, awaitPromise: false });
+                    }
+                }
+                cur = session.queuedReinjectOpts;
+                session.queuedReinjectOpts = null;
+            }
+        } catch (err) {
+            if (allowUnverified) throw err;
+        } finally {
+            session.injecting = false;
+        }
     };
 
     ws.addEventListener('message', async (event) => {
@@ -1762,12 +2331,8 @@ function createSession(target) {
                     return;
                 }
                 const saved = saveConfig(parsed.config);
-                if (saved) {
-                    for (const other of sessions.values()) {
-                        if (other.id !== target.id && other.verified) {
-                            other.reinject();
-                        }
-                    }
+                if (saved && saved.changed === true) {
+                    scheduleCrossWindowConfigSync(target.id);
                 }
             } catch (err) {
                 log(`Config binding error: ${err.message}`);
@@ -1777,30 +2342,43 @@ function createSession(target) {
 
         if (msg.method === 'Page.frameNavigated' && msg.params && msg.params.frame && !msg.params.frame.parentId) {
             const navUrl = String(msg.params.frame.url || '');
+            const wasVerified = session.verified;
+            session.currentUrl = navUrl;
             if (!isCandidateAntigravityUrl(navUrl)) {
                 session.verified = false;
-                rememberIgnoredTarget(target.id, navUrl);
+                if (!wasVerified) {
+                    rememberIgnoredTarget(target.id, navUrl);
+                }
                 try {
                     ws.close();
                 } catch (_) {}
                 return;
             }
             try {
-                const ok = await verifyDomIsAntigravity();
+                const ok = await verifyDomIsAntigravity({
+                    maxAttempts: 8,
+                    delayMs: 250,
+                    ignoreReadyState: true,
+                });
                 if (!ok) {
                     session.verified = false;
-                    rememberIgnoredTarget(target.id, navUrl);
-                    ws.close();
+                    if (!wasVerified) {
+                        rememberIgnoredTarget(target.id, navUrl);
+                    }
+                    try {
+                        ws.close();
+                    } catch (_) {}
                     return;
                 }
-                await session.reinject();
+                session.verified = true;
+                await session.reinject({ syncFromDaemon: false });
             } catch (_) {}
         }
     });
 
     ws.addEventListener('open', async () => {
         try {
-            const isAuthentic = await verifyDomIsAntigravity();
+            const isAuthentic = await verifyDomIsAntigravity({ maxAttempts: 3, delayMs: 250 });
             if (!isAuthentic) {
                 rememberIgnoredTarget(target.id, String(target.url || ''));
                 log(`[security] Skipped non-Antigravity localhost page ${target.id} (${target.url}).`);
@@ -1810,20 +2388,17 @@ function createSession(target) {
                 return;
             }
 
-            session.verified = true;
             await send('Page.enable');
             await send('Runtime.enable');
             try {
                 await send('Runtime.addBinding', { name: 'agySaveThemeConfig' });
             } catch (_) {}
 
-            const src = buildInjectedSource();
-            if (src) {
-                await send('Page.addScriptToEvaluateOnNewDocument', { source: src });
-                await send('Runtime.evaluate', { expression: src, awaitPromise: false });
-            }
+            await session.reinject({ initialAttach: true, syncFromDaemon: false });
+            session.verified = true;
             log(`Attached verified Antigravity target ${target.id} (${target.url})`);
         } catch (err) {
+            session.verified = false;
             log(`Attach error for ${target.id}: ${err.message}`);
             try {
                 ws.close();
@@ -1832,6 +2407,7 @@ function createSession(target) {
     });
 
     const cleanup = () => {
+        session.verified = false;
         for (const p of pending.values()) {
             p.reject(new Error('WebSocket closed'));
         }
@@ -1924,6 +2500,7 @@ function watchPayload() {
 function shutdown(signal) {
     log(`Shutting down on ${signal}.`);
     clearTimeout(reloadTimer);
+    clearTimeout(configBroadcastTimer);
     if (payloadWatcher) {
         try {
             payloadWatcher.close();

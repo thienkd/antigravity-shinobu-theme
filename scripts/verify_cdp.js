@@ -11,10 +11,78 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 if (typeof globalThis.WebSocket !== 'function') {
     console.error(`[verify-cdp] Node.js >= 22 is required (found ${process.version} at ${process.execPath}).`);
     process.exit(1);
+}
+
+const ROOT_DIR = path.resolve(__dirname, '..');
+const PID_FILE = path.join(ROOT_DIR, 'daemon.pid');
+const NODE_PROC_RE = /\bnode(?:js|\d+)?(?:\.exe)?\b/i;
+const DAEMON_SCRIPT_RE = /theme_daemon\.js/;
+
+function isPidAlive(pid) {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+function isVerifiedDaemonProcess(pid) {
+    if (!Number.isInteger(pid) || pid <= 0 || !isPidAlive(pid)) return false;
+
+    if (process.platform === 'win32') {
+        try {
+            const out = execFileSync(
+                'powershell.exe',
+                [
+                    '-NoProfile',
+                    '-NonInteractive',
+                    '-Command',
+                    `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" -ErrorAction Stop; if ($p) { "$($p.Name)|$($p.CommandLine)" }`,
+                ],
+                { encoding: 'utf8', windowsHide: true, timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
+            ).trim();
+            if (!out) return false;
+            return NODE_PROC_RE.test(out) && DAEMON_SCRIPT_RE.test(out);
+        } catch (_) {
+            try {
+                const wmicOut = execFileSync(
+                    'wmic.exe',
+                    ['process', 'where', `ProcessId=${pid}`, 'get', 'Name,CommandLine', '/FORMAT:LIST'],
+                    { encoding: 'utf8', windowsHide: true, timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] }
+                ).trim();
+                if (!wmicOut) return false;
+                return NODE_PROC_RE.test(wmicOut) && DAEMON_SCRIPT_RE.test(wmicOut);
+            } catch (__) {
+                return false;
+            }
+        }
+    }
+
+    if (process.platform === 'linux') {
+        try {
+            const rawCmd = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0+/g, ' ').trim();
+            if (rawCmd) {
+                return NODE_PROC_RE.test(rawCmd) && DAEMON_SCRIPT_RE.test(rawCmd);
+            }
+        } catch (_) {}
+    }
+
+    try {
+        const cmdline = execFileSync('ps', ['-ww', '-p', String(pid), '-o', 'command='], {
+            encoding: 'utf8',
+            timeout: 3000,
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+        return NODE_PROC_RE.test(cmdline) && DAEMON_SCRIPT_RE.test(cmdline);
+    } catch (_) {
+        return false;
+    }
 }
 
 function resolvePortFile() {
@@ -78,7 +146,7 @@ function isCandidateAntigravityUrl(rawUrl) {
     try {
         const u = new URL(trimmed);
         if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-        if (u.hostname !== '127.0.0.1' && u.hostname !== 'localhost') return false;
+        if (u.hostname !== '127.0.0.1' && u.hostname !== 'localhost' && u.hostname !== '[::1]') return false;
         const p = u.pathname || '/';
         return (
             p === '/' ||
@@ -115,41 +183,57 @@ function fetchJson(url) {
 
 function evaluatePage(wsUrl, expression) {
     return new Promise((resolve, reject) => {
+        let settled = false;
         const ws = new globalThis.WebSocket(wsUrl);
+        const finish = (err, val) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            if (err) reject(err);
+            else resolve(val);
+        };
         const timer = setTimeout(() => {
             try {
                 ws.close();
             } catch (_) {}
-            reject(new Error('CDP evaluation timeout'));
+            finish(new Error('CDP evaluation timeout'));
         }, 4000);
 
         ws.addEventListener('open', () => {
-            ws.send(
-                JSON.stringify({
-                    id: 1,
-                    method: 'Runtime.evaluate',
-                    params: { expression, returnByValue: true, awaitPromise: true },
-                })
-            );
+            try {
+                ws.send(
+                    JSON.stringify({
+                        id: 1,
+                        method: 'Runtime.evaluate',
+                        params: { expression, returnByValue: true, awaitPromise: true },
+                    })
+                );
+            } catch (err) {
+                finish(err);
+            }
         });
         ws.addEventListener('message', (event) => {
             try {
                 const msg = JSON.parse(String(event.data));
                 if (msg.id === 1) {
-                    clearTimeout(timer);
-                    ws.close();
-                    if (msg.error) reject(new Error(msg.error.message));
-                    else if (msg.result && msg.result.exceptionDetails) {
-                        reject(new Error(msg.result.exceptionDetails.text || 'Runtime exception'));
+                    if (msg.error) {
+                        finish(new Error(msg.error.message || 'CDP error'));
+                    } else if (msg.result && msg.result.exceptionDetails) {
+                        finish(new Error(msg.result.exceptionDetails.text || 'Runtime exception'));
                     } else {
-                        resolve(msg.result && msg.result.result ? msg.result.result.value : null);
+                        finish(null, msg.result && msg.result.result ? msg.result.result.value : null);
                     }
+                    try {
+                        ws.close();
+                    } catch (_) {}
                 }
             } catch (_) {}
         });
+        ws.addEventListener('close', () => {
+            finish(new Error('WebSocket closed before CDP response'));
+        });
         ws.addEventListener('error', (err) => {
-            clearTimeout(timer);
-            reject(err);
+            finish(err instanceof Error ? err : new Error('WebSocket connection error'));
         });
     });
 }
@@ -200,6 +284,16 @@ const INSPECT_EXPR = `(() => {
 })()`;
 
 async function main() {
+    if (!fs.existsSync(PID_FILE)) {
+        console.error(`[verify-cdp] FAIL: daemon.pid not found at ${PID_FILE} (theme_daemon.js is not running).`);
+        process.exit(1);
+    }
+    const daemonPid = parseInt(fs.readFileSync(PID_FILE, 'utf8').replace(/^\uFEFF/, '').trim(), 10);
+    if (!daemonPid || !isVerifiedDaemonProcess(daemonPid)) {
+        console.error(`[verify-cdp] FAIL: daemon.pid (${daemonPid || 'invalid'}) does not point to a live theme_daemon.js process.`);
+        process.exit(1);
+    }
+
     const portFile = resolvePortFile();
     if (!fs.existsSync(portFile)) {
         console.error(`[verify-cdp] DevToolsActivePort not found at: ${portFile}`);
@@ -219,9 +313,13 @@ async function main() {
 
     const results = [];
     for (const page of candidatePages) {
-        const report = await evaluatePage(page.webSocketDebuggerUrl, INSPECT_EXPR);
-        if (report && report.isAntigravityDom) {
-            results.push({ id: page.id, title: page.title, ...report });
+        try {
+            const report = await evaluatePage(page.webSocketDebuggerUrl, INSPECT_EXPR);
+            if (report && report.isAntigravityDom) {
+                results.push({ id: page.id, title: page.title, ...report });
+            }
+        } catch (err) {
+            console.warn(`[verify-cdp] Skipped unresponsive target ${page.id}: ${err.message}`);
         }
     }
 

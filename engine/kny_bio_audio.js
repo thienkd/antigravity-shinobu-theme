@@ -2,7 +2,7 @@
 // Kimetsu no Yaiba — 0 KB Bio-Acoustic Kagura & Circadian Guard (kny_bio_audio.js)
 // Exposes window.__AGY_BIO_AUDIO__
 // 100% Pure Mathematical Web Audio Synthesis (0 KB external MP3/WAV, 0% idle CPU)
-// + Bio-Circadian Retinal Guard (Night Care 01:30–05:29 & Yoriichi Dawn 05:55–06:30)
+// + Bio-Circadian Retinal Guard (Night Care 01:30–05:54 & Yoriichi Dawn 05:55–06:30)
 // Built strictly with createElement + textContent (Zero XSS surface).
 // ============================================================================
 
@@ -17,10 +17,13 @@
   }
 
   const STORAGE_KEY = 'agy_kny_audio_prefs';
+  const SFX_MUTE_STORAGE_KEY = 'agy_kny_sfx_muted';
   const NIGHT_TOAST_SESSION_KEY = 'agy_kny_night_care_shown_date';
   const STYLE_ID = 'antigravity-kny-bio-audio-style';
   const POPOVER_ID = 'agy-kny-bio-audio-popover';
   const TOAST_ID = 'agy-kny-circadian-toast';
+  const CIRCADIAN_VEIL_TAG = 'agy-circadian-veil';
+  const CIRCADIAN_VEIL_ID = 'agy-kny-circadian-veil';
   const DAWN_GLOW_ID = 'agy-kny-dawn-glow-layer';
   const HUD_BAR_ID = 'agy-token-context-bar';
   const AUTO_HUD_BTN_ID = 'agy-bio-audio-hud-btn';
@@ -132,6 +135,9 @@
     // UI Popover & HUD hook
     popoverEl: null,
     anchorEl: null,
+    chimeSwitchEl: null,
+    swordSwitchEl: null,
+    syncingSwordSfx: false,
     hudMountTimer: 0,
     cleanups: []
   };
@@ -140,6 +146,26 @@
    * 1. LAZY WEB AUDIO ENGINE & ZERO-CPU AUTO-SUSPEND
    * ========================================================================== */
 
+  function disconnectAll(nodes) {
+    if (!Array.isArray(nodes)) return;
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      if (n && typeof n.disconnect === 'function') {
+        try { n.disconnect(); } catch (_) {}
+      }
+    }
+  }
+
+  function isExternalSwordSfxMuted() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(SFX_MUTE_STORAGE_KEY);
+        if (raw === '1' || raw === 'true') return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
   function getAudioContextCtor() {
     if (typeof ROOT === 'undefined') return null;
     return ROOT.AudioContext || ROOT.webkitAudioContext || null;
@@ -147,7 +173,7 @@
 
   function ensureAudioContext() {
     if (state.destroyed || !state.userInteracted) return null;
-    if (!state.audioCtx) {
+    if (!state.audioCtx || state.audioCtx.state === 'closed') {
       const Ctor = getAudioContextCtor();
       if (!Ctor) return null;
       try {
@@ -159,6 +185,16 @@
           return null;
         }
       }
+      if (state.audioCtx && typeof state.audioCtx.addEventListener === 'function') {
+        state.audioCtx.addEventListener('statechange', () => {
+          if (state.destroyed || !state.audioCtx) return;
+          const keepAlive = state.lastWorkingState ||
+            (state.prefs.enabled && state.prefs.ambientMode !== 'off' && Boolean(state.ambientNodes));
+          if (keepAlive && (state.audioCtx.state === 'suspended' || state.audioCtx.state === 'interrupted')) {
+            try { state.audioCtx.resume().catch(() => {}); } catch (_) {}
+          }
+        });
+      }
     }
     if (state.audioCtx && state.audioCtx.state !== 'running' && state.audioCtx.state !== 'closed') {
       try {
@@ -166,6 +202,73 @@
       } catch (_) {}
     }
     return state.audioCtx;
+  }
+
+  /**
+   * Ensures AudioContext is 'running' before computing ctx.currentTime + 0.015 and constructing nodes.
+   * Races ctx.resume() against maxWaitMs (1200ms) so WASAPI/CoreAudio wake latency never clips the
+   * first Koto note AND backgrounded blocked contexts never fire stale chimes minutes later.
+   */
+  function withRunningAudioContext(maxWaitMs, fn) {
+    if (state.destroyed || typeof fn !== 'function') return false;
+    const ctx = ensureAudioContext();
+    if (!ctx || ctx.state === 'closed') return false;
+
+    if (ctx.state === 'running') {
+      try {
+        fn(ctx);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    clearTimeout(state.suspendTimer);
+    state.suspendTimer = 0;
+
+    const limitMs = (typeof maxWaitMs === 'number' && maxWaitMs > 0) ? maxWaitMs : 1200;
+    let settled = false;
+    let timerId = 0;
+
+    try {
+      const resumePromise = ctx.resume();
+      if (!resumePromise || typeof resumePromise.then !== 'function') {
+        if (ctx.state === 'running') {
+          try { fn(ctx); return true; } catch (_) { return false; }
+        }
+        scheduleAutoSuspend();
+        return false;
+      }
+
+      timerId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        scheduleAutoSuspend();
+      }, limitMs);
+
+      resumePromise.then(() => {
+        clearTimeout(timerId);
+        if (settled || state.destroyed || ctx !== state.audioCtx || ctx.state !== 'running') {
+          if (!settled) scheduleAutoSuspend();
+          settled = true;
+          return;
+        }
+        settled = true;
+        try { fn(ctx); } catch (_) {}
+      }).catch(() => {
+        clearTimeout(timerId);
+        if (!settled) {
+          settled = true;
+          scheduleAutoSuspend();
+        }
+      });
+
+      return true;
+    } catch (_) {
+      clearTimeout(timerId);
+      scheduleAutoSuspend();
+      return false;
+    }
   }
 
   function markOneShotActivity(durationSec) {
@@ -181,6 +284,11 @@
     clearTimeout(state.suspendTimer);
     state.suspendTimer = 0;
     if (state.destroyed || !state.audioCtx) return;
+    // CRITICAL-02: NEVER suspend AudioContext while AI is actively reasoning (lastWorkingState === true)
+    // Empty WebAudio graph consumes 0% CPU while keeping background Alt+Tab Koto/Furin chime instant!
+    if (state.lastWorkingState) {
+      return;
+    }
     if (state.prefs.enabled && state.prefs.ambientMode !== 'off' && state.ambientNodes) {
       return; // Keep running smoothly while Alpha-wave ambient soundscape is active
     }
@@ -188,6 +296,7 @@
     state.suspendTimer = setTimeout(() => {
       state.suspendTimer = 0;
       if (state.destroyed || !state.audioCtx) return;
+      if (state.lastWorkingState) return;
       if (state.prefs.enabled && state.prefs.ambientMode !== 'off' && state.ambientNodes) return;
       if (Date.now() < state.activeOneShotUntil) {
         scheduleAutoSuspend();
@@ -264,7 +373,7 @@
    * ========================================================================== */
 
   /**
-   * 1) playKaguraChime(): Koto Pentatonic Arpeggio + Butterfly Estate Furin Wind Chime (~1.4s, gain ~0.08)
+   * 1) playKaguraChime(): Koto Pentatonic Arpeggio + Butterfly Estate Furin Wind Chime (~1.5s, gain ~0.08)
    * Ideal gentle completion cue when AI finishes a turn, especially while Alt+Tabbed!
    */
   function playKaguraChime(opts = {}) {
@@ -274,89 +383,114 @@
 
     const nowMs = Date.now();
     if (!force && nowMs - state.lastChimeAt < 900) return false;
-    const ctx = ensureAudioContext();
-    if (!ctx) return false;
-
     state.lastChimeAt = nowMs;
-    const t0 = ctx.currentTime + 0.015;
-    const isBackgrounded = typeof document !== 'undefined' && typeof document.hasFocus === 'function'
-      ? !document.hasFocus()
-      : false;
-    const masterPeak = isBackgrounded ? 0.092 : 0.078;
 
-    const phraseIdx = state.phraseCursor % KOTO_PHRASES.length;
-    state.phraseCursor += 1;
-    const notes = KOTO_PHRASES[phraseIdx];
-    const furinPair = FURIN_HARMONICS[phraseIdx];
+    return withRunningAudioContext(1200, (ctx) => {
+      const t0 = ctx.currentTime + 0.015;
+      const isBackgrounded = typeof document !== 'undefined' && (
+        Boolean(document.hidden) ||
+        (typeof document.hasFocus === 'function' ? !document.hasFocus() : false)
+      );
+      const masterPeak = isBackgrounded ? 0.092 : 0.078;
 
-    const masterGain = ctx.createGain();
-    const warmthFilter = ctx.createBiquadFilter();
-    warmthFilter.type = 'lowpass';
-    warmthFilter.frequency.setValueAtTime(3800, t0);
-    warmthFilter.Q.setValueAtTime(0.65, t0);
+      const phraseIdx = state.phraseCursor % KOTO_PHRASES.length;
+      state.phraseCursor += 1;
+      const notes = KOTO_PHRASES[phraseIdx];
+      const furinPair = FURIN_HARMONICS[phraseIdx];
 
-    masterGain.gain.setValueAtTime(masterPeak, t0);
-    masterGain.gain.setValueAtTime(masterPeak, t0 + 1.05);
-    masterGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.52);
+      const masterGain = ctx.createGain();
+      const warmthFilter = ctx.createBiquadFilter();
+      warmthFilter.type = 'lowpass';
+      warmthFilter.frequency.setValueAtTime(3800, t0);
+      warmthFilter.Q.setValueAtTime(0.65, t0);
 
-    warmthFilter.connect(masterGain);
-    masterGain.connect(ctx.destination);
+      masterGain.gain.setValueAtTime(masterPeak, t0);
+      masterGain.gain.setValueAtTime(masterPeak, t0 + 1.05);
+      masterGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.52);
 
-    // Koto plucked strings (Triangle body + 2nd harmonic Sine + subtle oshide pitch bend)
-    notes.forEach((freq, idx) => {
-      const start = t0 + idx * 0.078;
-      const dur = 1.38 - idx * 0.08;
+      warmthFilter.connect(masterGain);
+      masterGain.connect(ctx.destination);
 
-      const noteGain = ctx.createGain();
-      noteGain.gain.setValueAtTime(0.0001, start);
-      noteGain.gain.linearRampToValueAtTime(0.85 - idx * 0.08, start + 0.009);
-      noteGain.gain.exponentialRampToValueAtTime(0.24, start + 0.22);
-      noteGain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-      noteGain.connect(warmthFilter);
+      let remainingVoices = notes.length * 2 + furinPair.length;
+      const furinGain = ctx.createGain();
+      const onVoiceDone = () => {
+        remainingVoices -= 1;
+        if (remainingVoices <= 0) {
+          disconnectAll([furinGain, warmthFilter, masterGain]);
+        }
+      };
 
-      const bodyOsc = ctx.createOscillator();
-      bodyOsc.type = 'triangle';
-      bodyOsc.frequency.setValueAtTime(freq * 1.011, start);
-      bodyOsc.frequency.exponentialRampToValueAtTime(freq, start + 0.028);
-      bodyOsc.connect(noteGain);
+      // Koto plucked strings (Triangle body + 2nd harmonic Sine + subtle oshide pitch bend)
+      notes.forEach((freq, idx) => {
+        const start = t0 + idx * 0.078;
+        const dur = 1.38 - idx * 0.08;
 
-      const overtoneGain = ctx.createGain();
-      overtoneGain.gain.setValueAtTime(0.22, start);
-      overtoneGain.connect(noteGain);
+        const noteGain = ctx.createGain();
+        noteGain.gain.setValueAtTime(0.0001, start);
+        noteGain.gain.linearRampToValueAtTime(0.85 - idx * 0.08, start + 0.009);
+        noteGain.gain.exponentialRampToValueAtTime(0.24, start + 0.22);
+        noteGain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+        noteGain.connect(warmthFilter);
 
-      const overtoneOsc = ctx.createOscillator();
-      overtoneOsc.type = 'sine';
-      overtoneOsc.frequency.setValueAtTime(freq * 2, start);
-      overtoneOsc.connect(overtoneGain);
+        const bodyOsc = ctx.createOscillator();
+        bodyOsc.type = 'triangle';
+        bodyOsc.frequency.setValueAtTime(freq * 1.011, start);
+        bodyOsc.frequency.exponentialRampToValueAtTime(freq, start + 0.028);
+        bodyOsc.connect(noteGain);
 
-      bodyOsc.start(start);
-      overtoneOsc.start(start);
-      bodyOsc.stop(start + dur + 0.03);
-      overtoneOsc.stop(start + dur + 0.03);
+        const overtoneGain = ctx.createGain();
+        overtoneGain.gain.setValueAtTime(0.22, start);
+        overtoneGain.connect(noteGain);
+
+        const overtoneOsc = ctx.createOscillator();
+        overtoneOsc.type = 'sine';
+        overtoneOsc.frequency.setValueAtTime(freq * 2, start);
+        overtoneOsc.connect(overtoneGain);
+
+        let notePartsLeft = 2;
+        const onPartEnded = (oscNode) => {
+          disconnectAll([oscNode]);
+          notePartsLeft -= 1;
+          if (notePartsLeft <= 0) {
+            disconnectAll([overtoneGain, noteGain]);
+          }
+          onVoiceDone();
+        };
+        bodyOsc.onended = () => onPartEnded(bodyOsc);
+        overtoneOsc.onended = () => onPartEnded(overtoneOsc);
+
+        bodyOsc.start(start);
+        overtoneOsc.start(start);
+        bodyOsc.stop(start + dur + 0.03);
+        overtoneOsc.stop(start + dur + 0.03);
+      });
+
+      // Butterfly Estate Edo Glass Furin (delicate crystalline breeze shimmer)
+      const furinStart = t0 + 0.25;
+      furinGain.gain.setValueAtTime(0.0001, furinStart);
+      furinGain.gain.linearRampToValueAtTime(0.24, furinStart + 0.012);
+      furinGain.gain.exponentialRampToValueAtTime(0.0001, furinStart + 1.22);
+      furinGain.connect(masterGain);
+
+      furinPair.forEach((fFreq, fIdx) => {
+        const fOsc = ctx.createOscillator();
+        fOsc.type = 'sine';
+        fOsc.frequency.setValueAtTime(fFreq, furinStart);
+        const partialGain = ctx.createGain();
+        partialGain.gain.setValueAtTime(fIdx === 0 ? 0.72 : 0.28, furinStart);
+        fOsc.connect(partialGain);
+        partialGain.connect(furinGain);
+        fOsc.onended = () => {
+          disconnectAll([fOsc, partialGain]);
+          onVoiceDone();
+        };
+        fOsc.start(furinStart);
+        fOsc.stop(furinStart + 1.25);
+      });
+
+      // Keep AudioContext running ~3.5s until every Koto/Furin harmonic tail completely decays
+      markOneShotActivity(3.5);
     });
-
-    // Butterfly Estate Edo Glass Furin (delicate crystalline breeze shimmer)
-    const furinStart = t0 + 0.25;
-    const furinGain = ctx.createGain();
-    furinGain.gain.setValueAtTime(0.0001, furinStart);
-    furinGain.gain.linearRampToValueAtTime(0.24, furinStart + 0.012);
-    furinGain.gain.exponentialRampToValueAtTime(0.0001, furinStart + 1.22);
-    furinGain.connect(masterGain);
-
-    furinPair.forEach((fFreq, fIdx) => {
-      const fOsc = ctx.createOscillator();
-      fOsc.type = 'sine';
-      fOsc.frequency.setValueAtTime(fFreq, furinStart);
-      const partialGain = ctx.createGain();
-      partialGain.gain.setValueAtTime(fIdx === 0 ? 0.72 : 0.28, furinStart);
-      fOsc.connect(partialGain);
-      partialGain.connect(furinGain);
-      fOsc.start(furinStart);
-      fOsc.stop(furinStart + 1.25);
-    });
-
-    markOneShotActivity(1.6);
-    return true;
   }
 
   /**
@@ -366,91 +500,103 @@
   function playNichirinSheathe(opts = {}) {
     const force = Boolean(opts && opts.force);
     if (state.destroyed) return false;
-    if (!force && (!state.prefs.enabled || !state.prefs.swordSfxEnabled)) return false;
+    if (!force && (!state.prefs.enabled || !state.prefs.swordSfxEnabled || isExternalSwordSfxMuted())) return false;
 
     const nowMs = Date.now();
     if (!force && nowMs - state.lastSheatheAt < 420) return false;
-    const ctx = ensureAudioContext();
-    if (!ctx) return false;
-
     state.lastSheatheAt = nowMs;
-    const t0 = ctx.currentTime + 0.01;
 
-    // Layer A: Metallic blade slide & harmonic ring (2800Hz -> 4200Hz)
-    const metalFilter = ctx.createBiquadFilter();
-    metalFilter.type = 'highpass';
-    metalFilter.frequency.setValueAtTime(2350, t0);
-    metalFilter.Q.setValueAtTime(2.6, t0);
+    return withRunningAudioContext(1200, (ctx) => {
+      const t0 = ctx.currentTime + 0.015;
 
-    const metalGain = ctx.createGain();
-    metalGain.gain.setValueAtTime(0.0001, t0);
-    metalGain.gain.linearRampToValueAtTime(0.068, t0 + 0.024);
-    metalGain.gain.linearRampToValueAtTime(0.082, t0 + 0.082);
-    metalGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.45);
+      // Layer A: Metallic blade slide & harmonic ring (2800Hz -> 4200Hz)
+      const metalFilter = ctx.createBiquadFilter();
+      metalFilter.type = 'highpass';
+      metalFilter.frequency.setValueAtTime(2350, t0);
+      metalFilter.Q.setValueAtTime(2.6, t0);
 
-    metalFilter.connect(metalGain);
-    metalGain.connect(ctx.destination);
+      const metalGain = ctx.createGain();
+      metalGain.gain.setValueAtTime(0.0001, t0);
+      metalGain.gain.linearRampToValueAtTime(0.068, t0 + 0.024);
+      metalGain.gain.linearRampToValueAtTime(0.082, t0 + 0.082);
+      metalGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.45);
 
-    const shimmerA = ctx.createOscillator();
-    shimmerA.type = 'sine';
-    shimmerA.frequency.setValueAtTime(2800, t0);
-    shimmerA.frequency.exponentialRampToValueAtTime(4200, t0 + 0.085);
-    shimmerA.frequency.exponentialRampToValueAtTime(4120, t0 + 0.45);
-    shimmerA.connect(metalFilter);
+      metalFilter.connect(metalGain);
+      metalGain.connect(ctx.destination);
 
-    const shimmerB = ctx.createOscillator();
-    shimmerB.type = 'triangle';
-    shimmerB.frequency.setValueAtTime(3380, t0);
-    shimmerB.frequency.exponentialRampToValueAtTime(5080, t0 + 0.085);
-    const shimmerBGain = ctx.createGain();
-    shimmerBGain.gain.setValueAtTime(0.38, t0);
-    shimmerB.connect(shimmerBGain);
-    shimmerBGain.connect(metalFilter);
+      const shimmerA = ctx.createOscillator();
+      shimmerA.type = 'sine';
+      shimmerA.frequency.setValueAtTime(2800, t0);
+      shimmerA.frequency.exponentialRampToValueAtTime(4200, t0 + 0.085);
+      shimmerA.frequency.exponentialRampToValueAtTime(4120, t0 + 0.45);
+      shimmerA.connect(metalFilter);
 
-    shimmerA.start(t0);
-    shimmerB.start(t0);
-    shimmerA.stop(t0 + 0.46);
-    shimmerB.stop(t0 + 0.46);
+      const shimmerB = ctx.createOscillator();
+      shimmerB.type = 'triangle';
+      shimmerB.frequency.setValueAtTime(3380, t0);
+      shimmerB.frequency.exponentialRampToValueAtTime(5080, t0 + 0.085);
+      const shimmerBGain = ctx.createGain();
+      shimmerBGain.gain.setValueAtTime(0.38, t0);
+      shimmerB.connect(shimmerBGain);
+      shimmerBGain.connect(metalFilter);
 
-    // Layer B: Tsuba & Wooden Saya Lock ("Ka-chin!" at +75ms, 180Hz -> 92Hz + crisp brass click)
-    const tLock = t0 + 0.075;
-    const woodOsc = ctx.createOscillator();
-    woodOsc.type = 'sine';
-    woodOsc.frequency.setValueAtTime(180, tLock);
-    woodOsc.frequency.exponentialRampToValueAtTime(92, tLock + 0.068);
+      let shimmerAlive = 2;
+      const onShimmerEnded = (oscNode, extraNode) => {
+        disconnectAll(extraNode ? [oscNode, extraNode] : [oscNode]);
+        shimmerAlive -= 1;
+        if (shimmerAlive <= 0) {
+          disconnectAll([metalFilter, metalGain]);
+        }
+      };
+      shimmerA.onended = () => onShimmerEnded(shimmerA, null);
+      shimmerB.onended = () => onShimmerEnded(shimmerB, shimmerBGain);
 
-    const woodGain = ctx.createGain();
-    woodGain.gain.setValueAtTime(0.0001, tLock);
-    woodGain.gain.linearRampToValueAtTime(0.115, tLock + 0.005);
-    woodGain.gain.exponentialRampToValueAtTime(0.0001, tLock + 0.085);
+      shimmerA.start(t0);
+      shimmerB.start(t0);
+      shimmerA.stop(t0 + 0.46);
+      shimmerB.stop(t0 + 0.46);
 
-    woodOsc.connect(woodGain);
-    woodGain.connect(ctx.destination);
-    woodOsc.start(tLock);
-    woodOsc.stop(tLock + 0.095);
+      // Layer B: Tsuba & Wooden Saya Lock ("Ka-chin!" at +75ms, 180Hz -> 92Hz + crisp brass click)
+      const tLock = t0 + 0.075;
+      const woodOsc = ctx.createOscillator();
+      woodOsc.type = 'sine';
+      woodOsc.frequency.setValueAtTime(180, tLock);
+      woodOsc.frequency.exponentialRampToValueAtTime(92, tLock + 0.068);
 
-    // Crisp Habaki Collar Click transient
-    const noiseBuf = getNoiseBuffer(ctx, 'white');
-    const clickSrc = ctx.createBufferSource();
-    clickSrc.buffer = noiseBuf;
+      const woodGain = ctx.createGain();
+      woodGain.gain.setValueAtTime(0.0001, tLock);
+      woodGain.gain.linearRampToValueAtTime(0.115, tLock + 0.005);
+      woodGain.gain.exponentialRampToValueAtTime(0.0001, tLock + 0.085);
 
-    const clickBp = ctx.createBiquadFilter();
-    clickBp.type = 'bandpass';
-    clickBp.frequency.setValueAtTime(3150, tLock);
-    clickBp.Q.setValueAtTime(4.2, tLock);
+      woodOsc.connect(woodGain);
+      woodGain.connect(ctx.destination);
+      woodOsc.onended = () => disconnectAll([woodOsc, woodGain]);
+      woodOsc.start(tLock);
+      woodOsc.stop(tLock + 0.095);
 
-    const clickGain = ctx.createGain();
-    clickGain.gain.setValueAtTime(0.0001, tLock);
-    clickGain.gain.linearRampToValueAtTime(0.085, tLock + 0.003);
-    clickGain.gain.exponentialRampToValueAtTime(0.0001, tLock + 0.036);
+      // Crisp Habaki Collar Click transient
+      const noiseBuf = getNoiseBuffer(ctx, 'white');
+      const clickSrc = ctx.createBufferSource();
+      clickSrc.buffer = noiseBuf;
 
-    clickSrc.connect(clickBp);
-    clickBp.connect(clickGain);
-    clickGain.connect(ctx.destination);
-    clickSrc.start(tLock, 0, 0.05);
+      const clickBp = ctx.createBiquadFilter();
+      clickBp.type = 'bandpass';
+      clickBp.frequency.setValueAtTime(3150, tLock);
+      clickBp.Q.setValueAtTime(4.2, tLock);
 
-    markOneShotActivity(0.5);
-    return true;
+      const clickGain = ctx.createGain();
+      clickGain.gain.setValueAtTime(0.0001, tLock);
+      clickGain.gain.linearRampToValueAtTime(0.085, tLock + 0.003);
+      clickGain.gain.exponentialRampToValueAtTime(0.0001, tLock + 0.036);
+
+      clickSrc.connect(clickBp);
+      clickBp.connect(clickGain);
+      clickGain.connect(ctx.destination);
+      clickSrc.onended = () => disconnectAll([clickSrc, clickBp, clickGain]);
+      clickSrc.start(tLock, 0, 0.05);
+
+      markOneShotActivity(0.8);
+    });
   }
 
   /**
@@ -459,52 +605,53 @@
   function playSwordDraw(opts = {}) {
     const force = Boolean(opts && opts.force);
     if (state.destroyed) return false;
-    if (!force && (!state.prefs.enabled || !state.prefs.swordSfxEnabled)) return false;
+    if (!force && (!state.prefs.enabled || !state.prefs.swordSfxEnabled || isExternalSwordSfxMuted())) return false;
 
     const nowMs = Date.now();
     if (!force && nowMs - state.lastDrawAt < 380) return false;
-    const ctx = ensureAudioContext();
-    if (!ctx) return false;
-
     state.lastDrawAt = nowMs;
-    const t0 = ctx.currentTime + 0.008;
 
-    const noiseSrc = ctx.createBufferSource();
-    noiseSrc.buffer = getNoiseBuffer(ctx, 'white');
+    return withRunningAudioContext(1200, (ctx) => {
+      const t0 = ctx.currentTime + 0.015;
 
-    const sweepBp = ctx.createBiquadFilter();
-    sweepBp.type = 'bandpass';
-    sweepBp.frequency.setValueAtTime(1450, t0);
-    sweepBp.frequency.exponentialRampToValueAtTime(3950, t0 + 0.22);
-    sweepBp.Q.setValueAtTime(1.9, t0);
+      const noiseSrc = ctx.createBufferSource();
+      noiseSrc.buffer = getNoiseBuffer(ctx, 'white');
 
-    const airGain = ctx.createGain();
-    airGain.gain.setValueAtTime(0.0001, t0);
-    airGain.gain.linearRampToValueAtTime(0.058, t0 + 0.035);
-    airGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.27);
+      const sweepBp = ctx.createBiquadFilter();
+      sweepBp.type = 'bandpass';
+      sweepBp.frequency.setValueAtTime(1450, t0);
+      sweepBp.frequency.exponentialRampToValueAtTime(3950, t0 + 0.22);
+      sweepBp.Q.setValueAtTime(1.9, t0);
 
-    noiseSrc.connect(sweepBp);
-    sweepBp.connect(airGain);
-    airGain.connect(ctx.destination);
-    noiseSrc.start(t0, 0, 0.30);
+      const airGain = ctx.createGain();
+      airGain.gain.setValueAtTime(0.0001, t0);
+      airGain.gain.linearRampToValueAtTime(0.058, t0 + 0.035);
+      airGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.27);
 
-    const edgeOsc = ctx.createOscillator();
-    edgeOsc.type = 'sine';
-    edgeOsc.frequency.setValueAtTime(2150, t0);
-    edgeOsc.frequency.exponentialRampToValueAtTime(3280, t0 + 0.24);
+      noiseSrc.connect(sweepBp);
+      sweepBp.connect(airGain);
+      airGain.connect(ctx.destination);
+      noiseSrc.onended = () => disconnectAll([noiseSrc, sweepBp, airGain]);
+      noiseSrc.start(t0, 0, 0.30);
 
-    const edgeGain = ctx.createGain();
-    edgeGain.gain.setValueAtTime(0.0001, t0);
-    edgeGain.gain.linearRampToValueAtTime(0.036, t0 + 0.03);
-    edgeGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
+      const edgeOsc = ctx.createOscillator();
+      edgeOsc.type = 'sine';
+      edgeOsc.frequency.setValueAtTime(2150, t0);
+      edgeOsc.frequency.exponentialRampToValueAtTime(3280, t0 + 0.24);
 
-    edgeOsc.connect(edgeGain);
-    edgeGain.connect(ctx.destination);
-    edgeOsc.start(t0);
-    edgeOsc.stop(t0 + 0.29);
+      const edgeGain = ctx.createGain();
+      edgeGain.gain.setValueAtTime(0.0001, t0);
+      edgeGain.gain.linearRampToValueAtTime(0.036, t0 + 0.03);
+      edgeGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28);
 
-    markOneShotActivity(0.34);
-    return true;
+      edgeOsc.connect(edgeGain);
+      edgeGain.connect(ctx.destination);
+      edgeOsc.onended = () => disconnectAll([edgeOsc, edgeGain]);
+      edgeOsc.start(t0);
+      edgeOsc.stop(t0 + 0.29);
+
+      markOneShotActivity(0.55);
+    });
   }
 
   /**
@@ -531,9 +678,16 @@
 
     try {
       const now = ctx.currentTime;
-      active.masterGain.gain.cancelScheduledValues(now);
-      active.masterGain.gain.setValueAtTime(Math.max(0.0001, active.masterGain.gain.value || 0.03), now);
-      active.masterGain.gain.linearRampToValueAtTime(0.0001, now + 0.28);
+      const gainParam = active.masterGain.gain;
+      const curVal = Math.max(0.0001, gainParam.value);
+      if (typeof gainParam.cancelAndHoldAtTime === 'function') {
+        gainParam.cancelAndHoldAtTime(now);
+        gainParam.setValueAtTime(Math.max(0.0001, gainParam.value || curVal), now);
+      } else {
+        gainParam.cancelScheduledValues(now);
+        gainParam.setValueAtTime(curVal, now);
+      }
+      gainParam.linearRampToValueAtTime(0.0001, now + 0.28);
       markOneShotActivity(0.35);
       setTimeout(() => {
         active.cleanup();
@@ -571,6 +725,7 @@
           src.connect(bp);
           bp.connect(g);
           g.connect(ctx.destination);
+          src.onended = () => disconnectAll([src, bp, g]);
           src.start(t, Math.random() * 0.4, 0.04);
         }
       } catch (_) {}
@@ -588,6 +743,11 @@
       return; // Will auto-start as soon as first user interaction unlocks AudioContext
     }
     if (state.ambientNodes && state.ambientNodes.mode === mode) {
+      // Resume AudioContext if OS suspended/interrupted it after sleep/wake or headphone hot-plug
+      ensureAudioContext();
+      if (mode === 'hearth' && !state.hearthCrackleTimer) {
+        scheduleHearthCrackle();
+      }
       return;
     }
 
@@ -695,7 +855,7 @@
   }
 
   /* ==========================================================================
-   * 3. BIO-CIRCADIAN RETINAL GUARD (01:30–05:29 NIGHT & 05:55–06:30 DAWN)
+   * 3. BIO-CIRCADIAN RETINAL GUARD (01:30–05:54 NIGHT & 05:55–06:30 DAWN)
    * ========================================================================== */
 
   function ensureStyles() {
@@ -707,20 +867,36 @@
       document.head.appendChild(st);
     }
     st.textContent = `
-      /* Retinal Night Care (01:30–05:29): Applies strictly to background <agy-live-fx> & wallpaper scrim — ZERO syntax color distortion! */
-      html[data-agy-circadian="night"] agy-live-fx,
-      html[data-agy-circadian="night"] #agy-live-fx-host,
-      html[data-agy-circadian="night"] .agy-shell::before {
-        filter: sepia(0.06) brightness(0.96) !important;
-        transition: filter 1.6s ease;
+      /* Full-Frame Bio-Circadian Veil (<agy-circadian-veil> appended at end of .agy-shell, z-index: 1):
+       * Covers 100% of 4K wallpaper, L-glass ::before & live particles seamlessly with ZERO L-seam cut,
+       * immune to Privacy Shield overrides, and ZERO filter on .agy-shell (100% code color & position:fixed fidelity)! */
+      ${CIRCADIAN_VEIL_TAG} {
+        display: block;
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 1.6s ease;
+      }
+      body[data-has-browser-hole="true"] .agy-shell[data-agy-hole-active="1"] ${CIRCADIAN_VEIL_TAG} {
+        clip-path: var(--agy-hole-clip, none);
       }
 
-      /* Primordial Yoriichi Dawn (05:55–06:30): Soft golden-amber sunrise warmth on background layer */
-      html[data-agy-circadian="dawn"] agy-live-fx,
-      html[data-agy-circadian="dawn"] #agy-live-fx-host,
-      html[data-agy-circadian="dawn"] .agy-shell::before {
-        filter: sepia(0.09) saturate(1.06) brightness(1.02) !important;
-        transition: filter 1.6s ease;
+      /* Retinal Night Care (01:30–05:54): Warm amber-ivory multiply veil absorbing harsh blue peaks evenly */
+      .agy-shell[data-agy-circadian="night"] > ${CIRCADIAN_VEIL_TAG},
+      html[data-agy-circadian="night"] .agy-shell > ${CIRCADIAN_VEIL_TAG} {
+        opacity: 1;
+        mix-blend-mode: multiply;
+        background: linear-gradient(180deg, rgba(244, 219, 190, 0.92) 0%, rgba(232, 204, 174, 0.89) 100%);
+      }
+
+      /* Primordial Yoriichi Dawn (05:55–06:30): Soft golden-amber sunrise warmth across entire 4K horizon */
+      .agy-shell[data-agy-circadian="dawn"] > ${CIRCADIAN_VEIL_TAG},
+      html[data-agy-circadian="dawn"] .agy-shell > ${CIRCADIAN_VEIL_TAG} {
+        opacity: 1;
+        mix-blend-mode: soft-light;
+        background: radial-gradient(ellipse 92% 66% at 52% 96%, rgba(251, 146, 60, 0.42) 0%, rgba(250, 204, 21, 0.24) 46%, rgba(254, 215, 170, 0.12) 78%, transparent 100%);
       }
 
       #${DAWN_GLOW_ID} {
@@ -732,6 +908,7 @@
         opacity: 0;
         transition: opacity 1.8s ease;
       }
+      .agy-shell[data-agy-circadian="dawn"] #${DAWN_GLOW_ID},
       html[data-agy-circadian="dawn"] #${DAWN_GLOW_ID} {
         opacity: 1;
       }
@@ -939,6 +1116,39 @@
     `;
   }
 
+  function syncCircadianVeilAndShell(phase) {
+    if (typeof document === 'undefined') return;
+    const isActive = phase === 'night' || phase === 'dawn';
+    const shell = document.querySelector('.agy-shell');
+    let veil = document.getElementById(CIRCADIAN_VEIL_ID);
+
+    if (shell) {
+      if (isActive) {
+        shell.dataset.agyCircadian = phase;
+        if (!veil) {
+          veil = document.createElement(CIRCADIAN_VEIL_TAG);
+          veil.id = CIRCADIAN_VEIL_ID;
+          veil.setAttribute('aria-hidden', 'true');
+          const guardChild = document.createElement('i');
+          guardChild.setAttribute('aria-hidden', 'true');
+          veil.appendChild(guardChild);
+        }
+        // Always mount at the end of .agy-shell so it sits above #agy-live-fx-host & ::before
+        // while staying at z-index: 1 underneath all UI panes (z-index >= 2)
+        if (veil.parentElement !== shell || shell.lastElementChild !== veil) {
+          shell.appendChild(veil);
+        }
+      } else {
+        delete shell.dataset.agyCircadian;
+        if (veil) veil.remove();
+      }
+    } else if (veil && !isActive) {
+      veil.remove();
+    }
+
+    syncDawnLayerElement(phase === 'dawn');
+  }
+
   function syncDawnLayerElement(isDawn) {
     if (typeof document === 'undefined') return;
     const fxHost = document.getElementById('agy-live-fx-host') || document.querySelector('agy-live-fx');
@@ -948,6 +1158,9 @@
         layer = document.createElement('div');
         layer.id = DAWN_GLOW_ID;
         layer.setAttribute('aria-hidden', 'true');
+        const guardChild = document.createElement('i');
+        guardChild.setAttribute('aria-hidden', 'true');
+        layer.appendChild(guardChild);
         fxHost.appendChild(layer);
       }
     } else if (layer && !isDawn) {
@@ -1021,7 +1234,7 @@
     if (typeof document === 'undefined' || !document.documentElement) return 'day';
     if (!state.prefs.nightCare) {
       delete document.documentElement.dataset.agyCircadian;
-      syncDawnLayerElement(false);
+      syncCircadianVeilAndShell('day');
       state.circadianPhase = 'day';
       return 'day';
     }
@@ -1029,26 +1242,26 @@
     const now = customDate instanceof Date ? customDate : new Date();
     const totalMins = now.getHours() * 60 + now.getMinutes();
 
-    // 01:30 (90m) to 05:29 (329m) -> Night Retinal Care
-    if (totalMins >= 90 && totalMins <= 329) {
+    // 01:30 (90m) through 05:54 (354m) -> Continuous Night Retinal Care (no 05:30 white flash!)
+    if (totalMins >= 90 && totalMins < 355) {
       document.documentElement.dataset.agyCircadian = 'night';
-      syncDawnLayerElement(false);
+      syncCircadianVeilAndShell('night');
       state.circadianPhase = 'night';
       const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       showNightCareGentleReminder(dateKey);
       return 'night';
     }
 
-    // 05:55 (355m) to 06:30 (390m) -> Primordial Yoriichi Dawn
+    // 05:55 (355m) to 06:30 (390m) -> Seamless transition to Primordial Yoriichi Dawn
     if (totalMins >= 355 && totalMins <= 390) {
       document.documentElement.dataset.agyCircadian = 'dawn';
-      syncDawnLayerElement(true);
+      syncCircadianVeilAndShell('dawn');
       state.circadianPhase = 'dawn';
       return 'dawn';
     }
 
     delete document.documentElement.dataset.agyCircadian;
-    syncDawnLayerElement(false);
+    syncCircadianVeilAndShell('day');
     state.circadianPhase = 'day';
     return 'day';
   }
@@ -1062,26 +1275,47 @@
 
     const turnSeq = typeof snap.turnFinishedSeq === 'number' ? snap.turnFinishedSeq : null;
     const slashSeq = typeof snap.slashSeq === 'number' ? snap.slashSeq : null;
+    const hasWorkingBool = typeof snap.isWorking === 'boolean';
 
     if (!state.telemetryPrimed) {
       state.telemetryPrimed = true;
       if (turnSeq !== null) state.lastTurnFinishedSeq = turnSeq;
       if (slashSeq !== null) state.lastSlashSeq = slashSeq;
-      if (typeof snap.isWorking === 'boolean') state.lastWorkingState = snap.isWorking;
+      if (hasWorkingBool) {
+        state.lastWorkingState = snap.isWorking;
+        if (snap.isWorking && state.prefs.enabled && state.userInteracted) {
+          clearTimeout(state.suspendTimer);
+          state.suspendTimer = 0;
+          ensureAudioContext();
+        }
+      }
       return;
     }
 
+    const prevWorking = state.lastWorkingState;
+    if (hasWorkingBool) {
+      state.lastWorkingState = snap.isWorking;
+      if (snap.isWorking) {
+        // Keep AudioContext 'running' (0% CPU empty graph) throughout AI reasoning so Alt+Tab chime is instant
+        clearTimeout(state.suspendTimer);
+        state.suspendTimer = 0;
+        if (state.prefs.enabled && state.userInteracted) {
+          ensureAudioContext();
+        }
+      }
+    }
+
     // Trigger Koto + Furin chime when AI finishes a turn
+    let chimePlayed = false;
     if (turnSeq !== null) {
       if (state.lastTurnFinishedSeq !== null && turnSeq > state.lastTurnFinishedSeq) {
         playKaguraChime();
+        chimePlayed = true;
       }
       state.lastTurnFinishedSeq = turnSeq;
-    } else if (typeof snap.isWorking === 'boolean') {
-      if (state.lastWorkingState && !snap.isWorking) {
-        playKaguraChime();
-      }
-      state.lastWorkingState = snap.isWorking;
+    } else if (hasWorkingBool && prevWorking && !snap.isWorking) {
+      playKaguraChime();
+      chimePlayed = true;
     }
 
     // Trigger Nichirin "Kachin!" sheathe when Demon Slash counter-attack succeeds
@@ -1090,6 +1324,11 @@
         playNichirinSheathe();
       }
       state.lastSlashSeq = slashSeq;
+    }
+
+    // Only schedule auto-suspend once lastWorkingState === false AND after ~3.5s chime tail completes
+    if (hasWorkingBool && prevWorking && !snap.isWorking && !chimePlayed) {
+      markOneShotActivity(3.5);
     }
   }
 
@@ -1168,6 +1407,8 @@
     }
     state.popoverEl = null;
     state.anchorEl = null;
+    state.chimeSwitchEl = null;
+    state.swordSwitchEl = null;
   }
 
   function createSwitchRow(titleText, descText, isChecked, onToggle) {
@@ -1235,9 +1476,45 @@
     }
   }
 
+  function syncSwordMuteWithAura(swordEnabled) {
+    if (state.syncingSwordSfx) return;
+    state.syncingSwordSfx = true;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(SFX_MUTE_STORAGE_KEY, swordEnabled ? '0' : '1');
+      }
+      if (ROOT.__AGY_KNY_CHIBI_AURA__ && typeof ROOT.__AGY_KNY_CHIBI_AURA__.setSfxMuted === 'function') {
+        ROOT.__AGY_KNY_CHIBI_AURA__.setSfxMuted(!swordEnabled);
+      }
+    } catch (_) {
+    } finally {
+      state.syncingSwordSfx = false;
+    }
+  }
+
+  function setSwordSfxEnabled(enabled) {
+    const next = Boolean(enabled);
+    if (next) state.prefs.enabled = true;
+    state.prefs.swordSfxEnabled = next;
+    savePrefs(state.prefs);
+    syncSwordMuteWithAura(next);
+    if (state.swordSwitchEl && state.swordSwitchEl.isConnected) {
+      state.swordSwitchEl.setAttribute('aria-checked', (state.prefs.enabled && state.prefs.swordSfxEnabled) ? 'true' : 'false');
+    }
+    if (state.chimeSwitchEl && state.chimeSwitchEl.isConnected) {
+      state.chimeSwitchEl.setAttribute('aria-checked', (state.prefs.enabled && state.prefs.chimeEnabled) ? 'true' : 'false');
+    }
+    updateHudButtonVisual();
+    return Boolean(state.prefs.enabled && state.prefs.swordSfxEnabled);
+  }
+
   function openPopover(anchorEl) {
     if (state.destroyed || typeof document === 'undefined' || !document.body) return null;
     state.userInteracted = true;
+    if (state.prefs.enabled) {
+      ensureAudioContext();
+      markOneShotActivity(3.5);
+    }
     ensureStyles();
 
     if (state.popoverEl && state.popoverEl.isConnected && state.anchorEl === anchorEl) {
@@ -1291,25 +1568,25 @@
         if (val) playKaguraChime({ force: true });
       }
     );
+    state.chimeSwitchEl = chimeCtrl.sw;
     pop.appendChild(chimeCtrl.row);
 
+    const swordEffective = Boolean(state.prefs.enabled && state.prefs.swordSfxEnabled && !isExternalSwordSfxMuted());
     const swordCtrl = createSwitchRow(
       '⚔️ Tiếng kiếm Nhật Luân Đao',
       'Âm rút kiếm xuất chiêu & tra kiếm "Kachin!"',
-      state.prefs.enabled && state.prefs.swordSfxEnabled,
+      swordEffective,
       (val) => {
-        if (val) state.prefs.enabled = true;
-        state.prefs.swordSfxEnabled = val;
-        savePrefs(state.prefs);
-        updateHudButtonVisual();
+        setSwordSfxEnabled(val);
         if (val) playNichirinSheathe({ force: true });
       }
     );
+    state.swordSwitchEl = swordCtrl.sw;
     pop.appendChild(swordCtrl.row);
 
     const nightCtrl = createSwitchRow(
       '🌙 Bảo vệ mắt đêm khuya',
-      'Giảm sáng xanh 01:30–05:29 & Bình minh 05:55',
+      'Giảm sáng xanh 01:30–05:54 & Bình minh 05:55',
       state.prefs.nightCare,
       (val) => {
         state.prefs.nightCare = val;
@@ -1442,6 +1719,7 @@
       state.prefs.swordSfxEnabled = true;
     }
     savePrefs(state.prefs);
+    if (next) ensureAudioContext();
     syncAmbientSoundscape();
     updateHudButtonVisual();
     if (next && state.prefs.chimeEnabled) {
@@ -1460,6 +1738,31 @@
     return cleanMode;
   }
 
+  /**
+   * Unlocks AudioContext strictly inside a genuine User Gesture (pointerdown/click/keydown)
+   * even when ambientMode === 'off', satisfying Chromium Autoplay Policy for future Alt+Tab chimes.
+   */
+  function unlockAudioOnUserGesture() {
+    if (state.destroyed) return;
+    const firstTime = !state.userInteracted;
+    state.userInteracted = true;
+    if (!state.prefs.enabled) return;
+
+    if (state.prefs.ambientMode !== 'off') {
+      syncAmbientSoundscape();
+      return;
+    }
+
+    if (firstTime || !state.audioCtx || state.audioCtx.state !== 'running') {
+      const ctx = ensureAudioContext();
+      if (ctx && !state.lastWorkingState) {
+        markOneShotActivity(3.5);
+      }
+    } else if (!state.lastWorkingState && (state.activeOneShotUntil - Date.now() < 1500)) {
+      markOneShotActivity(3.5);
+    }
+  }
+
   function initDomLifecycle() {
     if (typeof document === 'undefined') return;
     ensureStyles();
@@ -1471,26 +1774,14 @@
 
     state.hudMountTimer = setInterval(() => {
       ensureHudTriggerMounted();
-      if (state.circadianPhase === 'dawn') {
-        syncDawnLayerElement(true);
+      if (state.circadianPhase === 'night' || state.circadianPhase === 'dawn') {
+        syncCircadianVeilAndShell(state.circadianPhase);
       }
     }, 1500);
     setTimeout(ensureHudTriggerMounted, 250);
 
-    const onFirstGesture = (ev) => {
-      if (!state.userInteracted) {
-        state.userInteracted = true;
-        if (state.prefs.enabled && state.prefs.ambientMode !== 'off') {
-          syncAmbientSoundscape();
-        }
-      }
-      // Subtle sword draw whoosh when user clicks a Breathing Skill cast button
-      if (ev && ev.type === 'click' && ev.target && typeof ev.target.closest === 'function') {
-        const castHit = ev.target.closest('.agy-chibi-hitbox, .agy-yoriichi-msg-hit, #agy-chibi-skill-bar button');
-        if (castHit) {
-          playSwordDraw();
-        }
-      }
+    const onFirstGesture = () => {
+      unlockAudioOnUserGesture();
     };
 
     const onDocClickOutside = (ev) => {
@@ -1503,12 +1794,7 @@
 
     const onDocKeyDown = (ev) => {
       if (ev.isComposing || ev.keyCode === 229) return;
-      if (!state.userInteracted) {
-        state.userInteracted = true;
-        if (state.prefs.enabled && state.prefs.ambientMode !== 'off') {
-          syncAmbientSoundscape();
-        }
-      }
+      unlockAudioOnUserGesture();
       if (ev.key === 'Escape' && state.popoverEl) {
         closePopover();
       }
@@ -1549,7 +1835,11 @@
       if (document.documentElement) {
         delete document.documentElement.dataset.agyCircadian;
       }
-      [STYLE_ID, POPOVER_ID, TOAST_ID, DAWN_GLOW_ID, AUTO_HUD_BTN_ID].forEach((id) => {
+      const shell = document.querySelector('.agy-shell');
+      if (shell) {
+        delete shell.dataset.agyCircadian;
+      }
+      [STYLE_ID, POPOVER_ID, TOAST_ID, CIRCADIAN_VEIL_ID, DAWN_GLOW_ID, AUTO_HUD_BTN_ID].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.remove();
       });
@@ -1567,6 +1857,7 @@
     playSheathe: playNichirinSheathe,
     playKaguraChime,
     playSwordDraw,
+    setSwordSfxEnabled,
     setAmbientMode,
     syncCircadianNow,
     getPrefs: () => ({ ...state.prefs }),

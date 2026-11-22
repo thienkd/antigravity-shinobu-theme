@@ -16,10 +16,13 @@
     sanitizeSvgMarkup: (s) => (typeof s === 'string' && !/<script|<foreignobject|\bon[a-z]+\s*=/i.test(s) ? s.trim() : ''),
     sanitizeThemeDefinition: (t) => t,
     resolveAssetUrl: (u) => (typeof u === 'string' ? u.trim() : ''),
-    getAssetBase: () => ''
+    getAssetBase: () => '',
+    getInitialConfig: () => null
   };
 
   const STORAGE_FORGED_THEMES = 'agy_forged_themes_v2';
+  const MAX_HEAVY_FORGED_THEMES = 6;
+  const HEAVY_BACKDROP_THRESHOLD_CHARS = 32768;
   const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
   const ALLOWED_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 
@@ -285,9 +288,349 @@
     return resolved;
   });
 
+  function hasPersona(personaId) {
+    return Boolean(typeof personaId === 'string' && personaId.trim() && PERSONA_MAP[personaId.trim()]);
+  }
+
   function getPersona(personaId) {
     const key = typeof personaId === 'string' ? personaId.trim() : 'yoriichi';
     return PERSONA_MAP[key] || PERSONA_MAP.yoriichi;
+  }
+
+  const FX_COMPANION_SPECS = {
+    sun: {
+      charId: 'yoriichi',
+      badgeLabel: '☀️ Hỏa Thần',
+      title: 'Tsugikuni Yoriichi • Nhật Chi Hô Hấp',
+      placeholder: 'Đàm đạo cùng Kiếm Thánh...',
+      pills: [
+        { key: 'act1', label: '☀️ Nhật Chi Vũ' },
+        { key: 'act2', label: '👁️ Thế Giới Trong Suốt' },
+        { key: 'act3', label: '🍵 Tĩnh Tâm' }
+      ],
+      welcome: [
+        'Ánh dương ban mai luôn soi rõ cội nguồn của mọi cấu trúc phức tạp. Hãy giữ nhịp thở thật tĩnh nhé. ☀️',
+        'Từng đường code chuẩn xác không nằm ở sức mạnh thô bạo, mà ở sự thuần khiết của tư duy. ✨'
+      ],
+      act1: ['Nhật Chi Hô Hấp — Thập Tam Thức nối liền mạch không điểm dừng, quét sạch mọi lỗi ẩn! ☀️⚔️'],
+      act2: ['Khi tâm trí lặng như gương, Thế Giới Trong Suốt sẽ chỉ ra ngay nút thắt của hệ thống. 👁️✨'],
+      act3: ['Hãy ngơi tay hít một hơi thật sâu và uống ngụm trà ấm để giữ trọn sinh lực nhé. 🍵']
+    },
+    moon: {
+      charId: 'obanai',
+      badgeLabel: '🌙 Nguyệt Xà',
+      title: 'Obanai Iguro • Nguyệt Dạ Xà Trụ',
+      placeholder: 'Trao đổi chiến thuật dưới trăng...',
+      pills: [
+        { key: 'act1', label: '🌙 Nguyệt Xà Trảm' },
+        { key: 'act2', label: '🐍 Soi Lỗi Ngầm' },
+        { key: 'act3', label: '🍵 Nghỉ Mắt' }
+      ],
+      welcome: [
+        'Dưới ánh trăng tĩnh mịch, Kaburamaru đang canh chừng từng nhánh rẽ logic cho ngươi đấy. 🌙🐍',
+        'Đừng để sót bất kỳ sơ hở nào trong đêm nay — tập trung dứt điểm gọn gàng nhé! 💜'
+      ],
+      act1: ['Đường kiếm uốn lượn dưới ánh trăng lách qua mọi góc khuất kiến trúc phức tạp! 🌙⚔️'],
+      act2: ['Mọi ngoại lệ biên và race-condition ẩn trong bóng tối đều đã bị khóa mục tiêu! 🐍✨'],
+      act3: ['Nhìn màn hình lâu dưới đêm trăng rồi, chớp mắt nghỉ 20 giây đi nhé. 🍵']
+    },
+    water: {
+      charId: 'giyu',
+      badgeLabel: '🌊 Thủy Trụ',
+      title: 'Giyu Tomioka • Thủy Trụ',
+      placeholder: 'Trò chuyện cùng Giyu...',
+      pills: [
+        { key: 'act1', label: '🌊 Tĩnh Thủy' },
+        { key: 'act2', label: '💧 Thức Thứ 11' },
+        { key: 'act3', label: '🍵 Nghỉ Tay' }
+      ],
+      welcome: [
+        'Mặt nước phẳng lặng phản chiếu trung thực mọi luồng dữ liệu. Cứ điềm tĩnh triển khai nhé. 🌊',
+        'Không cần ồn ào vội vã — nhịp thở đều đặn sẽ dẫn lối qua mọi bài toán hóc búa. 💧'
+      ],
+      act1: ['Hơi thở của Nước chảy mượt qua từng module mà không gặp chút lực cản nào! 🌊⚔️'],
+      act2: ['Thức thứ Mười Một: Lặng — Mọi hỗn loạn và bug đều tan biến trên mặt hồ tĩnh tại. 💙'],
+      act3: ['Uống một ngụm nước mát và thả lỏng cổ tay vài nhịp thở nhé. 🍵']
+    },
+    flame: {
+      charId: 'rengoku',
+      badgeLabel: '🔥 Viêm Trụ',
+      title: 'Kyojuro Rengoku • Viêm Trụ',
+      placeholder: 'Thắp lửa nhiệt huyết cùng Rengoku...',
+      pills: [
+        { key: 'act1', label: '🔥 Bùng Cháy' },
+        { key: 'act2', label: '⚔️ Luyện Ngục' },
+        { key: 'act3', label: '🍱 Nạp Năng Lượng' }
+      ],
+      welcome: [
+        'HÃY THẮP SÁNG NGỌN LỬA TRONG TIM!! Tiến độ hôm nay nhất định sẽ rực rỡ tuyệt vời!! 🔥💛',
+        'Đứng vững và tiến thẳng về phía trước nhé! Ta luôn sát cánh cổ vũ hết mình cho bạn!! 🔥'
+      ],
+      act1: ['Nhiệt huyết bừng cháy giúp tốc độ giải quyết vấn đề tăng vọt gấp bội!! 🔥⚔️'],
+      act2: ['Bí kỹ Luyện Ngục thiêu rụi toàn bộ nợ kỹ thuật cản đường chúng ta!! 🐉🔥'],
+      act3: ['UMAI!! Nhớ uống nước và nạp năng lượng đầy đủ để chiến đấu bền bỉ nhé!! 🍱✨']
+    },
+    thunder: {
+      charId: 'zenitsu',
+      badgeLabel: '⚡ Lôi Minh',
+      title: 'Zenitsu Agatsuma • Lôi Chi Hô Hấp',
+      placeholder: 'Nhắn nhanh cho Zenitsu...',
+      pills: [
+        { key: 'act1', label: '⚡ Nhất Thiểm' },
+        { key: 'act2', label: '🌩️ Lục Liên' },
+        { key: 'act3', label: '🍵 Bình Tĩnh' }
+      ],
+      welcome: [
+        'Chỉ cần rèn luyện một chiêu tới mức thượng thừa, tốc độ thực thi sẽ nhanh như tia chớp! ⚡💛',
+        'Đôi tai mình nghe thấy nhịp hệ thống đang chạy rất êm rồi đó, cố lên nha! ⚡'
+      ],
+      act1: ['Phích Lịch Nhất Thiểm!! Giải quyết gọn gàng tác vụ chỉ trong một chớp mắt! ⚡⚔️'],
+      act2: ['Lục Liên tốc độ âm thanh xử lý song song mọi đầu việc không trễ một nhịp! 🌩️✨'],
+      act3: ['Hít sâu thư giãn đôi vai một chút rồi mình lại phóng đi như chớp nhé! 🍵']
+    },
+    wisteria: {
+      charId: 'shinobu',
+      badgeLabel: '🦋 Shinobu',
+      title: 'Shinobu Kocho • Trùng Trụ',
+      placeholder: 'Nói gì đó với Shinobu...',
+      pills: [
+        { key: 'act1', label: '✨ Cổ Vũ' },
+        { key: 'act2', label: '🍵 Pha Trà' },
+        { key: 'act3', label: '🦋 Điệp Phủ' }
+      ],
+      welcome: [
+        'Ara ara~ Bảng màu kính mờ mới thật dịu mắt, chạm vào mình bất cứ lúc nào bạn muốn trò chuyện nhé! 🦋',
+        'Đêm hoa tử đằng yên bình quá nhỉ~ Cứ thong thả triển khai ý tưởng nha! 💜✨'
+      ],
+      act1: ['Hơi thở của Côn Trùng nhẹ nhàng mà chuẩn xác tuyệt đối tới từng dòng code! 🦋💜'],
+      act2: ['Mình vừa pha tách trà hoa tử đằng ấm thơm rồi đây, nghỉ mắt 10 giây nha~ 🍵'],
+      act3: ['Quy tắc 20-20-20 của Điệp Phủ sẽ giữ đôi mắt bạn luôn tinh anh suốt ca làm việc! ✨']
+    },
+    royal_wisteria: {
+      charId: 'ubuyashiki',
+      badgeLabel: '👑 Chúa Công',
+      title: 'Chúa Công Kagaya & Amane • Ubuyashiki',
+      placeholder: 'Tâm sự cùng Chúa Công...',
+      pills: [
+        { key: 'act1', label: '🌸 Chúc Phúc' },
+        { key: 'act2', label: '🏮 Thiên Đăng' },
+        { key: 'act3', label: '📜 Ý Chí' }
+      ],
+      welcome: [
+        'Chào mừng con trở về dưới giàn tử đằng bình yên. Ta luôn đặt trọn niềm tin nơi trí tuệ của con. 👑🌸',
+        'Hãy để tâm hồn thật thư thái khi kiến tạo những công trình mới nhé, đứa trẻ ưu tú của ta. 🏮✨'
+      ],
+      act1: ['Ánh thiên đăng vàng kim soi sáng từng quyết định kiến trúc chuẩn mực của con. 🌸👑'],
+      act2: ['Toàn thể các Trụ Cột luôn sẵn sàng hợp sức hỗ trợ con hoàn thành đại cuộc. 🏮✨'],
+      act3: ['Ý chí bền bỉ của con người là ngọn lửa vĩnh cửu không gì lay chuyển nổi. 📜💜']
+    },
+    wind: {
+      charId: 'sanemi',
+      badgeLabel: '🌪️ Phong Trụ',
+      title: 'Sanemi Shinazugawa • Phong Trụ',
+      placeholder: 'Báo cáo nhanh với Phong Trụ...',
+      pills: [
+        { key: 'act1', label: '🌪️ Cuồng Phong' },
+        { key: 'act2', label: '⚔️ Quét Sạch Bug' },
+        { key: 'act3', label: '🍵 Ohagi & Trà' }
+      ],
+      welcome: [
+        'Lốc xoáy Phong Trụ đã dọn sạch đường băng! Cứ mạnh tay triển khai không cần chần chừ! 🌪️💚',
+        'Bất kể bug cứng đầu cỡ nào, chém gọn từ gốc rễ là xong ngay! ⚔️'
+      ],
+      act1: ['Cuồng Phong Trảm cuốn bay mọi đoạn code thừa và nghẽn cổ chai hiệu năng! 🌪️⚡'],
+      act2: ['Kiểm tra biên thật chặt, không để bất kỳ lỗi lặt vặt nào lọt qua lưới gió! 💚'],
+      act3: ['Làm ngụm trà xanh với bánh Ohagi lấy sức rồi chiến tiếp nào! 🍵🍡']
+    },
+    mist: {
+      charId: 'muichiro',
+      badgeLabel: '🌫️ Hà Trụ',
+      title: 'Muichiro Tokito • Hà Trụ',
+      placeholder: 'Trò chuyện cùng Muichiro...',
+      pills: [
+        { key: 'act1', label: '🌫️ Hà Vân' },
+        { key: 'act2', label: '☁️ Thức Thứ 7' },
+        { key: 'act3', label: '🍃 Thư Giãn' }
+      ],
+      welcome: [
+        'Làn sương bạc hà dịu mát giúp gạt bỏ mọi nhiễu loạn thừa thãi quanh màn hình code. 🌫️✨',
+        'Tập trung vào điều cốt lõi nhất trước mắt, mọi thứ sẽ tự khắc rõ ràng. ☁️'
+      ],
+      act1: ['Di Lưu Trảm lướt êm như mây trôi, tối ưu gọn gàng từng hàm xử lý! 🌫️⚔️'],
+      act2: ['Thức thứ Bảy: Lông — Nhẹ nhàng khép lại mọi lỗ hổng logic không dấu vết. ☁️💚'],
+      act3: ['Ngắm làn sương trôi vài giây cho dịu mắt rồi tiếp tục nhé. 🍃']
+    },
+    sound: {
+      charId: 'uzui',
+      badgeLabel: '🎵 Âm Trụ',
+      title: 'Tengen Uzui • Âm Trụ',
+      placeholder: 'Lên nhạc hào nhoáng cùng Uzui...',
+      pills: [
+        { key: 'act1', label: '💎 Hào Nhoáng' },
+        { key: 'act2', label: '🎶 Phổ Nhạc' },
+        { key: 'act3', label: '🎆 Giải Lao' }
+      ],
+      welcome: [
+        'Bố cục màu sắc mới trông CỰC KỲ HÀO NHOÁNG đấy!! Bắt nhịp triển khai luôn thôi!! 💎🎆',
+        'Mọi luồng xử lý đều có nhịp điệu riêng — nghe thấu tiết tấu là thắng chắc! 🎵✨'
+      ],
+      act1: ['Cú dứt điểm kiến trúc vang dội và chuẩn chỉnh tới từng chi tiết! 💎💥'],
+      act2: ['PHỔ NHẠC HOÀN TẤT!! Toàn bộ luồng dữ liệu đã nằm gọn trong lòng bàn tay!! 🎶⚡'],
+      act3: ['Nghỉ giải lao cũng phải thật phong cách và sảng khoái nhé chiến hữu!! 🎆']
+    },
+    love: {
+      charId: 'mitsuri',
+      badgeLabel: '🌸 Luyến Trụ',
+      title: 'Mitsuri Kanroji • Luyến Trụ',
+      placeholder: 'Trò chuyện cùng Mitsuri...',
+      pills: [
+        { key: 'act1', label: '🌸 Cổ Vũ' },
+        { key: 'act2', label: '💖 Luyến Khúc' },
+        { key: 'act3', label: '🍡 Bánh Sakura' }
+      ],
+      welcome: [
+        'Kyaa~ Giao diện mới đẹp mê ly luôn đó!! Mình cùng làm việc thật vui vẻ nha! 🌸💖',
+        'Từng tính năng bạn chăm chút đều tràn đầy tâm huyết, cố lên nhé! ✨'
+      ],
+      act1: ['Đường kiếm hoa anh đào uyển chuyển kết nối mượt mà mọi thành phần UI! 🌸⚔️'],
+      act2: ['Năng lượng tích cực sẽ giúp bạn vượt qua mọi bài kiểm thử khó nhằn nhất! 💖✨'],
+      act3: ['Thưởng thức chút trà thơm bánh ngọt để giữ tinh thần luôn tươi tắn nha! 🍡🍵']
+    },
+    serpent: {
+      charId: 'obanai',
+      badgeLabel: '🐍 Xà Trụ',
+      title: 'Obanai Iguro • Xà Trụ',
+      placeholder: 'Kiểm định code cùng Obanai...',
+      pills: [
+        { key: 'act1', label: '🐍 U Xà Trảm' },
+        { key: 'act2', label: '🔍 Kiểm Định' },
+        { key: 'act3', label: '🍵 Nghỉ Mắt' }
+      ],
+      welcome: [
+        'Từng điều kiện rẽ nhánh đều cần độ chính xác tuyệt đối. Kaburamaru đang quan sát cùng bạn đấy. 🐍💜',
+        'Kiến trúc chặt chẽ ngay từ đầu sẽ chặn đứng mọi lỗi phát sinh về sau. ✨'
+      ],
+      act1: ['Nhát kiếm Xà Trụ lách chuẩn xác qua mọi cấu trúc dữ liệu chồng chéo! 🐍⚔️'],
+      act2: ['Rà soát kỹ các trường hợp biên — không một bug ngầm nào lọt lưới! 🔍💚'],
+      act3: ['Thả lỏng cổ và mắt vài giây trước khi tiếp tục rà soát nhé. 🍵']
+    },
+    stone: {
+      charId: 'gyomei',
+      badgeLabel: '📿 Nham Trụ',
+      title: 'Gyomei Himejima • Nham Trụ',
+      placeholder: 'Đàm đạo cùng Nham Trụ...',
+      pills: [
+        { key: 'act1', label: '📿 Vững Vàng' },
+        { key: 'act2', label: '🪨 Nham Khu' },
+        { key: 'act3', label: '🍵 Tĩnh Tọa' }
+      ],
+      welcome: [
+        'Nam mô... Một nền tảng hệ thống kiên cố như đá tảng sẽ chịu được mọi thử thách thời gian. 📿🔥',
+        'Sự kiên nhẫn và tỉ mỉ của bạn thật đáng trân trọng. Cứ vững bước tiến lên nhé. 🙏'
+      ],
+      act1: ['Nham Khu Vạn Vật trấn giữ toàn bộ kiến trúc an toàn tuyệt đối! 🪨⚔️'],
+      act2: ['Từng lớp bảo vệ được gia cố vững chắc không thể lay chuyển! 📿✨'],
+      act3: ['Hít thở sâu và giữ lưng thẳng để cơ thể luôn dẻo dai bền bỉ nhé. 🍵']
+    },
+    nezuko: {
+      charId: 'nezuko',
+      badgeLabel: '🎋 Nezuko',
+      title: 'Nezuko Kamado • Huyết Quỷ Hoa Lửa',
+      placeholder: 'Trò chuyện cùng Nezuko...',
+      pills: [
+        { key: 'act1', label: '🌸 Bộc Huyết' },
+        { key: 'act2', label: '🎋 Canh Gác' },
+        { key: 'act3', label: '💤 Nghỉ Ngơi' }
+      ],
+      welcome: [
+        'Ưm ưm~ Ngọn lửa hồng ấm áp đang xua tan mọi lỗi độc hại khỏi không gian làm việc của bạn! 🎋🌸',
+        'Nezuko ngồi ngay góc khung chat tiếp thêm năng lượng dễ thương cho bạn đây~ 💖✨'
+      ],
+      act1: ['Bộc Huyết Hoa Lửa đốt sạch bug nhưng giữ nguyên vẹn từng dòng code sạch! 🔥🌸'],
+      act2: ['Luôn sát cánh bảo vệ tiến độ công việc của bạn an toàn tuyệt đối! 🎋💖'],
+      act3: ['Nhớ nghỉ ngơi hợp lý để nạp lại đầy ắp năng lượng giống Nezuko nha~ 💤✨']
+    },
+    sun_water: {
+      charId: 'tanjiro',
+      badgeLabel: '🎴 Tanjiro',
+      title: 'Tanjiro Kamado • Hỏa Thần & Thủy Lưu',
+      placeholder: 'Trò chuyện cùng Tanjiro...',
+      pills: [
+        { key: 'act1', label: '🔥 Hỏa Thần Vũ' },
+        { key: 'act2', label: '🌊 Sinh Sinh Lưu' },
+        { key: 'act3', label: '🍙 Tiếp Sức' }
+      ],
+      welcome: [
+        'Mình ngửi thấy sợi chỉ sơ hở của bài toán rồi! Cùng kiên trì tháo gỡ tới cùng nhé! 🎴🔥',
+        'Kết hợp sự uyển chuyển của Nước và sức mạnh Hỏa Thần, việc khó mấy cũng vượt qua! 🌊☀️'
+      ],
+      act1: ['Vũ Điệu Hỏa Thần: Viên Vũ!! Chém đứt gọn gàng nút thắt phức tạp nhất! 🔥⚔️'],
+      act2: ['Sinh Sinh Lưu Chuyển tích lũy đà tiến độ mỗi lúc một mạnh mẽ hơn! 🌊🐉'],
+      act3: ['Cố lên bạn ơi! Nghỉ uống ngụm nước rồi tụi mình lại tiếp tục tiến bước nhé! 🍙✨']
+    },
+    beast: {
+      charId: 'inosuke',
+      badgeLabel: '🐗 Inosuke',
+      title: 'Inosuke Hashibira • Sơn Lâm Dã Thú',
+      placeholder: 'Thách đấu bug cùng Đấng Inosuke...',
+      pills: [
+        { key: 'act1', label: '🐗 Trư Đột' },
+        { key: 'act2', label: '⚔️ Khung Không Gian' },
+        { key: 'act3', label: '🍤 Tempura' }
+      ],
+      welcome: [
+        'WAHAHAHA!! TRƯ ĐỘT MÃNH TIẾN!! Đưa hết bài toán khó đây Đấng Inosuke càn quét cùng ngươi!! 🐗⚔️',
+        'Cảm quan không gian bén nhạy đã phát hiện ra vị trí ẩn nấp của lũ bug rồi!! 💙⚡'
+      ],
+      act1: ['Song kiếm răng cưa xé toạc mọi rào cản phức tạp ngay tức khắc!! 🐗💥'],
+      act2: ['Thức thứ Bảy: Cảm Quan Không Gian quét sạch toàn bộ ngóc ngách codebase!! 🌐✨'],
+      act3: ['Nạp đầy Tempura giòn rụm vào là sức chiến đấu lại tăng vọt 200%!! 🍤🔥']
+    }
+  };
+
+  function resolveCompanionForFxMode(fxMode) {
+    const cleanFx = String(fxMode || 'sun').trim().toLowerCase();
+    const mappedKey = cleanFx === 'wisteria_royal' ? 'royal_wisteria' : cleanFx;
+    const spec = FX_COMPANION_SPECS[mappedKey] || FX_COMPANION_SPECS.sun;
+    const charPersona = getPersona(spec.charId);
+    return {
+      charId: spec.charId,
+      cornerSvg: charPersona.userCornerSvg,
+      sticker: charPersona.userSticker,
+      actionSticker: charPersona.actionSticker || '',
+      npc: {
+        badgeLabel: spec.badgeLabel,
+        title: spec.title,
+        placeholder: spec.placeholder,
+        pills: spec.pills.map((p) => ({ key: p.key, label: p.label })),
+        dialogs: {
+          welcome: spec.welcome.slice(),
+          act1: spec.act1.slice(),
+          act2: spec.act2.slice(),
+          act3: spec.act3.slice()
+        },
+        replies: {
+          greet: spec.welcome[0],
+          bug: spec.act1[0],
+          tired: spec.act3[0],
+          praise: spec.act2[0],
+          fallback: `“{input}” — ${spec.act1[0]}`
+        }
+      }
+    };
+  }
+
+  function applyCompanionForFxMode(themeDef, fxMode) {
+    if (!themeDef || typeof themeDef !== 'object') return themeDef;
+    const cleanFx = String(fxMode || themeDef.fxMode || 'sun').replace(/[^a-zA-Z0-9_-]/g, '') || 'sun';
+    const comp = resolveCompanionForFxMode(cleanFx);
+    themeDef.fxMode = cleanFx;
+    themeDef.cornerSvg = comp.cornerSvg;
+    themeDef.sticker = comp.sticker;
+    themeDef.actionSticker = comp.actionSticker;
+    themeDef.agentAvatar = '';
+    themeDef.npc = comp.npc;
+    return themeDef;
   }
 
   /* ==========================================================================
@@ -351,7 +694,8 @@
 
   function oklchToRgb(L, C, hDeg) {
     const safeL = clamp(L, 0, 1);
-    const safeH = ((hDeg % 360) + 360) % 360;
+    const finiteH = Number.isFinite(hDeg) ? hDeg : 0;
+    const safeH = ((finiteH % 360) + 360) % 360;
     let lo = 0;
     let hi = clamp(C, 0, 0.38);
     let best = oklchRawLinear(safeL, 0, safeH);
@@ -440,12 +784,27 @@
    * Generates all 14 WCAG-AA-verified frosted glass color tokens + engine properties in OKLCH space.
    */
   function buildOklchThemeDefinition(opts) {
-    const h1 = ((Number(opts.h1) || 275) % 360 + 360) % 360;
-    const c1 = clamp(Number(opts.c1) || 0.17, 0.11, 0.24);
-    const h2 = opts.h2 !== undefined
-      ? (((Number(opts.h2) || (h1 + 48)) % 360) + 360) % 360
-      : ((h1 + 52) % 360);
-    const c2 = clamp(Number(opts.c2) || 0.15, 0.10, 0.22);
+    const safeOpts = (opts && typeof opts === 'object') ? opts : {};
+    const parsedH1 = (safeOpts.h1 !== undefined && safeOpts.h1 !== null && safeOpts.h1 !== '' && Number.isFinite(Number(safeOpts.h1)))
+      ? Number(safeOpts.h1)
+      : 275;
+    const h1 = ((parsedH1 % 360) + 360) % 360;
+
+    const hasFiniteC1 = safeOpts.c1 !== undefined && safeOpts.c1 !== null && safeOpts.c1 !== '' && Number.isFinite(Number(safeOpts.c1));
+    const isAchromatic = Boolean(safeOpts.achromatic) || (hasFiniteC1 && Number(safeOpts.c1) < 0.04);
+    const c1 = isAchromatic
+      ? clamp(hasFiniteC1 ? Number(safeOpts.c1) : 0.016, 0.008, 0.035)
+      : clamp(hasFiniteC1 ? Number(safeOpts.c1) : 0.17, 0.11, 0.24);
+
+    const hasFiniteH2 = safeOpts.h2 !== undefined && safeOpts.h2 !== null && safeOpts.h2 !== '' && Number.isFinite(Number(safeOpts.h2));
+    const h2 = hasFiniteH2
+      ? (((Number(safeOpts.h2) % 360) + 360) % 360)
+      : ((h1 + (isAchromatic ? 25 : 52)) % 360);
+
+    const hasFiniteC2 = safeOpts.c2 !== undefined && safeOpts.c2 !== null && safeOpts.c2 !== '' && Number.isFinite(Number(safeOpts.c2));
+    const c2 = isAchromatic
+      ? clamp(hasFiniteC2 ? Number(safeOpts.c2) : 0.02, 0.008, 0.04)
+      : clamp(hasFiniteC2 ? Number(safeOpts.c2) : 0.15, 0.10, 0.22);
 
     const codeSurfaceRgb = oklchToRgb(0.155, Math.min(0.035, c1 * 0.22), h1);
     const sidebarSurfaceRgb = oklchToRgb(0.145, Math.min(0.038, c1 * 0.24), h1);
@@ -460,10 +819,10 @@
     const compB = oklchToRgb(0.16, Math.min(0.042, c2 * 0.28), h2);
 
     // Guarantee WCAG AA/AAA readability on dark glass surfaces
-    const primaryRgb = ensureReadableLightOklch(0.76, c1, h1, codeSurfaceRgb, 4.6);
-    const accentRgb = ensureReadableLightOklch(0.78, c2, h2, codeSurfaceRgb, 4.6);
-    const textMainRgb = ensureReadableLightOklch(0.968, 0.012, h1, codeSurfaceRgb, 11.5);
-    const textMutedRgb = ensureReadableLightOklch(0.81, 0.024, h1, sidebarSurfaceRgb, 4.7);
+    const primaryRgb = ensureReadableLightOklch(isAchromatic ? 0.84 : 0.76, c1, h1, codeSurfaceRgb, 4.6);
+    const accentRgb = ensureReadableLightOklch(isAchromatic ? 0.80 : 0.78, c2, h2, codeSurfaceRgb, 4.6);
+    const textMainRgb = ensureReadableLightOklch(0.968, Math.min(0.012, c1), h1, codeSurfaceRgb, 11.5);
+    const textMutedRgb = ensureReadableLightOklch(0.81, Math.min(0.024, c1), h1, sidebarSurfaceRgb, 4.7);
 
     const primaryHex = rgbToHex(primaryRgb);
     const accentHex = rgbToHex(accentRgb);
@@ -480,12 +839,16 @@
     const pillBg = rgbaStr(pillSurfaceRgb, 0.72);
     const pillBorder = rgbaStr(primaryRgb, 0.32);
 
-    const fxMode = String(opts.fxMode || suggestFxModeFromHue(h1)).replace(/[^a-zA-Z0-9_-]/g, '');
-    const wpUrl = opts.wallpaper ? SEC.sanitizeCssUrl(opts.wallpaper) : '';
-    const persona = getPersona(opts.personaId || 'yoriichi');
+    const defaultFx = isAchromatic ? 'mist' : suggestFxModeFromHue(h1);
+    const fxMode = String(safeOpts.fxMode || defaultFx).replace(/[^a-zA-Z0-9_-]/g, '') || defaultFx;
+    const wpUrl = safeOpts.wallpaper ? SEC.sanitizeCssUrl(safeOpts.wallpaper) : '';
+    const persona = getPersona(safeOpts.personaId || 'yoriichi');
+    const companion = resolveCompanionForFxMode(fxMode);
 
     return {
-      concept: String(opts.concept || `OKLCH Forged Universe • WCAG AA (${Math.round(h1)}° / ${Math.round(h2)}°)`).slice(0, 140),
+      concept: String(safeOpts.concept || (isAchromatic
+        ? 'OKLCH Monochrome Silver-Slate • WCAG AA'
+        : `OKLCH Forged Universe • WCAG AA (${Math.round(h1)}° / ${Math.round(h2)}°)`)).slice(0, 140),
       // Core 14 OKLCH WCAG-AA Variables
       primary: primaryHex,
       accent: accentHex,
@@ -511,7 +874,7 @@
       uiMutedColor: textMutedHex,
       innerBorder: `1px solid ${rgbaStr(primaryRgb, 0.24)}`,
       clearBackdrop: true,
-      defaultDimming: typeof opts.defaultDimming === 'number' ? clamp(Math.round(opts.defaultDimming), 18, 75) : 28,
+      defaultDimming: typeof safeOpts.defaultDimming === 'number' ? clamp(Math.round(safeOpts.defaultDimming), 18, 75) : 28,
       bgPosition: 'center center',
       sidebarBlur: '4px',
       sidebarHoverBg: rgbaStr(primaryRgb, 0.16),
@@ -535,30 +898,35 @@
       isOrnament: true,
       isChibiNpc: true,
       liveWallpaperFx: true,
-      cornerSvg: persona.userCornerSvg,
+      // Decoupled AI Companion (mapped from fxMode) vs User Master Persona
+      cornerSvg: companion.cornerSvg,
       userCornerSvg: persona.userCornerSvg,
-      sticker: persona.userSticker,
+      sticker: companion.sticker,
       userSticker: persona.userSticker,
-      actionSticker: persona.actionSticker || '',
+      actionSticker: companion.actionSticker,
       userActionSticker: persona.actionSticker || '',
       stickerW: 140,
       stickerH: 64,
       stickerTop: -56,
       stickerRight: 10,
       userAvatar: persona.userAvatar,
-      agentAvatar: persona.userAvatar,
+      agentAvatar: '',
+      npc: companion.npc,
       wcagReport: {
         textContrast: Number(wcagContrast(textMainRgb, codeSurfaceRgb).toFixed(2)),
         mutedContrast: Number(wcagContrast(textMutedRgb, sidebarSurfaceRgb).toFixed(2)),
         primaryContrast: Number(wcagContrast(primaryRgb, codeSurfaceRgb).toFixed(2)),
         dominantHue: Math.round(h1),
-        accentHue: Math.round(h2)
+        accentHue: Math.round(h2),
+        achromatic: isAchromatic
       }
     };
   }
 
   /**
    * Scans a 64x64 downsampled Canvas histogram in OKLCH space to extract primary & accent hues.
+   * Uses a circular 3-bucket sliding window to prevent hue-splitting across 15° boundaries
+   * and detects monochrome / black-and-white manga artwork cleanly.
    */
   function analyzeImageHistogram64(imgEl) {
     const size = 64;
@@ -567,7 +935,7 @@
     canvas.height = size;
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      return { h1: 275, c1: 0.17, h2: 205, c2: 0.15, avgL: 0.35 };
+      return { h1: 275, c1: 0.17, h2: 205, c2: 0.15, avgL: 0.35, achromatic: false };
     }
     ctx.drawImage(imgEl, 0, 0, size, size);
     const data = ctx.getImageData(0, 0, size, size).data;
@@ -597,61 +965,114 @@
       sumC[bIdx] += lch.C * w;
     }
 
-    let bestIdx = 0;
-    for (let b = 1; b < bucketCount; b++) {
-      if (weights[b] > weights[bestIdx]) bestIdx = b;
+    const avgL = pixelCount > 0 ? totalLum / pixelCount : 0.35;
+
+    // Circular 3-bucket sliding window: (b + 23) % 24, b, (b + 1) % 24
+    const winWeights = new Float64Array(bucketCount);
+    for (let b = 0; b < bucketCount; b++) {
+      const prevB = (b + 23) % bucketCount;
+      const nextB = (b + 1) % bucketCount;
+      winWeights[b] = weights[prevB] + weights[b] + weights[nextB];
     }
 
-    let h1 = 275;
-    let c1 = 0.17;
-    if (weights[bestIdx] > 0.0001) {
-      h1 = Math.atan2(sumSin[bestIdx], sumCos[bestIdx]) * (180 / Math.PI);
-      if (h1 < 0) h1 += 360;
-      c1 = clamp((sumC[bestIdx] / weights[bestIdx]) * 1.25, 0.12, 0.23);
+    let bestIdx = 0;
+    let rawPeakIdx = 0;
+    for (let b = 1; b < bucketCount; b++) {
+      if (winWeights[b] > winWeights[bestIdx]) bestIdx = b;
+      if (weights[b] > weights[rawPeakIdx]) rawPeakIdx = b;
     }
+
+    // Monochrome / Manga Black-and-White detection (near-zero chromatic energy)
+    if (weights[rawPeakIdx] <= 0.0001 || winWeights[bestIdx] <= 0.0001) {
+      return {
+        h1: 220,
+        c1: 0.016,
+        h2: 245,
+        c2: 0.02,
+        avgL,
+        achromatic: true,
+        fxMode: 'mist'
+      };
+    }
+
+    const p1 = (bestIdx + 23) % bucketCount;
+    const n1 = (bestIdx + 1) % bucketCount;
+    const w1 = winWeights[bestIdx];
+    const sSin1 = sumSin[p1] + sumSin[bestIdx] + sumSin[n1];
+    const sCos1 = sumCos[p1] + sumCos[bestIdx] + sumCos[n1];
+    const sC1 = sumC[p1] + sumC[bestIdx] + sumC[n1];
+
+    let h1 = Math.atan2(sSin1, sCos1) * (180 / Math.PI);
+    if (h1 < 0) h1 += 360;
+    const c1 = clamp((sC1 / w1) * 1.25, 0.12, 0.23);
 
     let secondIdx = -1;
     let secondBestW = 0;
     for (let b = 0; b < bucketCount; b++) {
       const centerHue = b * 15 + 7.5;
       if (circularHueDistance(centerHue, h1) < 36) continue;
-      if (weights[b] > secondBestW) {
-        secondBestW = weights[b];
+      if (winWeights[b] > secondBestW) {
+        secondBestW = winWeights[b];
         secondIdx = b;
       }
     }
 
     let h2 = (h1 + 48) % 360;
     let c2 = clamp(c1 * 0.92, 0.11, 0.21);
-    if (secondIdx >= 0 && secondBestW > weights[bestIdx] * 0.12) {
-      h2 = Math.atan2(sumSin[secondIdx], sumCos[secondIdx]) * (180 / Math.PI);
+    if (secondIdx >= 0 && secondBestW > w1 * 0.12) {
+      const p2 = (secondIdx + 23) % bucketCount;
+      const n2 = (secondIdx + 1) % bucketCount;
+      const sSin2 = sumSin[p2] + sumSin[secondIdx] + sumSin[n2];
+      const sCos2 = sumCos[p2] + sumCos[secondIdx] + sumCos[n2];
+      const sC2 = sumC[p2] + sumC[secondIdx] + sumC[n2];
+      h2 = Math.atan2(sSin2, sCos2) * (180 / Math.PI);
       if (h2 < 0) h2 += 360;
-      c2 = clamp((sumC[secondIdx] / secondBestW) * 1.2, 0.11, 0.22);
+      c2 = clamp((sC2 / secondBestW) * 1.2, 0.11, 0.22);
     }
 
-    const avgL = pixelCount > 0 ? totalLum / pixelCount : 0.35;
-    return { h1, c1, h2, c2, avgL };
+    return { h1, c1, h2, c2, avgL, achromatic: false };
   }
 
+  /**
+   * Adaptive step-down WebP/JPEG encoder keeping Base64 backdrop compact (< ~900KB / 1.15M chars)
+   * so 5MB localStorage and 2MB CDP IPC bindings never overflow.
+   */
   function compressBackdropToDataUrl(imgEl) {
-    const maxW = 2560;
-    const maxH = 1440;
     const natW = Math.max(1, imgEl.naturalWidth || imgEl.width || 1920);
     const natH = Math.max(1, imgEl.naturalHeight || imgEl.height || 1080);
-    const scale = Math.min(1, maxW / natW, maxH / natH);
-    const w = Math.max(64, Math.round(natW * scale));
-    const h = Math.max(64, Math.round(natH * scale));
+    const tiers = [
+      { maxW: 1920, maxH: 1080, quality: 0.82, maxChars: 1150000 },
+      { maxW: 1600, maxH: 900, quality: 0.74, maxChars: 920000 },
+      { maxW: 1280, maxH: 720, quality: 0.68, maxChars: 880000 },
+      { maxW: 1280, maxH: 720, quality: 0.56, maxChars: Infinity }
+    ];
     const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
-    ctx.drawImage(imgEl, 0, 0, w, h);
-    let dataUrl = canvas.toDataURL('image/webp', 0.86);
-    if (!dataUrl || !dataUrl.startsWith('data:image/webp')) {
-      dataUrl = canvas.toDataURL('image/jpeg', 0.86);
+
+    let lastValid = '';
+    for (let i = 0; i < tiers.length; i++) {
+      const tier = tiers[i];
+      const scale = Math.min(1, tier.maxW / natW, tier.maxH / natH);
+      const w = Math.max(64, Math.round(natW * scale));
+      const h = Math.max(64, Math.round(natH * scale));
+      canvas.width = w;
+      canvas.height = h;
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(imgEl, 0, 0, w, h);
+      let dataUrl = canvas.toDataURL('image/webp', tier.quality);
+      if (!dataUrl || !dataUrl.startsWith('data:image/webp')) {
+        dataUrl = canvas.toDataURL('image/jpeg', tier.quality);
+      }
+      const safeUrl = safeRasterDataUrl(dataUrl);
+      if (safeUrl) {
+        lastValid = safeUrl;
+        if (safeUrl.length <= tier.maxChars) {
+          return safeUrl;
+        }
+      }
     }
-    return safeRasterDataUrl(dataUrl);
+    return lastValid;
   }
 
   function forgeFromWallpaperFile(file, forgeOpts) {
@@ -689,18 +1110,23 @@
               return;
             }
             const defaultDimming = stats.avgL > 0.58 ? 44 : (stats.avgL > 0.38 ? 32 : 24);
-            const suggestedFx = suggestFxModeFromHue(stats.h1);
+            const suggestedFx = stats.achromatic
+              ? (stats.fxMode || 'mist')
+              : suggestFxModeFromHue(stats.h1);
             const baseName = String(file.name || 'Custom 4K').replace(/\.[^.]+$/, '').slice(0, 36).trim() || 'Forged Universe';
             const themeDef = buildOklchThemeDefinition({
               h1: stats.h1,
               c1: stats.c1,
               h2: stats.h2,
               c2: stats.c2,
+              achromatic: Boolean(stats.achromatic),
               defaultDimming,
               fxMode: suggestedFx,
               personaId: activePersonaId,
               wallpaper: wpDataUrl,
-              concept: `OKLCH 64×64 Forged • WCAG AA ${stats.avgL > 0.5 ? 'Bright-Balanced' : 'Deep-Focus'}`
+              concept: stats.achromatic
+                ? 'OKLCH 64×64 Monochrome Silver-Slate • WCAG AA'
+                : `OKLCH 64×64 Forged • WCAG AA ${stats.avgL > 0.5 ? 'Bright-Balanced' : 'Deep-Focus'}`
             });
             resolve({
               suggestedName: `⚒️ ${baseName}`,
@@ -742,6 +1168,9 @@
           wallpaper: makeMultiverseBackdropUri('shadow_monarch'),
           concept: 'Shadow Monarch Abyssal Violet & Necro-Azure • OKLCH WCAG AA'
         });
+        def.sticker = MULTIVERSE_CRESTS.shadow_monarch.ornament;
+        def.cornerSvg = MULTIVERSE_CRESTS.shadow_monarch.corner;
+        def.actionSticker = '';
         def.npc = {
           badgeLabel: '🌌 Quân Đoàn Bóng Tối',
           title: 'Đế Vương Bóng Tối • Shadow Sovereign',
@@ -782,6 +1211,9 @@
           wallpaper: makeMultiverseBackdropUri('six_eyes'),
           concept: 'Six Eyes Celestial Cyan & Hollow Purple Infinity • OKLCH WCAG AA'
         });
+        def.sticker = MULTIVERSE_CRESTS.six_eyes.ornament;
+        def.cornerSvg = MULTIVERSE_CRESTS.six_eyes.corner;
+        def.actionSticker = '';
         def.npc = {
           badgeLabel: '♾️ Lục Nhãn',
           title: 'Lục Nhãn Vô Hạ Hạn • Six Eyes Domain',
@@ -822,6 +1254,9 @@
           wallpaper: makeMultiverseBackdropUri('great_sage'),
           concept: 'Obsidian Gold & Fiery Golden Eyes • OKLCH WCAG AA'
         });
+        def.sticker = MULTIVERSE_CRESTS.great_sage.ornament;
+        def.cornerSvg = MULTIVERSE_CRESTS.great_sage.corner;
+        def.actionSticker = '';
         def.npc = {
           badgeLabel: '🔥 Đại Thánh',
           title: 'Tề Thiên Đại Thánh • Destined Great Sage',
@@ -854,20 +1289,17 @@
     if (typeof rawUrl !== 'string') return '';
     const trimmed = rawUrl.trim();
     if (!trimmed) return '';
-    if (/^data:image\/svg\+xml,/i.test(trimmed)) {
+    const svgHeaderMatch = trimmed.match(/^data:image\/svg\+xml(?:;charset=[A-Za-z0-9_-]+|;utf8)?(;base64)?,/i);
+    if (svgHeaderMatch) {
       try {
-        const decoded = decodeURIComponent(trimmed.slice(trimmed.indexOf(',') + 1));
+        const body = trimmed.slice(svgHeaderMatch[0].length);
+        if (svgHeaderMatch[1]) {
+          const bin = typeof atob === 'function' ? atob(body) : '';
+          const utf8 = decodeURIComponent(Array.from(bin).map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join(''));
+          return svgToDataUri(utf8);
+        }
+        const decoded = decodeURIComponent(body);
         return svgToDataUri(decoded);
-      } catch (_) {
-        return '';
-      }
-    }
-    if (/^data:image\/svg\+xml;base64,/i.test(trimmed)) {
-      try {
-        const b64 = trimmed.slice(trimmed.indexOf(',') + 1);
-        const bin = typeof atob === 'function' ? atob(b64) : '';
-        const utf8 = decodeURIComponent(Array.from(bin).map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join(''));
-        return svgToDataUri(utf8);
       } catch (_) {
         return '';
       }
@@ -882,7 +1314,7 @@
     const cleanRoot = SEC.stripProtoKeys(rawDef);
     if (!cleanRoot || typeof cleanRoot !== 'object') return null;
 
-    // Pre-normalize any SVG data URIs through sanitizeSvgMarkup -> base64
+    // Pre-normalize any SVG data URIs through sanitizeSvgMarkup -> strict percent-encoded URI
     const pre = Object.assign({}, cleanRoot);
     const assetKeys = ['wallpaper', 'sticker', 'userSticker', 'actionSticker', 'userActionSticker', 'cornerSvg', 'userCornerSvg', 'userAvatar', 'agentAvatar'];
     for (const ak of assetKeys) {
@@ -917,7 +1349,10 @@
     if (!base.inputCardBg && base.composerBg) base.inputCardBg = base.composerBg;
     if (!base.bg && base.userBubble) base.bg = base.userBubble;
     if (typeof pre.defaultDimming === 'number' && Number.isFinite(pre.defaultDimming)) {
-      base.defaultDimming = clamp(Math.round(pre.defaultDimming), 15, 92);
+      const normDim = (pre.defaultDimming > 0 && pre.defaultDimming < 1)
+        ? Math.round(pre.defaultDimming * 100)
+        : Math.round(pre.defaultDimming);
+      base.defaultDimming = clamp(normDim, 15, 92);
     } else {
       base.defaultDimming = 28;
     }
@@ -933,13 +1368,44 @@
     base.stickerRight = clamp(Number(pre.stickerRight) || 10, 0, 48);
 
     const fallbackPersona = getPersona('yoriichi');
-    if (!base.cornerSvg) base.cornerSvg = fallbackPersona.userCornerSvg;
-    if (!base.userCornerSvg) base.userCornerSvg = base.cornerSvg;
-    if (!base.sticker) base.sticker = fallbackPersona.userSticker;
-    if (!base.userSticker) base.userSticker = base.sticker;
+    const fallbackCompanion = resolveCompanionForFxMode(base.fxMode || 'sun');
+    if (!base.cornerSvg) base.cornerSvg = fallbackCompanion.cornerSvg || fallbackPersona.userCornerSvg;
+    if (!base.userCornerSvg) base.userCornerSvg = fallbackPersona.userCornerSvg;
+    if (!base.sticker) base.sticker = fallbackCompanion.sticker || fallbackPersona.userSticker;
+    if (!base.userSticker) base.userSticker = fallbackPersona.userSticker;
     if (!base.userAvatar) base.userAvatar = fallbackPersona.userAvatar;
+    if (!base.npc) base.npc = fallbackCompanion.npc;
 
     return base;
+  }
+
+  function isHeavyBackdropEntry(themeDef) {
+    return Boolean(
+      themeDef &&
+      typeof themeDef.wallpaper === 'string' &&
+      themeDef.wallpaper.length > HEAVY_BACKDROP_THRESHOLD_CHARS
+    );
+  }
+
+  function pruneHeavyForgedLru(mapObj, protectedKey, maxHeavy) {
+    const keys = Object.keys(mapObj);
+    let heavyKeys = keys.filter((k) => isHeavyBackdropEntry(mapObj[k]));
+    while (heavyKeys.length > maxHeavy) {
+      const victim = heavyKeys.find((k) => k !== protectedKey);
+      if (!victim) break;
+      delete mapObj[victim];
+      heavyKeys = Object.keys(mapObj).filter((k) => isHeavyBackdropEntry(mapObj[k]));
+    }
+  }
+
+  function isQuotaExceededError(err) {
+    if (!err) return false;
+    return (
+      err.name === 'QuotaExceededError' ||
+      err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      err.code === 22 ||
+      err.code === 1014
+    );
   }
 
   function loadPersistedThemes() {
@@ -970,18 +1436,53 @@
     const safeDef = sanitizeFullThemeRecord(themeDef);
     if (!safeDef) return null;
     safeDef.isForged = true;
-    try {
+
+    let quotaExceeded = false;
+    if (typeof localStorage !== 'undefined') {
       const current = loadPersistedThemes();
+      // Refresh LRU insertion order so safeName is newest
+      if (safeName in current) delete current[safeName];
       current[safeName] = safeDef;
-      localStorage.setItem(STORAGE_FORGED_THEMES, JSON.stringify(current));
-    } catch (_) {
-      // If quota exceeded due to huge custom wallpaper, still return sanitized in-memory theme
+      pruneHeavyForgedLru(current, safeName, MAX_HEAVY_FORGED_THEMES);
+
+      let savedOk = false;
+      while (!savedOk) {
+        try {
+          localStorage.setItem(STORAGE_FORGED_THEMES, JSON.stringify(current));
+          savedOk = true;
+        } catch (err) {
+          const removable = Object.keys(current).find((k) => k !== safeName);
+          if (removable && (isQuotaExceededError(err) || err)) {
+            delete current[removable];
+            continue;
+          }
+          quotaExceeded = true;
+          break;
+        }
+      }
     }
-    return { name: safeName, theme: safeDef };
+    return { name: safeName, theme: safeDef, quotaExceeded };
   }
 
   function hydrateIntoThemesRegistry(themesRegistry, themeKeysArray) {
     if (!themesRegistry || typeof themesRegistry !== 'object') return;
+
+    // 1. Pre-register all 3 built-in Multiverse Presets so they are always available on startup
+    for (const preset of MULTIVERSE_PRESETS) {
+      if (!themesRegistry[preset.name]) {
+        const built = sanitizeFullThemeRecord(preset.build());
+        if (built) {
+          built.isForged = true;
+          built.isMultiversePreset = true;
+          themesRegistry[preset.name] = built;
+          if (Array.isArray(themeKeysArray) && !themeKeysArray.includes(preset.name)) {
+            themeKeysArray.push(preset.name);
+          }
+        }
+      }
+    }
+
+    // 2. Hydrate persisted forged themes from localStorage
     const persisted = loadPersistedThemes();
     for (const [name, def] of Object.entries(persisted)) {
       themesRegistry[name] = def;
@@ -989,6 +1490,25 @@
         themeKeysArray.push(name);
       }
     }
+
+    // 3. Hydrate activeForgedTheme from daemon's theme_config.json when opening a window on a new origin/port
+    try {
+      const initCfg = typeof SEC.getInitialConfig === 'function' ? SEC.getInitialConfig() : null;
+      const activeForged = initCfg && initCfg.activeForgedTheme;
+      if (activeForged && typeof activeForged === 'object' && !Array.isArray(activeForged)) {
+        const forgedName = String(activeForged.name || initCfg.themeName || '').trim().slice(0, 68);
+        if (forgedName) {
+          const cleanActive = sanitizeFullThemeRecord(activeForged);
+          if (cleanActive) {
+            cleanActive.isForged = true;
+            themesRegistry[forgedName] = cleanActive;
+            if (Array.isArray(themeKeysArray) && !themeKeysArray.includes(forgedName)) {
+              themeKeysArray.push(forgedName);
+            }
+          }
+        }
+      }
+    } catch (_) {}
   }
 
   function registerThemeIntoRegistry(themesRegistry, themeKeysArray, name, rawDef) {
@@ -1072,11 +1592,14 @@
     FX_MODE_OPTIONS,
     PERSONA_LIST,
     MULTIVERSE_PRESETS,
+    hasPersona,
     getPersona,
+    applyCompanionForFxMode,
     rgbToOklch,
     oklchToRgb,
     wcagContrast,
     buildOklchThemeDefinition,
+    compressBackdropToDataUrl,
     forgeFromWallpaperFile,
     hydrateIntoThemesRegistry,
     registerThemeIntoRegistry,

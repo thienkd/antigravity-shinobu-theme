@@ -72,7 +72,7 @@ def read_utf8_no_bom(path: Path) -> str:
     raw_text = path.read_bytes().decode("utf-8")
     if raw_text.startswith("\ufeff"):
         raw_text = raw_text[1:]
-    return raw_text.replace("\r\n", "\n")
+    return re.sub(r"\r\n?", "\n", raw_text)
 
 
 def assert_safe_svg(svg_text: str, svg_path: Path) -> None:

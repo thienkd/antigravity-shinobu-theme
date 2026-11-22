@@ -35,23 +35,23 @@
   const SHORTCUT_SHIELD = IS_MAC ? '⌥⇧P' : 'Alt+Shift+P';
   const SHORTCUT_CINEMA = IS_MAC ? '⌥⇧C' : 'Alt+Shift+C';
 
-  const SENSITIVE_TEXT_RE = /(?:localhost:\d{2,5}|127\.0\.0\.1:\d{2,5}|0\.0\.0\.0:\d{2,5}|[A-Za-z]:\\(?:Users|Projects|Workspaces|Repos)\\[A-Za-z0-9._-]+|\/Users\/[A-Za-z0-9._-]+|\/home\/[A-Za-z0-9._-]+|sk-[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{20,})/i;
+  const SENSITIVE_TEXT_RE = /(?:localhost:\d{2,5}|127\.0\.0\.1:\d{2,5}|0\.0\.0\.0:\d{2,5}|[A-Za-z]:\\[A-Za-z0-9._ -]+\\|[A-Za-z]:\\(?:Users|Projects|Workspaces|Repos)\\[A-Za-z0-9._-]+|[A-Za-z]:\/[A-Za-z0-9._ -]+\/|\/Users\/[A-Za-z0-9._-]+|\/home\/[A-Za-z0-9._-]+|sk-[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{20,})/i;
 
   function loadDirectorPrefs() {
     try {
       if (typeof localStorage === 'undefined') {
-        return { strictRedact: false, autoShield: true, keepShieldAfter: true };
+        return { strictRedact: false, autoShield: true, keepShieldAfter: false };
       }
       const raw = localStorage.getItem(STORAGE_DIRECTOR_PREFS);
-      if (!raw) return { strictRedact: false, autoShield: true, keepShieldAfter: true };
+      if (!raw) return { strictRedact: false, autoShield: true, keepShieldAfter: false };
       const parsed = JSON.parse(raw);
       return {
         strictRedact: Boolean(parsed && parsed.strictRedact),
         autoShield: parsed && typeof parsed.autoShield === 'boolean' ? parsed.autoShield : true,
-        keepShieldAfter: parsed && typeof parsed.keepShieldAfter === 'boolean' ? parsed.keepShieldAfter : true
+        keepShieldAfter: parsed && typeof parsed.keepShieldAfter === 'boolean' ? parsed.keepShieldAfter : false
       };
     } catch (_) {
-      return { strictRedact: false, autoShield: true, keepShieldAfter: true };
+      return { strictRedact: false, autoShield: true, keepShieldAfter: false };
     }
   }
 
@@ -72,6 +72,8 @@
     prefs: loadDirectorPrefs(),
     shieldActive: false,
     shieldScanTimer: 0,
+    shieldObserver: null,
+    shieldMutationDebounce: 0,
 
     // Showcase choreography state
     showcaseRunning: false,
@@ -79,9 +81,11 @@
     showcaseTimers: [],
     showcaseProgressRaf: 0,
     savedSnapshot: null,
+    lastRestoredSnapshot: null,
     savedThemeName: '',
     savedBubbleName: '',
     savedShieldBeforeShowcase: false,
+    savedBladeBonus: 0,
 
     // UI elements
     panelEl: null,
@@ -109,7 +113,7 @@
     st.textContent = `
       /* ======================================================================
        * 1-CLICK ENTERPRISE PRIVACY SHIELD (100% Non-Destructive Blur Masking)
-       * Blurs workspace trees, breadcrumbs, project pills & chat history titles
+       * Blurs workspace trees, breadcrumbs, editor tabs, project pills & chat history
        * while keeping 4K backgrounds, Chibis, Hashira Squad & VFX 100% sharp!
        * ====================================================================== */
       html[data-agy-privacy-shield="1"] .explorer-folders-view,
@@ -118,12 +122,20 @@
       html[data-agy-privacy-shield="1"] [data-testid*="explorer"],
       html[data-agy-privacy-shield="1"] .monaco-breadcrumbs,
       html[data-agy-privacy-shield="1"] [class*="breadcrumb"],
+      html[data-agy-privacy-shield="1"] [data-testid*="breadcrumb"],
+      html[data-agy-privacy-shield="1"] .tabs-and-actions-container .tab,
+      html[data-agy-privacy-shield="1"] [role="tablist"] [role="tab"],
+      html[data-agy-privacy-shield="1"] .tab-label,
+      html[data-agy-privacy-shield="1"] .preview-tabs,
       html[data-agy-privacy-shield="1"] [data-testid="project-selector-trigger"],
       html[data-agy-privacy-shield="1"] [aria-label="Select Environment"],
       html[data-agy-privacy-shield="1"] [data-testid="branch-pill-trigger"],
       html[data-agy-privacy-shield="1"] .window-title,
       html[data-agy-privacy-shield="1"] [data-testid*="conversation-list"] a,
       html[data-agy-privacy-shield="1"] [data-testid*="conversation-item"],
+      html[data-agy-privacy-shield="1"] .sidebar-conv-list,
+      html[data-agy-privacy-shield="1"] .bg-sidebar .conv-item,
+      html[data-agy-privacy-shield="1"] .agy-tok-pop-title,
       html[data-agy-privacy-shield="1"] aside nav a:not(#agy-custom-theme-sidebar-btn),
       html[data-agy-privacy-shield="1"] aside [role="listitem"]:not(:has(#agy-custom-theme-sidebar-btn)),
       html[data-agy-privacy-shield="1"] [data-agy-sensitive-masked="1"] {
@@ -132,8 +144,9 @@
         transition: filter 0.22s ease;
       }
 
-      /* Strict Redact Option: Also masks code editor lines, terminal & raw message text */
+      /* Strict Redact Option: Also masks code editor lines, terminal, composer & raw message text */
       html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] .monaco-editor .view-lines,
+      html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] .monaco-list-rows,
       html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] .xterm-screen,
       html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] .agy-user-bubble,
       html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] [data-testid="user-message-bubble"],
@@ -141,6 +154,14 @@
       html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] [data-testid="agent-response"] pre,
       html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] [data-testid="agent-response"] li,
       html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] [data-testid="agent-response"] code,
+      html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] [data-testid="agent-response"] table,
+      html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] [data-testid="agent-response"] blockquote,
+      html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] [data-testid="agent-response"] h1,
+      html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] [data-testid="agent-response"] h2,
+      html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] [data-testid="agent-response"] h3,
+      html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] [data-testid="agent-response"] details,
+      html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] .surface-composer textarea,
+      html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] .surface-composer [contenteditable="true"],
       html[data-agy-privacy-shield="1"][data-agy-privacy-strict="1"] #agy-yoriichi-msg-echo {
         filter: blur(7.5px) !important;
         user-select: none !important;
@@ -150,6 +171,8 @@
       html[data-agy-privacy-shield="1"] agy-live-fx,
       html[data-agy-privacy-shield="1"] #agy-live-fx-host,
       html[data-agy-privacy-shield="1"] #agy-live-fx-canvas,
+      html[data-agy-privacy-shield="1"] agy-hashira-squad,
+      html[data-agy-privacy-shield="1"] agy-skill-vfx,
       html[data-agy-privacy-shield="1"] #agy-custom-theme-sidebar-btn,
       html[data-agy-privacy-shield="1"] .agy-chibi-hitbox,
       html[data-agy-privacy-shield="1"] #agy-shinobu-npc-wrap,
@@ -462,11 +485,11 @@
   function scanAndTagSensitiveInlineNodes() {
     if (typeof document === 'undefined' || !state.shieldActive) return;
     const candidates = document.querySelectorAll('code, a, .monaco-icon-label-container, [title]');
-    const maxCheck = Math.min(candidates.length, 400);
-    for (let i = 0; i < maxCheck; i++) {
+    // Traverse backwards from bottom-most conversation messages first so newly streamed tokens are masked immediately
+    for (let i = candidates.length - 1, count = 0; i >= 0 && count < 600; i--, count++) {
       const el = candidates[i];
       if (!el || !el.dataset) continue;
-      if (el.closest(`#${PANEL_ID}, #${SHIELD_BADGE_ID}, #${HUD_BAR_ID}, #agy-custom-theme-modal-backdrop`)) {
+      if (el.closest(`#${PANEL_ID}, #${SHIELD_BADGE_ID}, #${HUD_BAR_ID}, #agy-custom-theme-modal-backdrop, agy-hashira-squad, agy-skill-vfx`)) {
         continue;
       }
       const txt = (el.textContent || '').slice(0, 240);
@@ -475,6 +498,35 @@
         el.dataset.agySensitiveMasked = '1';
       }
     }
+  }
+
+  function disconnectShieldObserver() {
+    clearTimeout(state.shieldMutationDebounce);
+    state.shieldMutationDebounce = 0;
+    if (state.shieldObserver) {
+      try { state.shieldObserver.disconnect(); } catch (_) {}
+      state.shieldObserver = null;
+    }
+  }
+
+  function ensureShieldObserver() {
+    if (typeof MutationObserver === 'undefined' || typeof document === 'undefined' || !document.body) return;
+    if (state.shieldObserver) return;
+    state.shieldObserver = new MutationObserver(() => {
+      if (!state.shieldActive || state.destroyed) return;
+      if (state.shieldMutationDebounce) return;
+      state.shieldMutationDebounce = setTimeout(() => {
+        state.shieldMutationDebounce = 0;
+        if (state.shieldActive && !state.destroyed) {
+          scanAndTagSensitiveInlineNodes();
+        }
+      }, 120);
+    });
+    state.shieldObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
   }
 
   function clearSensitiveInlineTags() {
@@ -517,12 +569,14 @@
         delete document.documentElement.dataset.agyPrivacyStrict;
       }
       scanAndTagSensitiveInlineNodes();
+      ensureShieldObserver();
       if (!state.shieldScanTimer) {
         state.shieldScanTimer = setInterval(scanAndTagSensitiveInlineNodes, 1800);
       }
     } else {
       delete document.documentElement.dataset.agyPrivacyShield;
       delete document.documentElement.dataset.agyPrivacyStrict;
+      disconnectShieldObserver();
       clearInterval(state.shieldScanTimer);
       state.shieldScanTimer = 0;
       clearSensitiveInlineTags();
@@ -545,84 +599,99 @@
    * 3. SEAMLESS THEME SWITCHER & 15-SECOND AUTO-SHOWCASE CHOREOGRAPHY
    * ========================================================================== */
 
+  function resolveMatchingThemeKey(queryOrExactName) {
+    const raw = String(queryOrExactName || '').trim();
+    if (!raw) return '';
+    const core = ROOT.__AGY_THEME_CORE__;
+    if (core && typeof core.getThemeKeys === 'function') {
+      try {
+        const keys = core.getThemeKeys();
+        const qLower = raw.toLowerCase();
+        const matched = keys.find((k) => k === raw) ||
+          keys.find((k) => String(k || '').toLowerCase().includes(qLower));
+        if (matched) return matched;
+      } catch (_) {}
+    }
+    return raw;
+  }
+
   function switchShowcaseThemeTransient(queryOrExactName) {
     const core = ROOT.__AGY_THEME_CORE__;
     if (core && typeof core.getThemeKeys === 'function' && typeof core.applyTransientTheme === 'function') {
       try {
-        const keys = core.getThemeKeys();
-        const qLower = String(queryOrExactName || '').toLowerCase();
-        const matched = keys.find((k) => k === queryOrExactName) ||
-          keys.find((k) => String(k || '').toLowerCase().includes(qLower));
+        const matched = resolveMatchingThemeKey(queryOrExactName);
         if (matched) {
           return Boolean(core.applyTransientTheme(matched));
         }
       } catch (_) {}
     }
-    return switchPresetSilently(queryOrExactName);
+    return switchPresetSilently(queryOrExactName, queryOrExactName, { transient: true });
   }
 
-  function restoreOriginalThemeSnapshot() {
+  function restoreOriginalThemeSnapshot(finalizeClear = false) {
     const core = ROOT.__AGY_THEME_CORE__;
-    if (core && typeof core.restoreSnapshot === 'function' && state.savedSnapshot) {
-      try {
-        core.restoreSnapshot(state.savedSnapshot);
-        state.savedSnapshot = null;
-        return true;
-      } catch (_) {}
+    const snap = state.savedSnapshot || state.lastRestoredSnapshot;
+    if (snap && typeof snap === 'object') {
+      state.lastRestoredSnapshot = { ...snap };
+      if (core && typeof core.restoreSnapshot === 'function') {
+        try {
+          core.restoreSnapshot(snap);
+          if (finalizeClear) state.savedSnapshot = null;
+          return true;
+        } catch (_) {}
+      }
+      const applyFn = (core && typeof core.applyTheme === 'function')
+        ? core.applyTheme
+        : ROOT.__ANTIGRAVITY_APPLY_CUSTOM_THEME__;
+      if (typeof applyFn === 'function') {
+        try {
+          applyFn({ ...snap }, { skipSaveDisk: true });
+          if (finalizeClear) state.savedSnapshot = null;
+          return true;
+        } catch (_) {}
+      }
     }
     if (state.savedThemeName) {
-      return switchPresetSilently(state.savedThemeName, state.savedBubbleName || state.savedThemeName);
+      const ok = switchPresetSilently(state.savedThemeName, state.savedBubbleName || state.savedThemeName);
+      if (finalizeClear) state.savedSnapshot = null;
+      return ok;
     }
     return false;
   }
-  function switchPresetSilently(queryOrExactName, optionalBubbleExact) {
-    if (typeof document === 'undefined') return false;
 
-    // Path 1: Direct Core API if exposed
-    const directFn = ROOT.__AGY_APPLY_THEME__ || ROOT.__AGY_SET_THEME__ || (ROOT.__AGY_THEME_CORE__ && ROOT.__AGY_THEME_CORE__.applyTheme);
-    if (typeof directFn === 'function') {
+  /**
+   * Switches preset cleanly via Core API with { skipSaveDisk: true }.
+   * NEVER simulates .click() on .agy-preset-card (which would wipe customWp: '' onto disk!).
+   */
+  function switchPresetSilently(presetName, optionalBubbleExact, extraOpts) {
+    const resolvedTheme = resolveMatchingThemeKey(presetName);
+    if (!resolvedTheme) return false;
+    const resolvedBubble = optionalBubbleExact
+      ? (resolveMatchingThemeKey(optionalBubbleExact) || resolvedTheme)
+      : resolvedTheme;
+    const opts = { skipSaveDisk: true, ...(extraOpts && typeof extraOpts === 'object' ? extraOpts : {}) };
+
+    const core = ROOT.__AGY_THEME_CORE__;
+    if (core && typeof core.applyTheme === 'function') {
       try {
-        directFn({
-          themeName: queryOrExactName,
-          bubbleName: optionalBubbleExact || queryOrExactName
-        });
+        core.applyTheme({ themeName: resolvedTheme, bubbleName: resolvedBubble }, opts);
         return true;
       } catch (_) {}
     }
 
-    // Path 2: Synchronous zero-paint modal card trigger (executes inside 1 JS tick — 0 visual flash!)
-    let backdrop = document.getElementById('agy-custom-theme-modal-backdrop');
-    const wasVisible = backdrop && backdrop.style.display !== 'none';
-    if (!backdrop) {
-      const triggerBtn = document.getElementById('agy-custom-theme-sidebar-btn') || document.getElementById('agy-custom-theme-settings-btn');
-      if (triggerBtn) {
-        try { triggerBtn.click(); } catch (_) {}
-        backdrop = document.getElementById('agy-custom-theme-modal-backdrop');
-      }
+    if (typeof ROOT.__ANTIGRAVITY_APPLY_CUSTOM_THEME__ === 'function') {
+      try {
+        ROOT.__ANTIGRAVITY_APPLY_CUSTOM_THEME__({ themeName: resolvedTheme, bubbleName: resolvedBubble }, opts);
+        return true;
+      } catch (_) {}
     }
 
-    if (backdrop) {
-      const cards = Array.from(backdrop.querySelectorAll('.agy-preset-card'));
-      const qLower = String(queryOrExactName || '').toLowerCase();
-      const matched = cards.find((c) => c.dataset && c.dataset.name === queryOrExactName) ||
-        cards.find((c) => c.dataset && String(c.dataset.name || '').toLowerCase().includes(qLower));
-
-      if (matched) {
-        try { matched.click(); } catch (_) {}
-      }
-
-      if (optionalBubbleExact && optionalBubbleExact !== (matched && matched.dataset.name)) {
-        const bCards = Array.from(backdrop.querySelectorAll('.agy-bubble-card'));
-        const bMatch = bCards.find((b) => b.dataset && b.dataset.name === optionalBubbleExact);
-        if (bMatch) {
-          try { bMatch.click(); } catch (_) {}
-        }
-      }
-
-      if (!wasVisible) {
-        backdrop.style.display = 'none';
-      }
-      return Boolean(matched);
+    const legacyFn = ROOT.__AGY_APPLY_THEME__ || ROOT.__AGY_SET_THEME__;
+    if (typeof legacyFn === 'function') {
+      try {
+        legacyFn({ themeName: resolvedTheme, bubbleName: resolvedBubble }, opts);
+        return true;
+      } catch (_) {}
     }
 
     return false;
@@ -723,21 +792,22 @@
     state.showcaseRunning = false;
     clearShowcaseArtifacts();
 
-    const skillsApi = ROOT.__AGY_BREATHING_SKILLS__ || ROOT.__AGY_KNY_SKILLS__;
-    if (skillsApi && typeof skillsApi.stopActiveSkill === 'function') {
-      try { skillsApi.stopActiveSkill(); } catch (_) {}
-    }
-    if (ROOT.__AGY_SQUAD_RAID__ && typeof ROOT.__AGY_SQUAD_RAID__.stopSimulation === 'function') {
-      try { ROOT.__AGY_SQUAD_RAID__.stopSimulation(); } catch (_) {}
-    }
-    if (ROOT.__AGY_TOKEN_HUD__ && typeof ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
-      try { ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat(0); } catch (_) {}
-    }
+    if (wasRunning) {
+      const skillsApi = ROOT.__AGY_BREATHING_SKILLS__ || ROOT.__AGY_KNY_SKILLS__;
+      if (skillsApi && typeof skillsApi.stopActiveSkill === 'function') {
+        try { skillsApi.stopActiveSkill(); } catch (_) {}
+      }
+      if (ROOT.__AGY_SQUAD_RAID__ && typeof ROOT.__AGY_SQUAD_RAID__.stopSimulation === 'function') {
+        try { ROOT.__AGY_SQUAD_RAID__.stopSimulation(); } catch (_) {}
+      }
+      if (ROOT.__AGY_TOKEN_HUD__ && typeof ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
+        try { ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat(state.savedBladeBonus); } catch (_) {}
+      }
 
-    if (wasRunning && restoreOriginal) {
-      restoreOriginalThemeSnapshot();
-      if (!state.prefs.keepShieldAfter && !state.savedShieldBeforeShowcase) {
-        togglePrivacyShield(false);
+      if (restoreOriginal) {
+        restoreOriginalThemeSnapshot(true);
+        // When user explicitly cancels Trailer (Esc / Stop), ALWAYS restore exact pre-showcase Shield state
+        togglePrivacyShield(state.savedShieldBeforeShowcase);
       }
     }
 
@@ -772,12 +842,19 @@
     closePanel();
 
     const core = ROOT.__AGY_THEME_CORE__;
-    state.savedSnapshot = (core && typeof core.getSnapshot === 'function') ? core.getSnapshot() : null;
+    const snap = (core && typeof core.getSnapshot === 'function') ? core.getSnapshot() : null;
+    state.savedSnapshot = snap ? { ...snap } : null;
+    state.lastRestoredSnapshot = snap ? { ...snap } : null;
     state.savedThemeName = (state.savedSnapshot && state.savedSnapshot.themeName) ||
       (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_THEME)) || '';
     state.savedBubbleName = (state.savedSnapshot && state.savedSnapshot.bubbleName) ||
       (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_BUBBLE)) || state.savedThemeName;
     state.savedShieldBeforeShowcase = state.shieldActive;
+
+    const hud = ROOT.__AGY_TOKEN_HUD__;
+    state.savedBladeBonus = (hud && typeof hud.getBladeBonusHeat === 'function')
+      ? (Number(hud.getBladeBonusHeat()) || 0)
+      : 0;
 
     if (state.prefs.autoShield) {
       togglePrivacyShield(true);
@@ -868,18 +945,20 @@
       }
     });
 
+    // Keep state.savedSnapshot intact across 14.55s–15.0s so an Esc cancel in that window never loses customWp!
     scheduleStep(14550, () => {
-      restoreOriginalThemeSnapshot();
+      restoreOriginalThemeSnapshot(false);
     });
 
     scheduleStep(15000, () => {
       state.showcaseRunning = false;
       clearShowcaseArtifacts();
+      restoreOriginalThemeSnapshot(true);
       if (ROOT.__AGY_TOKEN_HUD__ && typeof ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
-        try { ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat(0); } catch (_) {}
+        try { ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat(state.savedBladeBonus); } catch (_) {}
       }
-      if (!state.prefs.keepShieldAfter && !state.savedShieldBeforeShowcase) {
-        togglePrivacyShield(false);
+      if (!state.prefs.keepShieldAfter) {
+        togglePrivacyShield(state.savedShieldBeforeShowcase);
       }
       syncPanelShowcaseState();
     });
@@ -1076,6 +1155,18 @@
     );
     panel.appendChild(autoShieldRow.row);
 
+    // Keep Shield After Trailer Toggle
+    const keepShieldRow = buildToggleRow(
+      '📌 Giữ Khiên Che Mật sau khi hết Trailer',
+      'Không tự tắt Khiên sau mốc 15s (nhấn Esc vẫn khôi phục)',
+      state.prefs.keepShieldAfter,
+      (val) => {
+        state.prefs.keepShieldAfter = val;
+        saveDirectorPrefs(state.prefs);
+      }
+    );
+    panel.appendChild(keepShieldRow.row);
+
     document.body.appendChild(panel);
     state.panelEl = panel;
 
@@ -1202,6 +1293,7 @@
     state.destroyed = true;
     stopShowcase(true);
     togglePrivacyShield(false);
+    disconnectShieldObserver();
     closePanel();
     clearInterval(state.hudMountTimer);
     clearInterval(state.shieldScanTimer);

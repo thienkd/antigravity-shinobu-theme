@@ -53,7 +53,7 @@ const MIME_BY_EXT = {
 };
 
 function readUtf8NoBom(filePath) {
-  return fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+  return fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
 }
 
 function assertSafeSvgContent(svgText, assetPath) {
@@ -148,12 +148,14 @@ function parseArgs(argv, repoRoot) {
     const arg = argv[i];
     if (arg === '--inline-all') {
       opts.inlineAll = true;
-    } else if (arg === '--themes' && argv[i + 1]) {
+    } else if (arg === '--themes' && argv[i + 1] && !argv[i + 1].startsWith('--')) {
       opts.themesPath = path.resolve(argv[++i]);
-    } else if (arg === '--engine' && argv[i + 1]) {
+    } else if (arg === '--engine' && argv[i + 1] && !argv[i + 1].startsWith('--')) {
       opts.enginePath = path.resolve(argv[++i]);
-    } else if (arg === '--out' && argv[i + 1]) {
+    } else if (arg === '--out' && argv[i + 1] && !argv[i + 1].startsWith('--')) {
       opts.outPath = path.resolve(argv[++i]);
+    } else if (arg === '--themes' || arg === '--engine' || arg === '--out') {
+      throw new Error(`Missing valid path value for CLI option '${arg}'.`);
     }
   }
   return opts;
@@ -163,11 +165,24 @@ function main() {
   const repoRoot = path.resolve(__dirname, '..');
   const { themesPath, enginePath, outPath, inlineAll } = parseArgs(process.argv.slice(2), repoRoot);
 
+  if (!fs.existsSync(themesPath) || !fs.statSync(themesPath).isFile()) {
+    throw new Error(`themes.json not found: ${themesPath}`);
+  }
+  if (!fs.existsSync(enginePath) || !fs.statSync(enginePath).isFile()) {
+    throw new Error(`core.js not found: ${enginePath}`);
+  }
+
   const themesRaw = JSON.parse(readUtf8NoBom(themesPath));
+  if (!themesRaw || typeof themesRaw !== 'object' || Array.isArray(themesRaw) || Object.keys(themesRaw).length === 0) {
+    throw new Error('themes.json must be a non-empty JSON object keyed by theme name.');
+  }
   const themesDir = path.dirname(themesPath);
   const resolved = {};
 
   for (const [name, cfg] of Object.entries(themesRaw)) {
+    if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) {
+      throw new Error(`Theme '${name}' must be a JSON object.`);
+    }
     const copied = { ...cfg };
     for (const key of ASSET_KEYS) {
       if (key in copied) {

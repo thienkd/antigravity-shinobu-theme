@@ -34,10 +34,14 @@
     ctxBtnEl: null,
     ctxIconWrap: null,
     ctxTextEl: null,
+    ctxNumEl: null,
     ctxFillEl: null,
     turnBtnEl: null,
     turnIconEl: null,
     turnTextEl: null,
+    turnNumEl: null,
+    turnDraftWrapEl: null,
+    turnDraftNumEl: null,
 
     // Bright Red Nichirin (赫刀) Blade Gauge Elements & State
     bladeBtnEl: null,
@@ -46,6 +50,12 @@
     bladeLabelEl: null,
     bladeHeat: 0,
     bladeBonusHeat: 0,
+    typingHeatPulse: 0,
+    lastHeatDecayAt: 0,
+    lastActivityAt: 0,
+    bonusHoldUntil: 0,
+    lastRenderedBladeHeat: -1,
+    lastRenderedBladeTier: '',
     bladeTier: 'black',
 
     // Quick Action SVG Buttons (Kagura Bell & Cinema Fox Mask)
@@ -79,10 +89,12 @@
 
     // Runtime telemetry & live animation state
     cid: '',
+    resolvedCid: '',
     lastSessionSig: '',
     lastElemKey: '',
     isWorking: false,
     wasWorking: false,
+    pollWasWorking: false,
     serverIsWorking: null,
     workStartedAt: 0,
     lastStepSeenAt: 0,
@@ -96,12 +108,20 @@
     serverTurnCount: 0,
     serverStepCount: 0,
     serverTurnCtxDelta: 0,
+    serverModelName: '',
     hasTelemetry: false,
 
     // Crisis & Bug-Slash state
     crisisState: false,
     lastSlashSeq: -1,
     lastTurnFinishedSeq: -1,
+    localFinishSeq: 0,
+
+    // Throttled DOM/Fiber measurement cache (220ms)
+    lastSignalSampleAt: 0,
+    forceSignalSample: true,
+    cachedSignals: null,
+    cachedDomChars: 0,
 
     turnBaselineDomChars: 0,
     stepBaselineDomChars: 0,
@@ -179,15 +199,21 @@
   }
 
   function resolveYoriichiActionUrl(themeCfg) {
-    if (themeCfg && typeof themeCfg.userActionSticker === 'string' && themeCfg.userActionSticker) {
-      const cleaned = sanitizeCssAssetUrl(themeCfg.userActionSticker);
+    const cfg = themeCfg && typeof themeCfg === 'object' ? themeCfg : {};
+    if (typeof cfg.userActionSticker === 'string' && cfg.userActionSticker.trim()) {
+      const cleaned = sanitizeCssAssetUrl(cfg.userActionSticker.trim());
       if (cleaned) return cleaned;
     }
-    if (themeCfg && typeof themeCfg.actionSticker === 'string' && themeCfg.actionSticker && themeCfg.personaSkillId && themeCfg.personaSkillId !== 'yoriichi') {
-      const cleanedAct = sanitizeCssAssetUrl(themeCfg.actionSticker);
-      if (cleanedAct) return cleanedAct;
+    if (cfg.isMultiversePersona) {
+      return '';
     }
-    return sanitizeCssAssetUrl('assets/yoriichi_action.png');
+    const rawSkillId = typeof cfg.personaSkillId === 'string' && cfg.personaSkillId.trim()
+      ? cfg.personaSkillId.trim().toLowerCase()
+      : 'yoriichi';
+    const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
+    const canonicalId = (ext && typeof ext.resolveCharacterId === 'function' && ext.resolveCharacterId(rawSkillId)) || rawSkillId;
+    const safeSkillFile = String(canonicalId || 'yoriichi').replace(/[^a-z0-9_]/g, '') || 'yoriichi';
+    return sanitizeCssAssetUrl(`assets/${safeSkillFile}_action.png`);
   }
 
   function isSfxMutedNow() {
@@ -196,11 +222,35 @@
         const raw = localStorage.getItem('agy_kny_sfx_muted');
         if (raw === '1' || raw === 'true') return true;
       }
-      if (typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__ && typeof window.__AGY_BIO_AUDIO__.isEnabled === 'function') {
-        if (!window.__AGY_BIO_AUDIO__.isEnabled()) return true;
+      if (typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__) {
+        const bio = window.__AGY_BIO_AUDIO__;
+        if (typeof bio.getPrefs === 'function') {
+          const prefs = bio.getPrefs();
+          if (prefs && prefs.swordSfxEnabled === false) return true;
+        }
+      }
+      if (typeof window !== 'undefined' && window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.isSoundMuted === 'function') {
+        if (window.__AGY_KNY_SKILLS__.isSoundMuted()) return true;
       }
     } catch (_) {}
     return false;
+  }
+
+  function setTextIfChanged(el, nextText) {
+    if (el && el.textContent !== nextText) {
+      el.textContent = nextText;
+    }
+  }
+
+  function formatSlashReasonVi(rawReason) {
+    const key = typeof rawReason === 'string' ? rawReason.trim() : '';
+    if (!key || key === 'bug_slashed') {
+      return 'Đã chém đứt tà khí lỗi (Exit 0) • Rèn Hách Đao +25%';
+    }
+    if (key === 'git_pushed') {
+      return 'Khải hoàn đẩy code lên kho lưu trữ (Git Push thành công)!';
+    }
+    return key;
   }
 
   function formatCompactTokens(n) {
@@ -343,7 +393,17 @@
       }
 
       /* Bright Red Blade (赫刀) Awakened -> Primordial Sun Demon Slayer Mark Halo on Yoriichi Avatars */
-      html[data-agy-red-blade="1"] .agy-yoriichi-crest-btn,
+      html[data-agy-red-blade="1"] .agy-yoriichi-crest-btn {
+        border-color: #fde047 !important;
+        box-shadow:
+          0 0 14px rgba(239, 68, 68, 0.92),
+          0 0 26px rgba(249, 115, 22, 0.68),
+          0 0 36px rgba(253, 224, 71, 0.42);
+      }
+      html[data-agy-red-blade="1"] .agy-yoriichi-crest-btn[data-surge="1"] {
+        transform: scale(1.15);
+        box-shadow: 0 0 22px #ef4444, 0 0 32px #fde047;
+      }
       html[data-agy-red-blade="1"] .agy-shell [data-testid="user-message"]::after {
         border-color: #fde047 !important;
         box-shadow:
@@ -352,7 +412,7 @@
           0 0 36px rgba(253, 224, 71, 0.42) !important;
       }
       @media (prefers-reduced-motion: no-preference) {
-        html[data-agy-red-blade="1"] .agy-yoriichi-crest-btn {
+        html[data-agy-red-blade="1"] .agy-yoriichi-crest-btn:not([data-surge="1"]) {
           animation: agySunSlayerMarkHalo 2.4s ease-in-out infinite;
         }
       }
@@ -798,19 +858,71 @@
     return { svg, fillRect, edgePath };
   }
 
-  function computeAndApplyBladeHeat() {
-    const turns = Math.max(0, state.serverTurnCount);
-    const steps = Math.max(0, state.serverStepCount || state.serverTurnSteps);
-    const tokFactor = Math.min(45, Math.floor((state.serverTotalOutTokens || 0) / 850));
-    const organicHeat = Math.min(84, Math.round(turns * 11 + steps * 2.4 + tokFactor * 0.6));
-    const totalHeat = Math.max(0, Math.min(100, organicHeat + state.bladeBonusHeat));
+  function decayBladeHeatWhenIdle(nowMs) {
+    const now = typeof nowMs === 'number' ? nowMs : Date.now();
+    if (!state.lastHeatDecayAt) {
+      state.lastHeatDecayAt = now;
+      return false;
+    }
+    const dtSec = Math.max(0, Math.min(5, (now - state.lastHeatDecayAt) / 1000));
+    if (dtSec < 0.25) return false;
+    state.lastHeatDecayAt = now;
 
+    let changed = false;
+    const idleSinceInputMs = now - (state.lastActivityAt || 0);
+    if (!state.isWorking && state.typingHeatPulse > 0 && idleSinceInputMs > 1200) {
+      const nextPulse = Math.max(0, +(state.typingHeatPulse - dtSec * 3.6).toFixed(2));
+      if (nextPulse !== state.typingHeatPulse) {
+        state.typingHeatPulse = nextPulse;
+        changed = true;
+      }
+    }
+    if (!state.isWorking && state.bladeBonusHeat > 0 && now >= (state.bonusHoldUntil || 0) && idleSinceInputMs > 6000) {
+      const nextBonus = Math.max(0, +(state.bladeBonusHeat - dtSec * 1.1).toFixed(2));
+      if (nextBonus !== state.bladeBonusHeat) {
+        state.bladeBonusHeat = nextBonus;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  function computeAndApplyBladeHeat() {
+    let organicHeat = 0;
+    if (state.hasTelemetry) {
+      const turns = Math.max(0, state.serverTurnCount);
+      const steps = Math.max(0, state.serverStepCount || state.serverTurnSteps);
+      const tokFactor = Math.min(60, Math.floor((state.serverTotalOutTokens || 0) / 800));
+      organicHeat = Math.min(100, Math.round(turns * 11 + steps * 2.5 + tokFactor * 0.65));
+    } else {
+      const domCtxEst = Math.max(0, state.targetCtxTokens || state.dispCtxTokens || 0);
+      const domTurnEst = Math.max(0, state.targetTurnTokens || state.dispTurnTokens || 0);
+      organicHeat = Math.min(100, Math.round(Math.min(45, domCtxEst / 950) + Math.min(55, domTurnEst / 45)));
+    }
+
+    let activePulse = 0;
+    if (state.isWorking) {
+      const nowPerf = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      const workSec = Math.max(0, (nowPerf - (state.workStartedAt || nowPerf)) / 1000);
+      activePulse += 12 + Math.min(14, Math.floor(workSec * 1.5));
+    }
+    if (state.typingHeatPulse > 0 || state.draftTokens > 0) {
+      activePulse += Math.min(14, Math.round(state.typingHeatPulse + Math.min(8, state.draftTokens / 12)));
+    }
+
+    const totalHeat = Math.max(0, Math.min(100, Math.round(organicHeat + activePulse + state.bladeBonusHeat)));
     state.bladeHeat = totalHeat;
 
     let tier = 'black';
     if (totalHeat >= 75) tier = 'red';
     else if (totalHeat >= 35) tier = 'ember';
     state.bladeTier = tier;
+
+    if (totalHeat === state.lastRenderedBladeHeat && tier === state.lastRenderedBladeTier) {
+      return;
+    }
+    state.lastRenderedBladeHeat = totalHeat;
+    state.lastRenderedBladeTier = tier;
 
     if (typeof document !== 'undefined' && document.documentElement) {
       if (tier === 'red') {
@@ -867,7 +979,7 @@
         : tier === 'ember'
         ? `Nhiệt Hồng Đao (${totalHeat}%)`
         : `Hắc Thiết Đao (${totalHeat}%)`;
-      state.detBladeVal.textContent = desc;
+      setTextIfChanged(state.detBladeVal, desc);
     }
   }
 
@@ -888,14 +1000,17 @@
 
     // 2. Grant +25% Bright Red Blade forge heat bonus
     state.bladeBonusHeat = Math.min(100, state.bladeBonusHeat + 25);
+    state.bonusHoldUntil = Date.now() + 18000;
     computeAndApplyBladeHeat();
 
-    // 3. Auto-trigger Ultimate Finisher Slash (12s cooldown guarded)
+    const reasonVi = formatSlashReasonVi(slashReason);
+
+    // 3. Auto-trigger Ultimate Finisher Slash (12s cooldown guarded; preserve right-corner Chibi origin!)
     if (typeof window !== 'undefined' && typeof window.__AGY_TRIGGER_FINISHER__ === 'function') {
       try {
         window.__AGY_TRIGGER_FINISHER__({
           reason: slashReason || 'bug_slashed',
-          originEl: state.yoriichiBtnEl || null
+          fallbackOriginEl: state.yoriichiBtnEl || null
         });
       } catch (_) {}
     }
@@ -909,7 +1024,7 @@
       try {
         window.__AGY_SQUAD_RAID__.triggerVictoryStamp({
           slashSeq,
-          reason: slashReason
+          reason: reasonVi
         });
       } catch (_) {}
     }
@@ -959,13 +1074,35 @@
    * ========================================================================== */
 
   function ingestTelemetrySnapshot(snap) {
-    if (!snap || typeof snap !== 'object') return;
-    if (snap.cid && state.cid && snap.cid !== state.cid) return;
+    if (!snap || typeof snap !== 'object' || snap.ok === false) return;
+    if (snap.cid && state.cid && state.cid !== 'latest' && snap.cid !== state.cid) return;
+
+    if (snap.cid) {
+      if (state.cid === 'latest' && state.resolvedCid && snap.cid !== state.resolvedCid) {
+        // Active session rotated on server while window uses cid='latest' fallback
+        state.hasTelemetry = false;
+        state.lastSlashSeq = -1;
+        state.lastServerStepIdx = -1;
+        state.bladeBonusHeat = 0;
+        applyCrisisVisual(false);
+        if (
+          typeof window !== 'undefined' &&
+          window.__AGY_SQUAD_RAID__ &&
+          typeof window.__AGY_SQUAD_RAID__.resetConversation === 'function'
+        ) {
+          try { window.__AGY_SQUAD_RAID__.resetConversation(snap.cid); } catch (_) {}
+        }
+      }
+      if (snap.cid !== state.resolvedCid) {
+        state.resolvedCid = snap.cid;
+        refreshSessionAndElementIcons();
+      }
+    }
 
     const firstSync = !state.hasTelemetry;
     state.hasTelemetry = true;
 
-    const ctxTok = Number(snap.inputTokens ?? snap.contextTokens) || 0;
+    const ctxTok = Number(snap.contextTokens ?? snap.inputTokens) || 0;
     const cacheTok = Number(snap.cacheReadTokens ?? snap.cacheTokens) || 0;
     const turnTok = Number(snap.turnTokens ?? snap.turnOutputTokens) || 0;
     const outTok = Number(snap.outputTokens ?? snap.totalOutputTokens) || 0;
@@ -981,14 +1118,20 @@
     state.serverTurnCount = turnCnt;
     state.serverTurnCtxDelta = Number(snap.turnContextDelta) || 0;
 
+    if (typeof snap.modelName === 'string' && snap.modelName.trim()) {
+      state.serverModelName = snap.modelName.trim();
+    }
+
     if (typeof snap.isWorking === 'boolean') {
       state.serverIsWorking = snap.isWorking;
+      state.pollWasWorking = snap.isWorking;
     }
 
     if (firstSync) {
       state.dispCtxTokens = state.serverCtxTokens;
       state.dispTurnTokens = state.serverTurnTokens;
       state.stepBaselineDomChars = measureConversationDomChars();
+      state.cachedDomChars = state.stepBaselineDomChars;
     }
 
     const stepMarker = typeof snap.latestStepIndex === 'number' ? snap.latestStepIndex : stepCnt;
@@ -996,28 +1139,29 @@
       state.lastServerStepIdx = stepMarker;
       state.lastStepSeenAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
       state.stepBaselineDomChars = measureConversationDomChars();
+      state.cachedDomChars = state.stepBaselineDomChars;
     }
 
-    // Crisis & Bug-Slash Detection
+    // Crisis & Bug-Slash Detection (strictly baseline on firstSync / tab switch — 0% false-positive!)
     if (typeof snap.crisisState === 'boolean') {
       applyCrisisVisual(snap.crisisState);
     }
 
     const incomingSlashSeq = typeof snap.slashSeq === 'number' ? snap.slashSeq : 0;
-    if (firstSync && !snap.justSlashedBug) {
+    if (firstSync || state.lastSlashSeq < 0) {
       state.lastSlashSeq = incomingSlashSeq;
-    } else if (
-      (snap.justSlashedBug === true && incomingSlashSeq !== state.lastSlashSeq) ||
-      (state.lastSlashSeq >= 0 && incomingSlashSeq > state.lastSlashSeq)
-    ) {
+    } else if (incomingSlashSeq > state.lastSlashSeq) {
       state.lastSlashSeq = incomingSlashSeq;
       executeDemonSlayCelebration(incomingSlashSeq, snap.slashReason || '');
-    } else if (state.lastSlashSeq < 0) {
+    } else if (incomingSlashSeq < state.lastSlashSeq) {
       state.lastSlashSeq = incomingSlashSeq;
     }
 
     if (typeof snap.turnFinishedSeq === 'number') {
       state.lastTurnFinishedSeq = snap.turnFinishedSeq;
+      if (snap.turnFinishedSeq > state.localFinishSeq) {
+        state.localFinishSeq = snap.turnFinishedSeq;
+      }
     }
 
     computeAndApplyBladeHeat();
@@ -1142,6 +1286,7 @@
             if (payloadStr && payloadStr !== '[DONE]') {
               try {
                 const snap = JSON.parse(payloadStr);
+                if (!snap || snap.ok === false) continue;
                 ingestTelemetrySnapshot(snap);
               } catch (_) {}
             }
@@ -1185,7 +1330,8 @@
         return;
       }
       const data = await res.json();
-      if (!data || data.ok === false || (data.cid && data.cid !== state.cid)) return;
+      if (!data || data.ok === false) return;
+      if (data.cid && state.cid && state.cid !== 'latest' && data.cid !== state.cid) return;
 
       state.fallbackBackoffMs = 1400;
       ingestTelemetrySnapshot(data);
@@ -1201,46 +1347,96 @@
    * LIVE DOM SIGNALS, SESSION ICONS & ODOMETER RENDERING
    * ========================================================================== */
 
+  const UUID_EXACT_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const URL_CID_RE = /\/c\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+
   function extractLivePageSignals(composerEl) {
-    let cid = '';
+    let explicitCid = '';
     let isWorking = false;
     let modelLabel = '';
     let quotaPct = null;
 
-    if (typeof window !== 'undefined' && window.location && window.location.pathname) {
-      const m = window.location.pathname.match(/\/c\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
-      if (m) cid = m[1].toLowerCase();
+    if (typeof window !== 'undefined' && window.location) {
+      const locStr = `${window.location.pathname || ''}${window.location.hash || ''}`;
+      const m = locStr.match(URL_CID_RE);
+      if (m) explicitCid = m[1].toLowerCase();
     }
 
     const comp = composerEl || state.composer;
-    if (comp) {
+    const inspectFiberChain = (rootNode) => {
+      if (!rootNode) return;
       try {
-        const fk = Object.keys(comp).find((k) => k.startsWith('__reactFiber$'));
-        if (fk) {
-          let cur = comp[fk];
-          let depth = 0;
-          while (cur && depth < 14) {
-            const p = cur.memoizedProps;
-            if (p && typeof p === 'object') {
-              if (typeof p.isRunning === 'boolean' && p.isRunning) {
-                isWorking = true;
-              }
-              if (!cid && typeof p.conversationId === 'string' && /^[0-9a-f-]{36}$/i.test(p.conversationId)) {
-                cid = p.conversationId.toLowerCase();
-              }
-              if (!modelLabel && p.currentModelConfig && typeof p.currentModelConfig === 'object') {
-                if (typeof p.currentModelConfig.label === 'string') {
-                  modelLabel = p.currentModelConfig.label;
-                }
-                const qi = p.currentModelConfig.quotaInfo;
-                if (qi && typeof qi.remainingFraction === 'number') {
-                  quotaPct = Math.round(Math.max(0, Math.min(1, qi.remainingFraction)) * 100);
-                }
+        const fk = Object.keys(rootNode).find((k) => k.startsWith('__reactFiber$'));
+        if (!fk) return;
+        let cur = rootNode[fk];
+        let depth = 0;
+        while (cur && depth < 45) {
+          const p = cur.memoizedProps;
+          if (p && typeof p === 'object') {
+            if (typeof p.isRunning === 'boolean' && p.isRunning) {
+              isWorking = true;
+            }
+            if (!explicitCid) {
+              const rawCand = p.conversationId || p.cascadeId || p.trajectoryId || p.sessionId;
+              if (typeof rawCand === 'string' && UUID_EXACT_RE.test(rawCand.trim())) {
+                explicitCid = rawCand.trim().toLowerCase();
               }
             }
-            cur = cur.return;
-            depth++;
+            if (!modelLabel && p.currentModelConfig && typeof p.currentModelConfig === 'object') {
+              if (typeof p.currentModelConfig.label === 'string') {
+                modelLabel = p.currentModelConfig.label;
+              }
+              const qi = p.currentModelConfig.quotaInfo;
+              if (qi && typeof qi.remainingFraction === 'number') {
+                quotaPct = Math.round(Math.max(0, Math.min(1, qi.remainingFraction)) * 100);
+              }
+            }
           }
+          cur = cur.return;
+          depth++;
+        }
+      } catch (_) {}
+    };
+
+    if (comp) inspectFiberChain(comp);
+    if (!explicitCid && typeof document !== 'undefined') {
+      const mainBody = document.querySelector('[data-main-content-body="true"]');
+      if (mainBody && mainBody !== comp) inspectFiberChain(mainBody);
+    }
+
+    if (!explicitCid && typeof document !== 'undefined') {
+      try {
+        const attrSel = '[data-conversation-id], [data-cascade-id], [data-trajectory-id], [data-session-id]';
+        const ancestorAttrEl = comp && comp.closest ? comp.closest(attrSel) : null;
+        const attrCandidates = ancestorAttrEl
+          ? [ancestorAttrEl]
+          : Array.from(document.querySelectorAll(attrSel));
+        for (let i = 0; i < attrCandidates.length; i++) {
+          const el = attrCandidates[i];
+          const val = (
+            el.getAttribute('data-conversation-id') ||
+            el.getAttribute('data-cascade-id') ||
+            el.getAttribute('data-trajectory-id') ||
+            el.getAttribute('data-session-id') ||
+            ''
+          ).trim();
+          if (UUID_EXACT_RE.test(val)) {
+            explicitCid = val.toLowerCase();
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!explicitCid && typeof document !== 'undefined') {
+      try {
+        const activeLink = document.querySelector(
+          'a[href*="/c/"][aria-current="page"], a[href*="/c/"][data-active="true"], a[href*="/c/"][data-state="active"], a[href*="/c/"].active, a[href*="/c/"].selected'
+        );
+        if (activeLink) {
+          const href = String(activeLink.getAttribute('href') || '');
+          const m = href.match(URL_CID_RE);
+          if (m) explicitCid = m[1].toLowerCase();
         }
       } catch (_) {}
     }
@@ -1260,8 +1456,9 @@
       }
     }
     const draftTokens = draftText.length > 0 ? Math.max(1, Math.round(draftText.length / 3.6)) : 0;
+    const cid = explicitCid || 'latest';
 
-    return { cid, isWorking, modelLabel, quotaPct, draftTokens, draftText };
+    return { cid, explicitCid, isWorking, modelLabel, quotaPct, draftTokens, draftText };
   }
 
   function measureConversationDomChars() {
@@ -1283,19 +1480,23 @@
     if (!ic || !state.barEl) return;
 
     const docTitle = typeof document !== 'undefined' ? (document.title || '') : '';
-    const sessionSig = `${docTitle}|${state.cid}`;
+    const displayCid = state.resolvedCid || (state.cid !== 'latest' ? state.cid : '');
+    const sessionSig = `${docTitle}|${displayCid}`;
     if (sessionSig !== state.lastSessionSig) {
       state.lastSessionSig = sessionSig;
-      const sesSmall = ic.buildSessionAvatar(docTitle, state.cid, 15);
-      const sesLarge = ic.buildSessionAvatar(docTitle, state.cid, 18);
+      const sesSmall = ic.buildSessionAvatar(docTitle, displayCid, 15);
+      const sesLarge = ic.buildSessionAvatar(docTitle, displayCid, 18);
       if (state.ctxIconWrap) state.ctxIconWrap.innerHTML = sesSmall.svg;
       if (state.ctxBtnEl) {
-        state.ctxBtnEl.title = `Phiên làm việc: ${sesSmall.info.displayLabel} — Nhấn xem chi tiết Ngữ cảnh & Nhật Luân Đao`;
+        const nextTitle = `Phiên làm việc: ${sesSmall.info.displayLabel} — Nhấn xem chi tiết Ngữ cảnh & Nhật Luân Đao`;
+        if (state.ctxBtnEl.title !== nextTitle) state.ctxBtnEl.title = nextTitle;
       }
       if (state.popSessionIcon) state.popSessionIcon.innerHTML = sesLarge.svg;
       if (state.popSessionTitle) {
-        state.popSessionTitle.textContent = sesSmall.info.displayLabel;
-        state.popSessionTitle.title = sesSmall.info.displayLabel;
+        setTextIfChanged(state.popSessionTitle, sesSmall.info.displayLabel);
+        if (state.popSessionTitle.title !== sesSmall.info.displayLabel) {
+          state.popSessionTitle.title = sesSmall.info.displayLabel;
+        }
       }
     }
 
@@ -1314,21 +1515,45 @@
 
   function switchActiveConversation(nextCid) {
     if (!nextCid || nextCid === state.cid) return;
+    if (state.cid === 'latest' && nextCid !== 'latest' && state.resolvedCid === nextCid) {
+      // Seamless promotion from 'latest' fallback to exact verified UUID of the same conversation
+      abortActiveStream();
+      state.cid = nextCid;
+      connectTelemetryStream(nextCid);
+      return;
+    }
+
     abortActiveStream();
     state.cid = nextCid;
+    state.resolvedCid = nextCid !== 'latest' ? nextCid : '';
     state.hasTelemetry = false;
     state.serverIsWorking = null;
     state.serverCtxTokens = 0;
+    state.serverCacheTokens = 0;
     state.serverTurnTokens = 0;
     state.serverTotalOutTokens = 0;
+    state.serverTurnSteps = 0;
     state.serverTurnCount = 0;
     state.serverStepCount = 0;
+    state.serverModelName = '';
     state.dispCtxTokens = 0;
     state.dispTurnTokens = 0;
     state.lastServerStepIdx = -1;
     state.lastSlashSeq = -1;
     state.bladeBonusHeat = 0;
+    state.typingHeatPulse = 0;
+    state.forceSignalSample = true;
+
+    if (
+      typeof window !== 'undefined' &&
+      window.__AGY_SQUAD_RAID__ &&
+      typeof window.__AGY_SQUAD_RAID__.resetConversation === 'function'
+    ) {
+      try { window.__AGY_SQUAD_RAID__.resetConversation(nextCid); } catch (_) {}
+    }
+
     applyCrisisVisual(false);
+    refreshSessionAndElementIcons();
     computeAndApplyBladeHeat();
 
     connectTelemetryStream(nextCid);
@@ -1336,13 +1561,27 @@
   }
 
   function recomputeTargets(nowMs) {
-    const sig = extractLivePageSignals(state.composer);
+    const shouldSampleDom =
+      state.forceSignalSample ||
+      !state.cachedSignals ||
+      (nowMs - state.lastSignalSampleAt) >= 220;
 
-    if (sig.cid && sig.cid !== state.cid) {
-      switchActiveConversation(sig.cid);
+    if (shouldSampleDom) {
+      state.forceSignalSample = false;
+      state.lastSignalSampleAt = nowMs;
+      state.cachedSignals = extractLivePageSignals(state.composer);
+      state.cachedDomChars = measureConversationDomChars();
+      refreshSessionAndElementIcons();
     }
 
-    refreshSessionAndElementIcons();
+    const sig = state.cachedSignals;
+    const domChars = state.cachedDomChars;
+
+    if (sig.explicitCid && sig.explicitCid !== state.cid) {
+      switchActiveConversation(sig.explicitCid);
+    } else if (!state.cid) {
+      switchActiveConversation(sig.cid || 'latest');
+    }
 
     state.isWorking = Boolean(sig.isWorking || state.serverIsWorking);
     state.draftTokens = sig.draftTokens;
@@ -1350,14 +1589,12 @@
     if (sig.quotaPct !== null) state.quotaPct = sig.quotaPct;
 
     // Auto-dismiss command echo banner once Antigravity renders the new user bubble
-    if (state.echoEl && state.echoEl.dataset.visible === '1' && typeof document !== 'undefined') {
+    if (state.echoEl && state.echoEl.dataset.visible === '1' && shouldSampleDom && typeof document !== 'undefined') {
       const curMsgCount = document.querySelectorAll('[data-testid="user-message"], .agy-user-bubble-frame').length;
       if (curMsgCount > state.baselineUserMsgCount && (nowMs - (state.echoShownAt || 0)) > 1800) {
         hideUserMessageEcho();
       }
     }
-
-    const domChars = measureConversationDomChars();
 
     if (state.isWorking && !state.wasWorking) {
       state.workStartedAt = nowMs;
@@ -1365,11 +1602,17 @@
       state.turnBaselineDomChars = domChars;
       state.stepBaselineDomChars = domChars;
       state.dispTurnTokens = 0;
+      computeAndApplyBladeHeat();
       if (state.cid && !state.streamConnected) fetchDaemonTelemetry(state.cid);
     } else if (!state.isWorking && state.wasWorking) {
+      computeAndApplyBladeHeat();
       if (state.cid && !state.streamConnected) fetchDaemonTelemetry(state.cid);
     }
     state.wasWorking = state.isWorking;
+
+    if (shouldSampleDom && state.isWorking) {
+      computeAndApplyBladeHeat();
+    }
 
     if (state.hasTelemetry) {
       let liveTurn = state.serverTurnTokens;
@@ -1403,6 +1646,9 @@
       } else {
         state.targetTurnTokens = state.liveDomTurnEst;
       }
+      if (shouldSampleDom) {
+        computeAndApplyBladeHeat();
+      }
     }
 
     if (state.dispCtxTokens === 0 && state.targetCtxTokens > 500) {
@@ -1421,72 +1667,89 @@
     const ctxRatio = Math.max(0, Math.min(1, ctxRounded / DEFAULT_CONTEXT_WINDOW));
     const ctxPctStr = (ctxRatio * 100).toFixed(1) + '%';
 
-    if (state.ctxTextEl) {
-      state.ctxTextEl.innerHTML =
-        `<span class="agy-tok-ctx-prefix">Ngữ cảnh: </span><span class="agy-tok-num">${formatCompactTokens(ctxRounded)}</span>`;
+    if (state.ctxNumEl) {
+      setTextIfChanged(state.ctxNumEl, formatCompactTokens(ctxRounded));
     }
     if (state.ctxFillEl) {
-      state.ctxFillEl.style.width = `${Math.max(3, Math.round(ctxRatio * 100))}%`;
-      if (ctxRatio >= 0.85) state.ctxFillEl.dataset.warn = 'red';
-      else if (ctxRatio >= 0.60) state.ctxFillEl.dataset.warn = 'amber';
-      else delete state.ctxFillEl.dataset.warn;
+      const nextW = `${Math.max(3, Math.round(ctxRatio * 100))}%`;
+      if (state.ctxFillEl.style.width !== nextW) {
+        state.ctxFillEl.style.width = nextW;
+      }
+      const nextWarn = ctxRatio >= 0.85 ? 'red' : (ctxRatio >= 0.60 ? 'amber' : '');
+      if (nextWarn) {
+        if (state.ctxFillEl.dataset.warn !== nextWarn) state.ctxFillEl.dataset.warn = nextWarn;
+      } else if (state.ctxFillEl.dataset.warn) {
+        delete state.ctxFillEl.dataset.warn;
+      }
     }
 
     if (state.turnBtnEl) {
-      if (state.isWorking) state.turnBtnEl.dataset.working = '1';
-      else delete state.turnBtnEl.dataset.working;
+      if (state.isWorking) {
+        if (state.turnBtnEl.dataset.working !== '1') state.turnBtnEl.dataset.working = '1';
+      } else if (state.turnBtnEl.dataset.working) {
+        delete state.turnBtnEl.dataset.working;
+      }
     }
 
-    const ic = getIconsApi();
-    const brushSvg = ic ? ic.getFuncSvg('draft_brush', 10) : '';
-
-    if (state.turnTextEl) {
-      const draftSuffix = (!state.isWorking && state.draftTokens > 0)
-        ? ` <span class="agy-tok-draft-tag">• ${brushSvg}+${formatCompactTokens(state.draftTokens)}</span>`
-        : '';
-      if (state.isWorking) {
-        state.turnTextEl.innerHTML =
-          `<span class="agy-tok-turn-prefix">Lượt: </span><span class="agy-tok-num">+${formatExactInt(turnRounded)}</span> tok`;
-      } else {
-        state.turnTextEl.innerHTML =
-          `<span class="agy-tok-turn-prefix">Lượt: </span><span class="agy-tok-num">+${formatCompactTokens(turnRounded)}</span> tok${draftSuffix}`;
+    if (state.turnNumEl) {
+      const turnStr = state.isWorking ? `+${formatExactInt(turnRounded)}` : `+${formatCompactTokens(turnRounded)}`;
+      setTextIfChanged(state.turnNumEl, turnStr);
+    }
+    if (state.turnDraftWrapEl && state.turnDraftNumEl) {
+      const showDraft = !state.isWorking && state.draftTokens > 0;
+      const nextDisp = showDraft ? '' : 'none';
+      if (state.turnDraftWrapEl.style.display !== nextDisp) {
+        state.turnDraftWrapEl.style.display = nextDisp;
+      }
+      if (showDraft) {
+        setTextIfChanged(state.turnDraftNumEl, `+${formatCompactTokens(state.draftTokens)}`);
       }
     }
 
     if (state.popoverOpen) {
       if (state.detStatusBadge) {
         const modeTxt = state.streamConnected ? 'SSE <30ms' : 'Trực tuyến';
-        state.detStatusBadge.textContent = state.isWorking ? `Đang rèn (${modeTxt})` : `Sẵn sàng (${modeTxt})`;
-        if (state.isWorking) state.detStatusBadge.dataset.working = '1';
-        else delete state.detStatusBadge.dataset.working;
+        setTextIfChanged(state.detStatusBadge, state.isWorking ? `Đang rèn (${modeTxt})` : `Sẵn sàng (${modeTxt})`);
+        if (state.isWorking) {
+          if (state.detStatusBadge.dataset.working !== '1') state.detStatusBadge.dataset.working = '1';
+        } else if (state.detStatusBadge.dataset.working) {
+          delete state.detStatusBadge.dataset.working;
+        }
       }
       if (state.detCtxVal) {
-        state.detCtxVal.textContent = `${formatExactInt(ctxRounded)} / 1.05M (${ctxPctStr})`;
+        setTextIfChanged(state.detCtxVal, `${formatExactInt(ctxRounded)} / 1.05M (${ctxPctStr})`);
       }
       if (state.detCtxMeter) {
-        state.detCtxMeter.style.width = `${Math.max(2, Math.round(ctxRatio * 100))}%`;
+        const nextMeterW = `${Math.max(2, Math.round(ctxRatio * 100))}%`;
+        if (state.detCtxMeter.style.width !== nextMeterW) {
+          state.detCtxMeter.style.width = nextMeterW;
+        }
       }
       if (state.detCacheVal) {
         const cachePct = ctxRounded > 0 ? Math.min(100, Math.round((state.serverCacheTokens / ctxRounded) * 100)) : 0;
-        state.detCacheVal.textContent = state.serverCacheTokens > 0
-          ? `${formatCompactTokens(state.serverCacheTokens)} (${cachePct}% cache)`
-          : '—';
+        setTextIfChanged(
+          state.detCacheVal,
+          state.serverCacheTokens > 0 ? `${formatCompactTokens(state.serverCacheTokens)} (${cachePct}% cache)` : '—'
+        );
       }
       if (state.detTurnVal) {
         const stepsTxt = state.serverTurnSteps > 0 ? ` • ${state.serverTurnSteps} bước` : '';
-        state.detTurnVal.textContent = `+${formatExactInt(turnRounded)} tok${stepsTxt}`;
+        setTextIfChanged(state.detTurnVal, `+${formatExactInt(turnRounded)} tok${stepsTxt}`);
       }
       computeAndApplyBladeHeat();
       if (state.detDraftVal) {
-        state.detDraftVal.textContent = state.draftTokens > 0 ? `+${formatExactInt(state.draftTokens)} tok` : '0 tok';
+        setTextIfChanged(state.detDraftVal, state.draftTokens > 0 ? `+${formatExactInt(state.draftTokens)} tok` : '0 tok');
       }
       if (state.detSessionVal) {
-        const tot = Math.max(turnRounded, state.serverTotalOutTokens);
-        state.detSessionVal.textContent = `${formatExactInt(tot)} tok`;
+        const tot = state.hasTelemetry
+          ? state.serverTotalOutTokens
+          : Math.max(turnRounded, state.serverTotalOutTokens);
+        setTextIfChanged(state.detSessionVal, `${formatExactInt(tot)} tok`);
       }
       if (state.detModelVal) {
         const qTxt = state.quotaPct !== null ? ` (${state.quotaPct}% hạn mức)` : '';
-        state.detModelVal.textContent = (state.modelLabel || 'Antigravity Agent') + qTxt;
+        const modelName = state.modelLabel || state.serverModelName || 'Antigravity Agent';
+        setTextIfChanged(state.detModelVal, modelName + qTxt);
       }
     }
   }
@@ -1535,6 +1798,7 @@
 
   function ensureOdometerRunning() {
     if (typeof document !== 'undefined' && document.hidden) return;
+    if (typeof requestAnimationFrame !== 'function') return;
     if (!state.rafId) {
       state.rafId = requestAnimationFrame(odometerTick);
     }
@@ -1555,13 +1819,23 @@
    * FIRST SWORDSMAN YORIICHI: SKILL UNLEASH & INSTANT ENTER MESSAGE ECHO
    * ========================================================================== */
 
-  function castYoriichiSunBreathing(originEl) {
+  function castYoriichiSunBreathing(arg0, arg1) {
     const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
     if (!ext || typeof ext.castSkill !== 'function') return;
 
+    const explicitSkillIdx = typeof arg0 === 'number' ? arg0 : (typeof arg1 === 'number' ? arg1 : null);
+    const originEl = (typeof arg0 === 'object' && arg0)
+      ? arg0
+      : ((typeof arg1 === 'object' && arg1) ? arg1 : state.yoriichiBtnEl);
+
     const targetSkillId = state.personaSkillId || 'yoriichi';
-    const idx = state.yoriichiComboIdx % 4;
-    state.yoriichiComboIdx = (idx + 1) % 4;
+    let idx = 0;
+    if (typeof explicitSkillIdx === 'number' && Number.isFinite(explicitSkillIdx)) {
+      idx = ((Math.floor(explicitSkillIdx) % 4) + 4) % 4;
+    } else {
+      idx = state.yoriichiComboIdx % 4;
+      state.yoriichiComboIdx = (idx + 1) % 4;
+    }
 
     let originRect = null;
     if (originEl && typeof originEl.getBoundingClientRect === 'function') {
@@ -1575,11 +1849,17 @@
       }, 360);
     }
 
+    const cfg = state.themeCfg || {};
+    const hasCustomUserAction = Boolean(typeof cfg.userActionSticker === 'string' && cfg.userActionSticker.trim());
+    const noActionSprite = Boolean(cfg.isMultiversePersona && !hasCustomUserAction);
+    const actionSticker = noActionSprite ? '' : resolveYoriichiActionUrl(cfg);
     const muted = isSfxMutedNow();
+
     ext.castSkill(targetSkillId, idx, {
       charId: targetSkillId,
       originRect,
-      actionSticker: resolveYoriichiActionUrl(state.themeCfg),
+      actionSticker,
+      noActionSprite,
       composerEl: null,
       soundEnabled: !muted
     });
@@ -1644,6 +1924,8 @@
       state.yoriichiBtnEl.style.backgroundImage = safeYoriAv ? `url("${safeYoriAv}")` : 'none';
       if (cfg.personaRingColor) {
         state.yoriichiBtnEl.style.borderColor = cfg.personaRingColor;
+      } else {
+        state.yoriichiBtnEl.style.removeProperty('border-color');
       }
       const crestTitle = isDefaultYoriichi
         ? 'Khai Tổ Vũ Điệu Hỏa Thần (Tsugikuni Yoriichi) — Nhấn để khai mở Nhật Chi Hô Hấp!'
@@ -1655,6 +1937,8 @@
       state.echoAvatarEl.style.backgroundImage = safeYoriAv ? `url("${safeYoriAv}")` : 'none';
       if (cfg.personaRingColor) {
         state.echoAvatarEl.style.borderColor = cfg.personaRingColor;
+      } else {
+        state.echoAvatarEl.style.removeProperty('border-color');
       }
     }
     if (state.echoHdrLabelEl) {
@@ -1745,6 +2029,7 @@
     ctxIconWrap.className = 'agy-tok-icon-slot';
     const ctxText = document.createElement('span');
     ctxText.innerHTML = '<span class="agy-tok-ctx-prefix">Ngữ cảnh: </span><span class="agy-tok-num">0</span>';
+    const ctxNumEl = ctxText.querySelector('.agy-tok-num');
 
     const ctxTrack = document.createElement('span');
     ctxTrack.className = 'agy-tok-ctx-track';
@@ -1765,7 +2050,13 @@
     const turnIcon = document.createElement('span');
     turnIcon.className = 'agy-tok-icon-slot';
     const turnText = document.createElement('span');
-    turnText.innerHTML = '<span class="agy-tok-turn-prefix">Lượt: </span><span class="agy-tok-num">+0</span> tok';
+    const brushSvgInit = ic ? ic.getFuncSvg('draft_brush', 10) : '';
+    turnText.innerHTML =
+      `<span class="agy-tok-turn-prefix">Lượt: </span><span class="agy-tok-num">+0</span><span> tok</span>` +
+      `<span class="agy-tok-draft-tag" style="display:none"> • ${brushSvgInit}<span class="agy-tok-draft-num">+0</span></span>`;
+    const turnNumEl = turnText.querySelector('.agy-tok-num');
+    const turnDraftWrapEl = turnText.querySelector('.agy-tok-draft-tag');
+    const turnDraftNumEl = turnText.querySelector('.agy-tok-draft-num');
 
     turnBtn.appendChild(turnIcon);
     turnBtn.appendChild(turnText);
@@ -1897,15 +2188,21 @@
     state.ctxBtnEl = ctxBtn;
     state.ctxIconWrap = ctxIconWrap;
     state.ctxTextEl = ctxText;
+    state.ctxNumEl = ctxNumEl;
     state.ctxFillEl = ctxFill;
     state.turnBtnEl = turnBtn;
     state.turnIconEl = turnIcon;
     state.turnTextEl = turnText;
+    state.turnNumEl = turnNumEl;
+    state.turnDraftWrapEl = turnDraftWrapEl;
+    state.turnDraftNumEl = turnDraftNumEl;
 
     state.bladeBtnEl = bladeBtn;
     state.bladeFillRectEl = katanaParts.fillRect;
     state.bladeGlowPathEl = katanaParts.edgePath;
     state.bladeLabelEl = bladeLbl;
+    state.lastRenderedBladeHeat = -1;
+    state.lastRenderedBladeTier = '';
 
     state.kaguraBtnEl = kaguraBtn;
     state.cinemaBtnEl = cinemaBtn;
@@ -2026,11 +2323,12 @@
       if (ev.key !== 'Enter' || ev.shiftKey || ev.altKey || ev.ctrlKey || ev.metaKey) return;
       const target = ev.target;
       if (!target || (target.closest && target.closest('#agy-shinobu-npc-wrap'))) return;
+      const editor = composer.querySelector('textarea, [contenteditable="true"]');
+      if (!editor || (target !== editor && !(editor.contains && editor.contains(target)))) return;
       const hasMenu = document.querySelector('[role="listbox"], [data-radix-popper-content-wrapper]');
       if (hasMenu && hasMenu.offsetParent !== null) return;
 
-      const editor = composer.querySelector('textarea, [contenteditable="true"]');
-      const raw = editor ? (typeof editor.value === 'string' ? editor.value : (editor.textContent || '')) : '';
+      const raw = typeof editor.value === 'string' ? editor.value : (editor.textContent || '');
       if (raw && raw.trim()) {
         showUserMessageEcho(raw.trim());
       }
@@ -2071,9 +2369,16 @@
         hideUserMessageEcho();
       }
     };
-    const onComposerInput = () => ensureOdometerRunning();
+    const onComposerInput = () => {
+      state.forceSignalSample = true;
+      state.lastActivityAt = Date.now();
+      state.typingHeatPulse = Math.min(14, +(state.typingHeatPulse + 2.4).toFixed(2));
+      computeAndApplyBladeHeat();
+      ensureOdometerRunning();
+    };
     const onVis = () => {
       if (!document.hidden) {
+        state.forceSignalSample = true;
         if (state.cid && !state.streamConnected) {
           connectTelemetryStream(state.cid);
           fetchDaemonTelemetry(state.cid);
@@ -2096,18 +2401,56 @@
     state.cleanups.push(() => composer.removeEventListener('input', onComposerInput));
     state.cleanups.push(() => document.removeEventListener('visibilitychange', onVis));
 
-    // Smart heartbeat: monitors cid changes & serves as resilient fallback if SSE stream drops
-    // Keeps gentle background check when !document.hasFocus() so Kagura Bell still rings on Alt+Tab!
+    // Smart heartbeat: monitors cid changes, cools idle blade naturally & serves as resilient fallback if SSE drops
+    // Keeps gentle background check when !document.hasFocus() so Kagura Bell still rings on Alt+Tab & offline/preview!
     state.pollTimer = setInterval(() => {
       refreshUtilityButtonStates();
       const sig = extractLivePageSignals(state.composer);
-      if (sig.cid && sig.cid !== state.cid) {
-        switchActiveConversation(sig.cid);
+      state.cachedSignals = sig;
+      state.lastSignalSampleAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+
+      if (sig.explicitCid && sig.explicitCid !== state.cid) {
+        switchActiveConversation(sig.explicitCid);
+        ensureOdometerRunning();
+        return;
+      } else if (!state.cid) {
+        switchActiveConversation(sig.cid || 'latest');
         ensureOdometerRunning();
         return;
       }
 
       const now = Date.now();
+      const curWorking = Boolean(sig.isWorking || state.serverIsWorking);
+
+      // Offline / preview.html / disconnected SSE fallback so Koto chime still rings on turn finish!
+      if (!state.streamConnected) {
+        if (!state.pollWasWorking && curWorking) {
+          if (typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__ && typeof window.__AGY_BIO_AUDIO__.onTelemetry === 'function') {
+            try {
+              window.__AGY_BIO_AUDIO__.onTelemetry({
+                isWorking: true,
+                turnFinishedSeq: state.localFinishSeq
+              });
+            } catch (_) {}
+          }
+        } else if (state.pollWasWorking && !curWorking) {
+          state.localFinishSeq = (state.localFinishSeq || 0) + 1;
+          if (typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__ && typeof window.__AGY_BIO_AUDIO__.onTelemetry === 'function') {
+            try {
+              window.__AGY_BIO_AUDIO__.onTelemetry({
+                isWorking: false,
+                turnFinishedSeq: state.localFinishSeq
+              });
+            } catch (_) {}
+          }
+        }
+      }
+      state.pollWasWorking = curWorking;
+
+      if (decayBladeHeatWhenIdle(now) || curWorking !== state.isWorking) {
+        computeAndApplyBladeHeat();
+      }
+
       const isHiddenOrUnfocused =
         typeof document !== 'undefined' && (document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus()));
 
@@ -2127,12 +2470,18 @@
     const initChars = measureConversationDomChars();
     state.turnBaselineDomChars = initChars;
     state.stepBaselineDomChars = initChars;
+    state.cachedDomChars = initChars;
     state.workStartedAt = nowInit;
     state.lastStepSeenAt = nowInit;
+    state.lastHeatDecayAt = Date.now();
 
     const initSig = extractLivePageSignals(composer);
-    state.cid = initSig.cid;
+    state.cachedSignals = initSig;
+    state.lastSignalSampleAt = nowInit;
+    state.cid = initSig.cid || 'latest';
+    state.resolvedCid = initSig.explicitCid || '';
     state.wasWorking = initSig.isWorking;
+    state.pollWasWorking = initSig.isWorking;
     if (state.cid) {
       connectTelemetryStream(state.cid);
       fetchDaemonTelemetry(state.cid).then(() => ensureOdometerRunning());
@@ -2149,7 +2498,7 @@
       state.composerRo = null;
     }
     if (state.rafId) {
-      cancelAnimationFrame(state.rafId);
+      if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(state.rafId);
       state.rafId = 0;
     }
     if (state.pollTimer) {
@@ -2178,11 +2527,16 @@
     }
     state.composer = null;
     state.barEl = null;
+    state.ctxNumEl = null;
+    state.turnNumEl = null;
+    state.turnDraftWrapEl = null;
+    state.turnDraftNumEl = null;
     state.echoEl = null;
     state.echoHdrLabelEl = null;
     state.kaguraBtnEl = null;
     state.cinemaBtnEl = null;
     state.bladeBtnEl = null;
+    state.cachedSignals = null;
     state.popoverOpen = false;
   }
 
@@ -2192,8 +2546,11 @@
     showUserMessageEcho,
     hideUserMessageEcho,
     ingestTelemetrySnapshot,
+    getBladeBonusHeat: () => state.bladeBonusHeat,
+    getBladeHeat: () => state.bladeHeat,
     setBladeBonusHeat: (bonus) => {
       state.bladeBonusHeat = Math.max(0, Math.min(100, Number(bonus) || 0));
+      state.bonusHoldUntil = Date.now() + 18000;
       computeAndApplyBladeHeat();
     },
     triggerCrisisSlashDemo: (reason) => {
@@ -2202,6 +2559,7 @@
     teardown,
     destroy: teardown,
     refresh: () => {
+      state.forceSignalSample = true;
       if (state.cid) {
         if (!state.streamConnected) connectTelemetryStream(state.cid);
         fetchDaemonTelemetry(state.cid);

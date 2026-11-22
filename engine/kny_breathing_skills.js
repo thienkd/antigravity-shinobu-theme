@@ -3,7 +3,7 @@
 
   /**
    * Kimetsu no Yaiba — Full-Screen Breathing Forms & Cinematic VFX Engine
-   * Exposes window.__AGY_KNY_SKILLS__ supporting all 14 characters × 4 iconic forms (56 skills),
+   * Exposes window.__AGY_KNY_SKILLS__ supporting all 15 characters × 4 iconic forms (60 skills),
    * Ufotable-inspired 60fps 2D Canvas compositing, cinematic anime banner, and Web Audio SFX.
    * Zero CPU idle footprint (rAF terminates cleanly upon completion).
    */
@@ -58,6 +58,7 @@
     kocho: 'shinobu',
     wisteria: 'shinobu',
     insect: 'shinobu',
+    kanao: 'shinobu',
 
     giyu: 'giyu',
     giyuu: 'giyu',
@@ -68,6 +69,7 @@
     kyojuro: 'rengoku',
     flame: 'rengoku',
     fire: 'rengoku',
+    akaza: 'rengoku',
 
     uzui: 'uzui',
     tengen: 'uzui',
@@ -76,6 +78,7 @@
     muichiro: 'muichiro',
     tokito: 'muichiro',
     mist: 'muichiro',
+    six_eyes: 'muichiro',
 
     mitsuri: 'mitsuri',
     kanroji: 'mitsuri',
@@ -85,6 +88,10 @@
     iguro: 'obanai',
     serpent: 'obanai',
     snake: 'obanai',
+    moon: 'obanai',
+    shadow: 'obanai',
+    shadow_monarch: 'obanai',
+    kokushibo: 'obanai',
 
     sanemi: 'sanemi',
     shinazugawa: 'sanemi',
@@ -99,13 +106,14 @@
     tanjirou: 'tanjiro',
     kamado_tanjiro: 'tanjiro',
     sun_water: 'tanjiro',
-    sun: 'tanjiro',
     hinokami: 'tanjiro',
 
     nezuko: 'nezuko',
     kamado_nezuko: 'nezuko',
     blood_blossom: 'nezuko',
     blood_demon: 'nezuko',
+    exploding_blood: 'nezuko',
+    muzan: 'nezuko',
 
     zenitsu: 'zenitsu',
     agatsuma: 'zenitsu',
@@ -118,7 +126,10 @@
 
     yoriichi: 'yoriichi',
     tsugikuni: 'yoriichi',
-    sun_origin: 'yoriichi'
+    sun_origin: 'yoriichi',
+    sun: 'yoriichi',
+    solar: 'yoriichi',
+    great_sage: 'yoriichi'
   };
 
   const SUBSTRING_MATCHERS = [
@@ -163,7 +174,7 @@
   }
 
   /* ==========================================================================
-   * 2. CATALOG OF 56 CANONICAL BREATHING FORMS (14 CHARACTERS × 4 FORMS)
+   * 2. CATALOG OF 60 CANONICAL BREATHING FORMS (15 CHARACTERS × 4 FORMS)
    * ========================================================================== */
 
   const SKILLS_DB = {
@@ -1033,7 +1044,7 @@
         primaryColor: '#ef4444',
         secondaryColor: '#fb923c',
         accentColor: '#fef08a',
-        sfxElement: 'flame_dragon',
+        sfxElement: 'sun_grand',
         durationMs: 3050
       },
       {
@@ -1047,7 +1058,7 @@
         primaryColor: '#facc15',
         secondaryColor: '#dc2626',
         accentColor: '#ffffff',
-        sfxElement: 'flame_dragon',
+        sfxElement: 'sun_grand',
         durationMs: 3150
       }
     ]
@@ -1162,7 +1173,6 @@
     if (raw === '1' || raw === 'true') return true;
     if (ROOT_SCOPE && ROOT_SCOPE.__AGY_BIO_AUDIO__) {
       const bio = ROOT_SCOPE.__AGY_BIO_AUDIO__;
-      if (typeof bio.isEnabled === 'function' && !bio.isEnabled()) return true;
       if (typeof bio.getPrefs === 'function') {
         const prefs = bio.getPrefs();
         if (prefs && prefs.swordSfxEnabled === false) return true;
@@ -1174,6 +1184,12 @@
   function setSoundMuted(muted) {
     const flag = Boolean(muted);
     safeWriteStorage(STORAGE_SFX_MUTED, flag ? '1' : '0');
+    if (ROOT_SCOPE && ROOT_SCOPE.__AGY_BIO_AUDIO__) {
+      const bio = ROOT_SCOPE.__AGY_BIO_AUDIO__;
+      if (typeof bio.setSwordSfxEnabled === 'function') {
+        try { bio.setSwordSfxEnabled(!flag); } catch (_) {}
+      }
+    }
     return flag;
   }
 
@@ -2417,7 +2433,7 @@
         }
         // Battle axe arc on right
         drawGlowArc(ctx, ax, cy, 52, HALF_PI, Math.PI * 1.5, 16 * env, skill.primaryColor, skill.accentColor, env);
-        if (meet > 0.85) {
+        if (p > 0.2) {
           drawGlowArc(ctx, cx, cy, minDim * 0.38 * easeOutCubic((p - 0.2) / 0.8), 0, TWO_PI, 8 * env, skill.primaryColor, '#ffffff', env);
         }
         break;
@@ -2758,6 +2774,19 @@
 
   const actionSpriteCache = Object.create(null);
 
+  function inferSpriteHeroKey(urlStr, fallbackCharId) {
+    if (typeof urlStr === 'string' && urlStr && !urlStr.startsWith('data:')) {
+      const m = urlStr.match(/([a-z0-9_]+)_action\.(?:png|webp|jpe?g|avif)(?:[?#]|$)/i);
+      if (m && m[1]) {
+        const cand = m[1].toLowerCase();
+        if (ACTION_SPRITE_META[cand]) return cand;
+        const resolved = resolveCharacterId(cand);
+        if (resolved && ACTION_SPRITE_META[resolved]) return resolved;
+      }
+    }
+    return resolveCharacterId(fallbackCharId) || 'shinobu';
+  }
+
   function resolveActionSpriteUrl(charId, explicitUrl) {
     if (typeof explicitUrl === 'string' && explicitUrl.trim()) {
       const trimmed = explicitUrl.trim();
@@ -2787,33 +2816,53 @@
   function preloadActionSprite(charId, explicitUrl) {
     const safeId = resolveCharacterId(charId) || 'shinobu';
     const url = resolveActionSpriteUrl(safeId, explicitUrl);
-    const existing = actionSpriteCache[safeId];
-    if (existing && existing.url === url && (existing.loaded || existing.loading)) {
+    if (!url) return null;
+    const spriteHeroKey = inferSpriteHeroKey(explicitUrl || url, safeId);
+    const cacheKey = url;
+    const existing = actionSpriteCache[cacheKey];
+    if (existing && (existing.loaded || existing.loading)) {
       return existing;
     }
     if (typeof Image === 'undefined') return null;
     const entry = {
       charId: safeId,
+      spriteHeroKey,
       url,
       img: new Image(),
       loaded: false,
       loading: true,
-      failed: false
+      failed: false,
+      timeoutId: 0
     };
     entry.img.decoding = 'async';
     if (/^https?:\/\//i.test(url)) {
       entry.img.crossOrigin = 'anonymous';
     }
+    entry.timeoutId = setTimeout(() => {
+      entry.timeoutId = 0;
+      if (entry.loading && !entry.loaded) {
+        entry.loading = false;
+        entry.failed = true;
+      }
+    }, 5000);
     entry.img.onload = () => {
+      if (entry.timeoutId) {
+        clearTimeout(entry.timeoutId);
+        entry.timeoutId = 0;
+      }
       entry.loaded = true;
       entry.loading = false;
     };
     entry.img.onerror = () => {
+      if (entry.timeoutId) {
+        clearTimeout(entry.timeoutId);
+        entry.timeoutId = 0;
+      }
       entry.loading = false;
       entry.failed = true;
     };
     entry.img.src = url;
-    actionSpriteCache[safeId] = entry;
+    actionSpriteCache[cacheKey] = entry;
     return entry;
   }
 
@@ -3088,8 +3137,9 @@
     };
   }
 
-  function computeFullStageActorState(w, h, rawP, skill, homeOrigin) {
-    const meta = ACTION_SPRITE_META[skill.charId] || ACTION_SPRITE_META.shinobu;
+  function computeFullStageActorState(w, h, rawP, skill, homeOrigin, spriteHeroKey) {
+    const metaKey = spriteHeroKey || skill.charId;
+    const meta = ACTION_SPRITE_META[metaKey] || ACTION_SPRITE_META[skill.charId] || ACTION_SPRITE_META.shinobu;
     const home = homeOrigin || { x: w * 0.80, y: h * 0.84 };
     const pattern = getChoreographyPattern(skill.vfxType);
     const p = warpProgressForHitStop(rawP);
@@ -3197,7 +3247,8 @@
   }
 
   function drawActionChibiOnStage(ctx, w, h, rawP, skill, homeOrigin, spriteEntry) {
-    const actor = computeFullStageActorState(w, h, rawP, skill, homeOrigin);
+    const spriteHeroKey = spriteEntry && spriteEntry.spriteHeroKey ? spriteEntry.spriteHeroKey : skill.charId;
+    const actor = computeFullStageActorState(w, h, rawP, skill, homeOrigin, spriteHeroKey);
     const pRgb = hexToRgb(skill.primaryColor);
     const aRgb = hexToRgb(skill.accentColor);
 
@@ -3214,11 +3265,11 @@
       ctx.globalCompositeOperation = 'lighter';
       for (let g = 5; g >= 1; g--) {
         const lagP = Math.max(0, rawP - g * 0.022);
-        const ghost = computeFullStageActorState(w, h, lagP, skill, homeOrigin);
+        const ghost = computeFullStageActorState(w, h, lagP, skill, homeOrigin, spriteHeroKey);
         const gAlpha = (1 - g / 6) * 0.42;
 
         // Luminous blade ribbon connecting ghost positions right through the Chibi's weapon path
-        const nextGhost = g === 1 ? actor : computeFullStageActorState(w, h, Math.max(0, rawP - (g - 1) * 0.022), skill, homeOrigin);
+        const nextGhost = g === 1 ? actor : computeFullStageActorState(w, h, Math.max(0, rawP - (g - 1) * 0.022), skill, homeOrigin, spriteHeroKey);
         drawGlowLine(
           ctx,
           ghost.x,
@@ -3342,6 +3393,7 @@
   let titleEl = null;
   let voiceEl = null;
   let activeRafId = 0;
+  let activeBannerRafId = 0;
   let activeBannerTimer = 0;
   let activeHideTimer = 0;
   let activeStageCleanup = null;
@@ -3524,6 +3576,10 @@
       cancelFrame(activeRafId);
       activeRafId = 0;
     }
+    if (activeBannerRafId) {
+      cancelFrame(activeBannerRafId);
+      activeBannerRafId = 0;
+    }
     if (activeBannerTimer) {
       clearTimeout(activeBannerTimer);
       activeBannerTimer = 0;
@@ -3535,7 +3591,7 @@
     if (typeof activeStageCleanup === 'function') {
       const fn = activeStageCleanup;
       activeStageCleanup = null;
-      try { fn(); } catch (_) {}
+      try { fn(true); } catch (_) {}
     }
     if (canvasEl && typeof canvasEl.getContext === 'function') {
       const ctx = canvasEl.getContext('2d');
@@ -3573,7 +3629,7 @@
       return cloneSkill(list[0], charId, 0);
     }
 
-    // Fallback: search by skillId across all 14 characters
+    // Fallback: search by skillId across all 15 characters
     if (typeof skillIndexOrId === 'string') {
       for (let i = 0; i < CHARACTER_IDS.length; i++) {
         const cid = CHARACTER_IDS[i];
@@ -3613,7 +3669,8 @@
 
     if (bannerEl && bannerEl.classList) {
       bannerEl.classList.remove('is-fading');
-      requestFrame(() => {
+      activeBannerRafId = requestFrame(() => {
+        activeBannerRafId = 0;
         if (bannerEl && bannerEl.classList) bannerEl.classList.add('is-visible');
       });
       activeBannerTimer = setTimeout(() => {
@@ -3642,7 +3699,7 @@
       const ox = (Number(r.left) || 0) + (Number(r.width) || 0) * 0.5;
       const oy = (Number(r.top) || 0) + (Number(r.height) || 0) * 0.5;
       if (ox > 0 || oy > 0) origin = { x: ox, y: oy };
-    } else if (typeof document !== 'undefined') {
+    } else if (opts.composerEl !== null && typeof document !== 'undefined') {
       const hitEl = document.querySelector('.surface-composer > .agy-chibi-hitbox');
       if (hitEl && typeof hitEl.getBoundingClientRect === 'function') {
         const r = hitEl.getBoundingClientRect();
@@ -3650,18 +3707,26 @@
       }
     }
 
+    const noActionSprite = Boolean(opts.noActionSprite);
     const explicitActionUrl = (opts.themeCfg && opts.themeCfg.actionSticker) || opts.actionSticker || '';
-    const spriteEntry = preloadActionSprite(skill.charId, explicitActionUrl);
+    const spriteEntry = noActionSprite ? null : preloadActionSprite(skill.charId, explicitActionUrl);
 
     // Hide the resting peeker Chibi on the chat frame while Full-Body Action Chibi leaps onto the stage!
+    // Strictly honors opts.composerEl === null so Squad Hashira / User Crest buttons never hide the right-corner Chibi!
     const stagePeekerEls = [];
-    if (!prefersReducedMotion()) {
-      const compEl = opts.composerEl || (typeof document !== 'undefined' ? document.querySelector('.surface-composer') : null);
+    if (!prefersReducedMotion() && !noActionSprite) {
+      const compEl = opts.composerEl !== undefined
+        ? opts.composerEl
+        : (typeof document !== 'undefined' ? document.querySelector('.surface-composer') : null);
       if (compEl && compEl.dataset) stagePeekerEls.push(compEl);
       if (opts.sourceFrameEl && opts.sourceFrameEl.dataset && opts.sourceFrameEl !== compEl) {
         stagePeekerEls.push(opts.sourceFrameEl);
       }
       stagePeekerEls.forEach((el) => {
+        if (el.__agyLandingTimer) {
+          clearTimeout(el.__agyLandingTimer);
+          el.__agyLandingTimer = 0;
+        }
         delete el.dataset.chibiLanding;
         el.dataset.chibiOutOnStage = '1';
       });
@@ -3671,18 +3736,27 @@
     }
 
     let returnedToCorner = false;
-    const triggerCornerReturn = () => {
+    const triggerCornerReturn = (interrupted) => {
       if (returnedToCorner) return;
       returnedToCorner = true;
       stagePeekerEls.forEach((el) => {
+        if (el.__agyLandingTimer) {
+          clearTimeout(el.__agyLandingTimer);
+          el.__agyLandingTimer = 0;
+        }
         delete el.dataset.chibiOutOnStage;
+        if (interrupted) {
+          delete el.dataset.chibiLanding;
+          return;
+        }
         void el.offsetWidth;
         el.dataset.chibiLanding = '1';
-        setTimeout(() => {
+        el.__agyLandingTimer = setTimeout(() => {
+          el.__agyLandingTimer = 0;
           if (el && el.dataset) delete el.dataset.chibiLanding;
         }, 420);
       });
-      if (typeof opts.onStageReturn === 'function') {
+      if (!interrupted && typeof opts.onStageReturn === 'function') {
         try { opts.onStageReturn(skill); } catch (_) {}
       }
     };
@@ -3694,7 +3768,9 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, vw, vh);
       renderSkillFrame(ctx, vw, vh, 0.35, skill, origin);
-      drawActionChibiOnStage(ctx, vw, vh, 0.48, skill, origin, spriteEntry);
+      if (!noActionSprite) {
+        drawActionChibiOnStage(ctx, vw, vh, 0.48, skill, origin, spriteEntry);
+      }
       ctx.restore();
       activeHideTimer = setTimeout(stopActiveSkill, 2450);
       return { ok: true, charId: skill.charId, skill: skill, durationMs: 2450, reducedMotion: true };
@@ -3712,7 +3788,7 @@
       const p = elapsed / duration;
 
       if (p >= 0.96 && !returnedToCorner) {
-        triggerCornerReturn();
+        triggerCornerReturn(false);
       }
 
       if (p >= 1) {
@@ -3745,7 +3821,9 @@
       ctx.setTransform(dpr, 0, 0, dpr, shakeX * dpr, shakeY * dpr);
       ctx.clearRect(-16, -16, vw + 32, vh + 32);
       renderSkillFrame(ctx, vw, vh, warpedP, skill, origin);
-      drawActionChibiOnStage(ctx, vw, vh, p, skill, origin, spriteEntry);
+      if (!noActionSprite) {
+        drawActionChibiOnStage(ctx, vw, vh, p, skill, origin, spriteEntry);
+      }
       ctx.restore();
 
       activeRafId = requestFrame(tick);
@@ -3757,6 +3835,14 @@
 
   function destroy() {
     stopActiveSkill();
+    Object.keys(actionSpriteCache).forEach((k) => {
+      const e = actionSpriteCache[k];
+      if (e && e.timeoutId) {
+        clearTimeout(e.timeoutId);
+        e.timeoutId = 0;
+      }
+      delete actionSpriteCache[k];
+    });
     clearTimeout(sfxSuspendTimer);
     sfxSuspendTimer = 0;
     sfxActiveUntil = 0;

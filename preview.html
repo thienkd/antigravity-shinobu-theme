@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Antigravity — Shinobu Wisteria Live Theme & Chibi NPC Preview</title>
+  <title>Antigravity Custom Theme v2.0 — Kimetsu no Yaiba &amp; Multiverse Live Preview</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body {
@@ -55,16 +55,25 @@
       opacity: 0.78;
     }
     .titlebar-Sub {
-      height: 40px;
+      min-height: 40px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 14px;
+      gap: 10px;
+      padding: 4px 14px;
+      flex-wrap: wrap;
     }
     .toolbar-left, .toolbar-right {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 7px;
+      flex-wrap: wrap;
+    }
+    .toolbar-sep {
+      width: 1px;
+      height: 16px;
+      background: rgba(255, 255, 255, 0.16);
+      margin: 0 2px;
     }
     .agy-logo {
       font-weight: 800;
@@ -83,20 +92,44 @@
     }
     .nav-icon-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
     .mode-switch-pill {
-      padding: 4px 11px;
+      padding: 4px 10px;
       border-radius: 999px;
       border: 1px solid rgba(192, 132, 252, 0.42);
       background: rgba(31, 18, 54, 0.65);
       color: #f3e8ff;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 600;
       cursor: pointer;
-      transition: background-color 0.15s ease, border-color 0.15s ease;
+      white-space: nowrap;
+      transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
     }
     .mode-switch-pill.active, .mode-switch-pill:hover {
       background: rgba(126, 34, 206, 0.55);
       border-color: #5eead4;
       color: #ffffff;
+    }
+    .quick-v2-pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(251, 191, 36, 0.44);
+      background: rgba(38, 19, 26, 0.72);
+      color: #fef3c7;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: transform 0.12s ease, border-color 0.15s ease, background-color 0.15s ease;
+    }
+    .quick-v2-pill:hover {
+      transform: translateY(-1px);
+      background: rgba(127, 29, 29, 0.72);
+      border-color: #fde047;
+      color: #ffffff;
+    }
+    .quick-v2-pill.active {
+      background: linear-gradient(135deg, rgba(6, 95, 70, 0.88), rgba(15, 118, 110, 0.88));
+      border-color: #6ee7b7;
+      color: #ecfdf5;
     }
     .open-ide-btn {
       padding: 4px 12px;
@@ -380,6 +413,13 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      transition: background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+    }
+    .send-circle.is-stopping {
+      background: #ef4444;
+      color: #ffffff;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.72);
+      font-size: 10px;
     }
   </style>
 </head>
@@ -405,13 +445,16 @@
           <button type="button" class="nav-icon-btn">←</button>
           <button type="button" class="nav-icon-btn">→</button>
           <button type="button" class="nav-icon-btn">🔍</button>
-          <span data-testid="breadcrumb-segment" id="top-breadcrumb" style="margin-left:8px; font-weight:500;">Shinobu Wisteria — Live Preview</span>
+          <span data-testid="breadcrumb-segment" id="top-breadcrumb" style="margin-left:8px; font-weight:500;">Antigravity Custom Theme v2.0 — Live Preview</span>
         </div>
         <div class="toolbar-right">
-          <button type="button" class="mode-switch-pill active" id="btn-view-welcome">1. Màn hình Welcome</button>
-          <button type="button" class="mode-switch-pill" id="btn-view-chat">2. Màn hình Hội thoại & Split SVG</button>
+          <button type="button" class="mode-switch-pill active" id="btn-view-welcome">1. Welcome</button>
+          <button type="button" class="mode-switch-pill" id="btn-view-chat">2. Hội thoại &amp; SVG</button>
+          <span class="toolbar-sep" aria-hidden="true"></span>
+          <button type="button" class="quick-v2-pill" id="btn-demo-squad" title="Triệu tập 5 Đại Trụ hiệp chiến &amp; Nung đỏ Hách Đao">⚔️ Thử Quân Đoàn Cửu Trụ</button>
+          <button type="button" class="quick-v2-pill" id="btn-demo-trailer" title="Diễn tự động Trailer điện ảnh 15s (Alt+Shift+C)">🎬 Trailer 15s</button>
+          <button type="button" class="quick-v2-pill" id="btn-demo-shield" title="Bật/Tắt Khiên Che Mật dự án (Alt+Shift+P)">🛡️ Khiên Che Mật</button>
           <button type="button" class="mode-switch-pill" id="btn-open-studio">🎨 Custom Theme Studio</button>
-          <button type="button" class="open-ide-btn border">Open IDE</button>
         </div>
       </div>
     </div>
@@ -518,14 +561,14 @@
 
           <div class="preview-column" data-side-panel-body="true">
             <div class="preview-tabs">
-              <span class="preview-tab">🦋 shinobu_ornament.svg</span>
+              <span class="preview-tab" id="showcase-tab-pill">🦋 shinobu_ornament.svg</span>
             </div>
             <div class="preview-breadcrumb">
-              skills &rsaquo; antigravity-custom-theme &rsaquo; themes &rsaquo; assets &rsaquo; <strong style="color:#f8fafc;">shinobu_ornament.svg</strong>
+              skills &rsaquo; antigravity-custom-theme &rsaquo; themes &rsaquo; assets &rsaquo; <strong style="color:#f8fafc;" id="showcase-breadcrumb-file">shinobu_ornament.svg</strong>
             </div>
             <div class="svg-showcase">
-              <span class="svg-showcase-hint">Bản xem trước cận cảnh Vector &amp; Chibi Animation (180×88)</span>
-              <img src="./themes/assets/shinobu_ornament.svg" alt="Chibi Shinobu Kocho Ornament SVG" />
+              <span class="svg-showcase-hint" id="showcase-hint-label">Bản xem trước cận cảnh Vector &amp; Chibi Animation (180×88)</span>
+              <img id="showcase-svg-img" src="./themes/assets/shinobu_ornament.svg" alt="Chibi Shinobu Kocho Ornament SVG" />
             </div>
           </div>
         </div>
@@ -579,6 +622,9 @@
       const btnWelcome = document.getElementById('btn-view-welcome');
       const btnChat = document.getElementById('btn-view-chat');
       const btnStudio = document.getElementById('btn-open-studio');
+      const btnSquad = document.getElementById('btn-demo-squad');
+      const btnTrailer = document.getElementById('btn-demo-trailer');
+      const btnShield = document.getElementById('btn-demo-shield');
       const sidebarNew = document.getElementById('sidebar-new-conv');
       const sidebarSettings = document.getElementById('sidebar-settings-btn');
       const convLink = document.getElementById('conv-link-npc');
@@ -591,12 +637,102 @@
       const projStrip = document.getElementById('composer-project-strip');
       const breadcrumb = document.getElementById('top-breadcrumb');
 
-      function setMode(mode) {
-        if (mode === 'chat') {
+      const showcaseTabPill = document.getElementById('showcase-tab-pill');
+      const showcaseBreadcrumbFile = document.getElementById('showcase-breadcrumb-file');
+      const showcaseHintLabel = document.getElementById('showcase-hint-label');
+      const showcaseImg = document.getElementById('showcase-svg-img');
+
+      let currentMode = 'welcome';
+
+      function extractCssRuleUrl(cssText, selectorPattern) {
+        if (!cssText) return '';
+        const re = new RegExp(selectorPattern + '\\s*\\{[^}]*?background-image:\\s*url\\(["\']?([^"\')]+)["\']?\\)', 'i');
+        const m = cssText.match(re);
+        return (m && m[1]) ? m[1].trim() : '';
+      }
+
+      function getActiveThemeLabel() {
+        const core = window.__AGY_THEME_CORE__;
+        if (core && typeof core.getSnapshot === 'function') {
+          try {
+            const snap = core.getSnapshot();
+            if (snap && snap.themeName) return snap.themeName;
+          } catch (_) {}
+        }
+        try {
+          const saved = localStorage.getItem('agy_theme_v3');
+          if (saved) return saved;
+        } catch (_) {}
+        return 'Shinobu Wisteria';
+      }
+
+      function syncDynamicOrnamentShowcase() {
+        const styleEl = document.getElementById('antigravity-custom-theme-active');
+        const cssText = styleEl ? (styleEl.textContent || '') : '';
+        const themeName = getActiveThemeLabel();
+
+        const composerSticker = extractCssRuleUrl(cssText, '\\.surface-composer::before');
+        const bubbleSticker = extractCssRuleUrl(cssText, '\\.agy-user-bubble-frame::before');
+        const cornerSvg = extractCssRuleUrl(cssText, '\\.surface-composer::after');
+
+        const chosenUrl = composerSticker || bubbleSticker || cornerSvg || './themes/assets/shinobu_ornament.svg';
+        const isCornerOnly = !composerSticker && !bubbleSticker && Boolean(cornerSvg);
+
+        let assetFile = 'theme_ornament.svg';
+        if (/^data:image\/svg\+xml/i.test(chosenUrl)) {
+          const slug = String(themeName || 'multiverse')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .slice(0, 28) || 'multiverse';
+          assetFile = slug + (isCornerOnly ? '_corner.svg' : '_ornament.svg');
+        } else {
+          const cleanPath = chosenUrl.split('?')[0].split('#')[0];
+          const parts = cleanPath.split('/');
+          assetFile = parts[parts.length - 1] || 'shinobu_ornament.svg';
+        }
+
+        if (showcaseImg && showcaseImg.getAttribute('src') !== chosenUrl) {
+          showcaseImg.setAttribute('src', chosenUrl);
+        }
+        if (showcaseImg) {
+          showcaseImg.alt = themeName + ' — ' + assetFile;
+          if (isCornerOnly) {
+            showcaseImg.style.width = 'min(52%, 220px)';
+            showcaseImg.style.marginBottom = '42px';
+          } else {
+            showcaseImg.style.width = 'min(92%, 680px)';
+            showcaseImg.style.marginBottom = '-8px';
+          }
+        }
+        if (showcaseTabPill) {
+          showcaseTabPill.textContent = (isCornerOnly ? '💠 ' : '🦋 ') + assetFile;
+        }
+        if (showcaseBreadcrumbFile) {
+          showcaseBreadcrumbFile.textContent = assetFile;
+        }
+        if (showcaseHintLabel) {
+          showcaseHintLabel.textContent = isCornerOnly
+            ? (themeName + ' — Hoa văn Góc Khung (Corner Filigree SVG)')
+            : (themeName + ' — Vector & Chibi Ornament Showcase');
+        }
+        if (currentMode === 'welcome' && breadcrumb) {
+          breadcrumb.textContent = themeName + ' — Live Preview v2.0';
+        }
+      }
+
+      function setMode(mode, skipReapply) {
+        const nextMode = mode === 'chat' ? 'chat' : 'welcome';
+        const modeChanged = currentMode !== nextMode;
+        currentMode = nextMode;
+
+        if (nextMode === 'chat') {
           welcomeView.style.display = 'none';
           chatView.style.display = 'flex';
           projStrip.style.display = 'none';
-          slotChat.appendChild(composer);
+          if (composer.parentElement !== slotChat) {
+            slotChat.appendChild(composer);
+          }
           btnWelcome.classList.remove('active');
           btnChat.classList.add('active');
           convLink.classList.add('active');
@@ -605,15 +741,19 @@
           chatView.style.display = 'none';
           welcomeView.style.display = 'flex';
           projStrip.style.display = 'flex';
-          slotWelcome.appendChild(composer);
+          if (composer.parentElement !== slotWelcome) {
+            slotWelcome.appendChild(composer);
+          }
           btnChat.classList.remove('active');
           btnWelcome.classList.add('active');
           convLink.classList.remove('active');
-          breadcrumb.textContent = 'Shinobu Wisteria — Live Preview';
+          breadcrumb.textContent = getActiveThemeLabel() + ' — Live Preview v2.0';
         }
-        if (window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__) {
+
+        if (!skipReapply && modeChanged && window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__) {
           window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__();
         }
+        syncDynamicOrnamentShowcase();
       }
 
       btnWelcome.addEventListener('click', () => setMode('welcome'));
@@ -629,16 +769,167 @@
       btnStudio.addEventListener('click', openModal);
       sidebarSettings.addEventListener('click', openModal);
 
-      // Allow sending test user messages in preview
+      // Quick v2.0 Experience Toolbar Handlers
+      let squadHeatResetTimer = 0;
+      if (btnSquad) {
+        btnSquad.addEventListener('click', () => {
+          if (window.__AGY_SQUAD_RAID__ && typeof window.__AGY_SQUAD_RAID__.simulateRaid === 'function') {
+            window.__AGY_SQUAD_RAID__.simulateRaid({ count: 5, durationMs: 6200 });
+          }
+          if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
+            clearTimeout(squadHeatResetTimer);
+            window.__AGY_TOKEN_HUD__.setBladeBonusHeat(96);
+            squadHeatResetTimer = setTimeout(() => {
+              if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
+                window.__AGY_TOKEN_HUD__.setBladeBonusHeat(0);
+              }
+            }, 6400);
+          }
+        });
+      }
+
+      function syncHeaderQuickStates() {
+        const dir = window.__AGY_CINEMA_DIRECTOR__;
+        if (btnShield) {
+          const shieldOn = Boolean(
+            (dir && typeof dir.isPrivacyShieldActive === 'function' && dir.isPrivacyShieldActive()) ||
+            document.documentElement.dataset.agyPrivacyShield === '1'
+          );
+          btnShield.classList.toggle('active', shieldOn);
+          btnShield.textContent = shieldOn ? '🛡️ Đang Bật Khiên' : '🛡️ Khiên Che Mật';
+        }
+        if (btnTrailer && dir && typeof dir.isShowcaseRunning === 'function') {
+          const running = Boolean(dir.isShowcaseRunning());
+          btnTrailer.classList.toggle('active', running);
+          btnTrailer.textContent = running ? '⏹️ Dừng Trailer' : '🎬 Trailer 15s';
+        }
+      }
+
+      if (btnTrailer) {
+        btnTrailer.addEventListener('click', () => {
+          if (window.__AGY_CINEMA_DIRECTOR__ && typeof window.__AGY_CINEMA_DIRECTOR__.startShowcase === 'function') {
+            window.__AGY_CINEMA_DIRECTOR__.startShowcase();
+            syncHeaderQuickStates();
+          }
+        });
+      }
+
+      if (btnShield) {
+        btnShield.addEventListener('click', () => {
+          if (window.__AGY_CINEMA_DIRECTOR__ && typeof window.__AGY_CINEMA_DIRECTOR__.togglePrivacyShield === 'function') {
+            window.__AGY_CINEMA_DIRECTOR__.togglePrivacyShield();
+            syncHeaderQuickStates();
+          }
+        });
+      }
+
+      // Observe <head> & <html> so theme changes & Privacy Shield toggles sync immediately
+      if (typeof MutationObserver !== 'undefined') {
+        const headObs = new MutationObserver(() => syncDynamicOrnamentShowcase());
+        if (document.head) {
+          headObs.observe(document.head, { childList: true, subtree: true, characterData: true });
+        }
+        const rootObs = new MutationObserver(() => syncHeaderQuickStates());
+        rootObs.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ['data-agy-privacy-shield']
+        });
+      }
+      window.addEventListener('storage', syncDynamicOrnamentShowcase);
+      setInterval(syncHeaderQuickStates, 800);
+      syncDynamicOrnamentShowcase();
+      syncHeaderQuickStates();
+
+      // Demo Prompt & 1.4s AI Reasoning + Red Blade + Koto/Furin Chime Simulation
       const promptInput = document.getElementById('main-prompt-input');
       const sendBtn = document.getElementById('main-send-btn');
       const chatList = document.getElementById('demo-chat-list');
 
+      let demoWorking = false;
+      let demoWorkTimer = 0;
+      let demoMidHeatTimer = 0;
+      let demoCoolTimer = 0;
+      let demoPendingRespEl = null;
+      let demoTurnSeq = 1;
+      let demoStepIdx = 2;
+      let demoCtxTokens = 14800;
+
+      function emitDemoTelemetry(isWorkingNow, finishedNow) {
+        if (finishedNow) {
+          demoTurnSeq += 1;
+          demoCtxTokens += 390;
+        }
+        demoStepIdx += 1;
+        const snap = {
+          ok: true,
+          isWorking: Boolean(isWorkingNow),
+          turnFinishedSeq: demoTurnSeq,
+          slashSeq: 0,
+          contextUsed: demoCtxTokens,
+          turnTokens: isWorkingNow ? 96 : 390,
+          totalOutputTokens: demoTurnSeq * 390,
+          turnCount: demoTurnSeq,
+          stepCount: demoStepIdx,
+          latestStepIndex: demoStepIdx
+        };
+        if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.ingestTelemetrySnapshot === 'function') {
+          window.__AGY_TOKEN_HUD__.ingestTelemetrySnapshot(snap);
+        } else if (window.__AGY_BIO_AUDIO__ && typeof window.__AGY_BIO_AUDIO__.onTelemetry === 'function') {
+          window.__AGY_BIO_AUDIO__.onTelemetry(snap);
+        }
+      }
+
+      function finishDemoReasoning(aborted) {
+        clearTimeout(demoWorkTimer);
+        clearTimeout(demoMidHeatTimer);
+        clearTimeout(demoCoolTimer);
+        demoWorkTimer = 0;
+        demoMidHeatTimer = 0;
+        demoWorking = false;
+
+        sendBtn.classList.remove('is-stopping');
+        sendBtn.removeAttribute('data-testid');
+        sendBtn.removeAttribute('aria-label');
+        sendBtn.textContent = '↑';
+        sendBtn.title = 'Gửi thử tin nhắn';
+
+        if (demoPendingRespEl && demoPendingRespEl.isConnected) {
+          demoPendingRespEl.textContent = '';
+          const meta = document.createElement('div');
+          meta.style.cssText = 'font-size:12px; color:#a78bfa; margin-bottom:6px;';
+          meta.textContent = aborted ? 'Đã dừng suy luận ▸' : 'Worked for 1.4s • Hách Đao hoàn tất ▸';
+
+          const p = document.createElement('p');
+          p.style.cssText = 'margin:0; line-height:1.55; color:#f1f5f9;';
+          p.textContent = aborted
+            ? 'Đã ngắt lượt suy luận theo yêu cầu của Chủ nhân.'
+            : 'Đã hoàn tất phân tích ở 60fps Live Glass! Thanh Nhật Luân Hách Đao đã rèn rực đỏ và chuông đàn Koto / chuông gió Furin Điệp Phủ vừa ngân vang báo hiệu xong việc.';
+
+          demoPendingRespEl.appendChild(meta);
+          demoPendingRespEl.appendChild(p);
+          chatList.scrollTop = chatList.scrollHeight;
+        }
+        demoPendingRespEl = null;
+
+        // Complete turn -> triggers Koto/Furin chime smoothly via telemetry contract
+        emitDemoTelemetry(false, !aborted);
+
+        demoCoolTimer = setTimeout(() => {
+          if (!demoWorking && window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
+            window.__AGY_TOKEN_HUD__.setBladeBonusHeat(0);
+          }
+        }, 1200);
+      }
+
       function sendDemoPrompt() {
+        if (demoWorking) {
+          finishDemoReasoning(true);
+          return;
+        }
         const val = promptInput.value.trim();
         if (!val) return;
         promptInput.value = '';
-        setMode('chat');
+
         const row = document.createElement('div');
         row.className = 'user-msg-row group/user-input-step';
         const userWrap = document.createElement('div');
@@ -652,10 +943,45 @@
         userWrap.appendChild(frame);
         row.appendChild(userWrap);
         chatList.appendChild(row);
-        chatList.scrollTop = chatList.scrollHeight;
-        if (window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__) {
+
+        const resp = document.createElement('div');
+        resp.setAttribute('data-testid', 'agent-response');
+        const thinkingLine = document.createElement('div');
+        thinkingLine.style.cssText = 'font-size:12.5px; color:#fde047; font-weight:500;';
+        thinkingLine.textContent = '🔥 Đang suy luận & rèn Nhật Luân Hách Đao... (1.4s)';
+        resp.appendChild(thinkingLine);
+        chatList.appendChild(resp);
+        demoPendingRespEl = resp;
+
+        // Single clean mode switch / apply (no duplicate __ANTIGRAVITY_APPLY_CUSTOM_THEME__ call!)
+        if (currentMode !== 'chat') {
+          setMode('chat', false);
+        } else if (window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__) {
           window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__();
         }
+        chatList.scrollTop = chatList.scrollHeight;
+
+        // Enter 1.4s Working state: expose Stop button for HUD live signal + heat up Red Blade
+        demoWorking = true;
+        sendBtn.classList.add('is-stopping');
+        sendBtn.setAttribute('data-testid', 'input-cancel-button');
+        sendBtn.setAttribute('aria-label', 'Stop execution');
+        sendBtn.textContent = '■';
+        sendBtn.title = 'Dừng thực thi (Stop execution)';
+
+        emitDemoTelemetry(true, false);
+        if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
+          window.__AGY_TOKEN_HUD__.setBladeBonusHeat(78);
+        }
+        demoMidHeatTimer = setTimeout(() => {
+          if (demoWorking && window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
+            window.__AGY_TOKEN_HUD__.setBladeBonusHeat(100);
+          }
+        }, 650);
+
+        demoWorkTimer = setTimeout(() => {
+          finishDemoReasoning(false);
+        }, 1400);
       }
 
       sendBtn.addEventListener('click', sendDemoPrompt);

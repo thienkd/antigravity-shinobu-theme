@@ -153,8 +153,9 @@
     squadEl: null,
     headerCountEl: null,
     unitsWrapEl: null,
+    activeCid: '',
     unitsById: new Map(),           // subId -> unit record
-    assignedHeroBySubId: new Map(), // subId -> heroKey (stable across lifecycle)
+    assignedHeroBySubId: new Map(), // subId -> heroKey (bounded <= 150)
     seenCompletedIds: new Set(),
     comboByHero: Object.create(null),
     simTimers: [],
@@ -222,17 +223,34 @@
     return 'system';
   }
 
-  function assignHeroForSubagent(subId, typeName, roleText) {
+  function rememberAssignedHero(subId, heroKey) {
     if (state.assignedHeroBySubId.has(subId)) {
-      return state.assignedHeroBySubId.get(subId);
+      state.assignedHeroBySubId.delete(subId);
     }
+    state.assignedHeroBySubId.set(subId, heroKey);
+    while (state.assignedHeroBySubId.size > 150) {
+      const oldestKey = state.assignedHeroBySubId.keys().next().value;
+      state.assignedHeroBySubId.delete(oldestKey);
+    }
+  }
 
+  function assignHeroForSubagent(subId, typeName, roleText) {
     const usedNow = new Set();
     const hostHero = getHostCharId();
     if (hostHero) usedNow.add(hostHero);
-    state.unitsById.forEach((u) => {
-      if (u && u.hero) usedNow.add(u.hero);
+    state.unitsById.forEach((u, otherId) => {
+      if (otherId !== subId && u && u.hero) {
+        usedNow.add(u.hero);
+      }
     });
+
+    if (state.assignedHeroBySubId.has(subId)) {
+      const cachedHero = state.assignedHeroBySubId.get(subId);
+      if (cachedHero && !usedNow.has(cachedHero)) {
+        rememberAssignedHero(subId, cachedHero);
+        return cachedHero;
+      }
+    }
 
     const poolKey = classifyPoolKey(typeName, roleText);
     const primaryPool = POOLS[poolKey] || POOLS.system;
@@ -242,7 +260,7 @@
     for (let i = 0; i < primaryPool.length; i++) {
       const candidate = primaryPool[(h + i) % primaryPool.length];
       if (!usedNow.has(candidate)) {
-        state.assignedHeroBySubId.set(subId, candidate);
+        rememberAssignedHero(subId, candidate);
         return candidate;
       }
     }
@@ -251,14 +269,14 @@
     for (let i = 0; i < ALL_HERO_KEYS.length; i++) {
       const candidate = ALL_HERO_KEYS[(h + i) % ALL_HERO_KEYS.length];
       if (!usedNow.has(candidate)) {
-        state.assignedHeroBySubId.set(subId, candidate);
+        rememberAssignedHero(subId, candidate);
         return candidate;
       }
     }
 
     // 3. All 13+ slots full: deterministic pick from specialized pool
     const fallbackHero = primaryPool[h % primaryPool.length];
-    state.assignedHeroBySubId.set(subId, fallbackHero);
+    rememberAssignedHero(subId, fallbackHero);
     return fallbackHero;
   }
 
@@ -771,8 +789,15 @@
         const raw = localStorage.getItem('agy_kny_sfx_muted');
         if (raw === '1' || raw === 'true') return true;
       }
-      if (typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__ && typeof window.__AGY_BIO_AUDIO__.isEnabled === 'function') {
-        if (!window.__AGY_BIO_AUDIO__.isEnabled()) return true;
+      if (typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__) {
+        const bio = window.__AGY_BIO_AUDIO__;
+        if (typeof bio.getPrefs === 'function') {
+          const prefs = bio.getPrefs();
+          if (prefs && prefs.swordSfxEnabled === false) return true;
+        }
+      }
+      if (typeof window !== 'undefined' && window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.isSoundMuted === 'function') {
+        if (window.__AGY_KNY_SKILLS__.isSoundMuted()) return true;
       }
     } catch (_) {}
     return false;
@@ -943,7 +968,7 @@
 
     const unitRecord = {
       id: sub.id,
-      isSim: Boolean(sub.isSim || state.simActive || /^sim-|^showcase-/i.test(String(sub.id))),
+      isSim: Boolean(sub.isSim || /^sim-|^showcase-/i.test(String(sub.id))),
       hero: meta.hero,
       meta,
       actionUrl,
@@ -1035,7 +1060,31 @@
     refreshSquadVisibility();
   }
 
-  function applySquadLists(activeRawList, completedRawList) {
+  function resetConversation(nextCid) {
+    const normCid = typeof nextCid === 'string' ? nextCid.trim() : '';
+    state.activeCid = normCid;
+    state.seenCompletedIds.clear();
+    state.lastSlashSeqHandled = 0;
+
+    // Immediately remove real units of the previous conversation without false 「完」 victory celebration!
+    const toRemove = [];
+    state.unitsById.forEach((u, id) => {
+      if (u && !u.isSim) {
+        clearTimeout(u.enterTimer);
+        clearTimeout(u.retreatTimer);
+        clearTimeout(u.removeTimer);
+        if (u.wrapEl && u.wrapEl.parentElement) {
+          u.wrapEl.remove();
+        }
+        toRemove.push(id);
+      }
+    });
+    toRemove.forEach((id) => state.unitsById.delete(id));
+    refreshSquadVisibility();
+  }
+
+  function applySquadLists(activeRawList, completedRawList, isSimSync) {
+    const simMode = Boolean(isSimSync);
     const activeList = Array.isArray(activeRawList)
       ? activeRawList.map((item, i) => normalizeSubEntry(item, i)).filter(Boolean)
       : [];
@@ -1051,6 +1100,7 @@
     const activeIds = new Set();
 
     activeList.forEach((sub) => {
+      if (simMode) sub.isSim = true;
       activeIds.add(sub.id);
       state.seenCompletedIds.delete(sub.id);
       let unit = state.unitsById.get(sub.id);
@@ -1076,11 +1126,15 @@
       }
     });
 
-    // Newly completed subagents (either present in recentCompletedSubagents or vanished from activeList)
+    // Newly completed subagents (strictly isolated by unit.isSim === simMode so simulation never touches real Hashira!)
     const completedMap = new Map();
-    completedList.forEach((c) => completedMap.set(c.id, c));
+    completedList.forEach((c) => {
+      if (simMode) c.isSim = true;
+      completedMap.set(c.id, c);
+    });
 
     state.unitsById.forEach((unit, id) => {
+      if (Boolean(unit.isSim) !== simMode) return;
       if (!activeIds.has(id) && unit.lifecycle === 'working') {
         markUnitCompletedAndRetreat(unit, completedMap.get(id) || null);
       }
@@ -1103,14 +1157,33 @@
 
   function sync(snap) {
     if (!snap || typeof snap !== 'object') return;
-    if (state.simActive && !snap.__fromSim) return;
+    const isSimSync = Boolean(snap.__fromSim);
 
-    applySquadLists(snap.activeSubagents, snap.recentCompletedSubagents);
+    if (!isSimSync && snap.cid) {
+      if (state.activeCid && state.activeCid !== 'latest' && snap.cid !== state.activeCid) {
+        resetConversation(snap.cid);
+      } else if (!state.activeCid || state.activeCid === 'latest') {
+        state.activeCid = snap.cid;
+      }
+    }
+
+    applySquadLists(snap.activeSubagents, snap.recentCompletedSubagents, isSimSync);
   }
 
   /* ==========================================================================
    * VICTORY STAMP 「滅」 (ÁC QUỶ DIỆT SÁT) & KASUGAI CROW FLYBY
    * ========================================================================== */
+
+  function formatVictoryReasonVi(rawReason) {
+    const key = typeof rawReason === 'string' ? rawReason.trim() : '';
+    if (!key || key === 'bug_slashed') {
+      return 'Đã chém đứt tà khí lỗi (Exit 0) • Rèn Hách Đao +25%';
+    }
+    if (key === 'git_pushed') {
+      return 'Khải hoàn đẩy code lên kho lưu trữ (Git Push thành công)!';
+    }
+    return key.slice(0, 84);
+  }
 
   function triggerVictoryStamp(rawOpts) {
     if (typeof document === 'undefined' || !document.body) return;
@@ -1148,10 +1221,7 @@
 
     const sub = document.createElement('div');
     sub.className = 'agy-metsu-sub';
-    const cleanReason = typeof opts.reason === 'string' && opts.reason.trim()
-      ? opts.reason.trim().slice(0, 72)
-      : 'Đã chém đứt tà khí lỗi • Khải hoàn rèn Hách Đao (+25%)';
-    sub.textContent = cleanReason;
+    sub.textContent = formatVictoryReasonVi(opts.reason);
 
     col.appendChild(headline);
     col.appendChild(sub);
@@ -1212,7 +1282,16 @@
         toRemove.push(id);
       }
     });
-    toRemove.forEach((id) => state.unitsById.delete(id));
+    toRemove.forEach((id) => {
+      state.unitsById.delete(id);
+      state.assignedHeroBySubId.delete(id);
+      state.seenCompletedIds.delete(id);
+    });
+    Array.from(state.assignedHeroBySubId.keys()).forEach((k) => {
+      if (/^sim-|^showcase-/i.test(String(k))) {
+        state.assignedHeroBySubId.delete(k);
+      }
+    });
     refreshSquadVisibility();
   }
 
@@ -1319,6 +1398,9 @@
       clearTimeout(u.removeTimer);
     });
     state.unitsById.clear();
+    state.assignedHeroBySubId.clear();
+    state.seenCompletedIds.clear();
+    state.activeCid = '';
 
     if (typeof document !== 'undefined') {
       document.querySelectorAll(SQUAD_TAG).forEach((el) => el.remove());
@@ -1338,6 +1420,7 @@
   const api = {
     mount: ensureMounted,
     sync,
+    resetConversation,
     simulateRaid,
     stopSimulation,
     triggerVictoryStamp,
