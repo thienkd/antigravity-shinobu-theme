@@ -1631,9 +1631,9 @@
       } else if (wave.children.length === 0) {
         wave.innerHTML = '<i aria-hidden="true"></i>';
       }
-      wave.style.setProperty('--agy-bwave-c1', `rgba(${meta.rgb1}, 0.44)`);
-      wave.style.setProperty('--agy-bwave-c2', `rgba(${meta.rgb2}, 0.20)`);
-      wave.style.setProperty('--agy-bwave-line', meta.primary);
+      wave.style.setProperty('--agy-bwave-c1', 'rgba(239, 68, 68, 0.48)');
+      wave.style.setProperty('--agy-bwave-c2', 'rgba(253, 224, 71, 0.24)');
+      wave.style.setProperty('--agy-bwave-line', '#fde047');
     });
   }
 

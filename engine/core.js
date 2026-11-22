@@ -19,7 +19,7 @@
 
   Object.values(THEMES).forEach((cfg) => {
     if (!cfg || typeof cfg !== 'object') return;
-    ['wallpaper', 'sticker', 'actionSticker', 'userActionSticker', 'cornerSvg', 'userAvatar', 'agentAvatar'].forEach((k) => {
+    ['wallpaper', 'sticker', 'userSticker', 'actionSticker', 'userActionSticker', 'cornerSvg', 'userCornerSvg', 'userAvatar', 'agentAvatar'].forEach((k) => {
       if (typeof cfg[k] === 'string' && cfg[k]) {
         cfg[k] = resolveThemeAssetUrl(cfg[k]);
       }
@@ -295,9 +295,11 @@
 
     const defaultCornerSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M2 20 L2 6 Q2 2 6 2 L20 2' stroke='%23fbbf24' stroke-width='1.5' fill='none' opacity='0.65'/%3E%3Ccircle cx='6' cy='6' r='2' fill='%23fbbf24' opacity='0.75'/%3E%3C/svg%3E";
     const cornerFiligreeUrl = bubbleTheme.cornerSvg || defaultCornerSvg;
+    const userCornerFiligreeUrl = bubbleTheme.userCornerSvg || cornerFiligreeUrl;
+    const userBubbleStickerUrl = bubbleTheme.userSticker || bubbleTheme.sticker || '';
 
     const bubblePadTop = Math.max(18, Math.abs(bubbleTheme.stickerTop || 0) + 8);
-    const bubbleStickerCss = bubbleTheme.sticker ? (bubbleTheme.isOrnament ? `
+    const bubbleStickerCss = userBubbleStickerUrl ? (bubbleTheme.isOrnament ? `
       .group\\/user-input-step {
         padding-top: ${bubbleTheme.isChibiNpc ? bubblePadTop : 18}px !important;
         overflow: visible !important;
@@ -309,7 +311,7 @@
         right: ${bubbleTheme.stickerRight}px;
         width: ${bubbleTheme.stickerW}px;
         height: ${bubbleTheme.stickerH}px;
-        background-image: url("${bubbleTheme.sticker}");
+        background-image: url("${userBubbleStickerUrl}");
         background-size: contain;
         background-position: ${bubbleTheme.isChibiNpc ? 'bottom center' : 'center'};
         background-repeat: no-repeat;
@@ -332,7 +334,7 @@
         right: ${bubbleTheme.stickerRight}px;
         width: ${bubbleTheme.stickerW}px;
         height: ${bubbleTheme.stickerH}px;
-        background-image: url("${bubbleTheme.sticker}");
+        background-image: url("${userBubbleStickerUrl}");
         background-size: contain;
         background-position: bottom center;
         background-repeat: no-repeat;
@@ -806,8 +808,8 @@
         top: 3px;
         left: 3px;
         width: ${bubbleTheme.isOrnament ? '16px' : '14px'};
-        height: ${bubbleTheme.isOrnament ? '16px' : '14px'};
-        background-image: url("${cornerFiligreeUrl}");
+        height: ${bubbleTheme.isOrnament ? '16px' : '16px'};
+        background-image: url("${userCornerFiligreeUrl}");
         background-size: contain;
         background-repeat: no-repeat;
         pointer-events: none;
@@ -2471,23 +2473,23 @@
         hit.innerHTML = '<i aria-hidden="true"></i>';
         hit.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill === 'function') {
-            window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill({
-              originEl: e.currentTarget,
+          // Clicking Yoriichi Chibi on the User's own message frame launches Yoriichi's Sun Breathing!
+          if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.castSkill === 'function') {
+            rt.yoriBubbleCombo = ((rt.yoriBubbleCombo || 0) + 1) % 4;
+            window.__AGY_KNY_SKILLS__.castSkill('yoriichi', rt.yoriBubbleCombo, {
+              charId: 'yoriichi',
+              originRect: e.currentTarget.getBoundingClientRect(),
               sourceFrameEl: frame,
-              fromChibiClick: true
+              composerEl: frame,
+              actionSticker: bTheme.userActionSticker
             });
             return;
           }
           triggerChibiBounce(frame);
-          const composerEl = document.querySelector('.surface-composer');
-          if (composerEl) triggerChibiBounce(composerEl);
-          const curText = document.querySelector('#agy-shinobu-npc-wrap .agy-npc-dialog-text')?.textContent || '';
-          speakShinobuLine(pickRandomLine('act1', curText), true);
         });
         frame.appendChild(hit);
       }
-      hit.title = `⚡ Nhấn vào ${prof.badgeLabel || 'Chibi'} để nhảy ra thi triển Hơi Thở!`;
+      hit.title = '☀️ Khai Tổ Vũ Điệu Hỏa Thần (Anh) — Nhấn để Chibi Yoriichi nhảy ra xuất chiêu!';
       hit.setAttribute('aria-label', hit.title);
       if (hit.children.length === 0) hit.innerHTML = '<i aria-hidden="true"></i>';
     });

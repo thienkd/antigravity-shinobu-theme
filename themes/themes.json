@@ -117,7 +117,9 @@
       }
     },
     "actionSticker": "assets/ubuyashiki_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "🦋 Trùng Trụ — Shinobu Kocho": {
     "concept": "Wisteria Moonlight & Interactive Chibi Shinobu NPC • 60fps Live Glass",
@@ -237,7 +239,9 @@
       }
     },
     "actionSticker": "assets/shinobu_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "🌊 Thủy Trụ — Giyu Tomioka": {
     "concept": "Eleventh Form: Dead Calm & Azure Stream • Giyu Tomioka",
@@ -357,7 +361,9 @@
       }
     },
     "actionSticker": "assets/giyu_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "🔥 Viêm Trụ — Kyojuro Rengoku": {
     "concept": "Set Your Heart Ablaze • Ninth Form: Rengoku Crimson Gold",
@@ -477,7 +483,9 @@
       }
     },
     "actionSticker": "assets/rengoku_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "💎 Âm Trụ — Tengen Uzui": {
     "concept": "God of Festivities • Flamboyant Ruby, Gold & Turquoise",
@@ -597,7 +605,9 @@
       }
     },
     "actionSticker": "assets/uzui_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "🌫️ Hà Trụ — Muichiro Tokito": {
     "concept": "Seventh Form: Obscuring Clouds & Mint Mist • Muichiro Tokito",
@@ -717,7 +727,9 @@
       }
     },
     "actionSticker": "assets/muichiro_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "🌸 Luyến Trụ — Mitsuri Kanroji": {
     "concept": "Love Breathing • Sakura Mochi Pink & Matcha Blossom",
@@ -837,7 +849,9 @@
       }
     },
     "actionSticker": "assets/mitsuri_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "🐍 Xà Trụ — Obanai Iguro": {
     "concept": "Serpent Breathing • Indigo Night & Heterochromia Gold-Teal",
@@ -957,7 +971,9 @@
       }
     },
     "actionSticker": "assets/obanai_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "🌪️ Phong Trụ — Sanemi Shinazugawa": {
     "concept": "Wind Breathing • Emerald Gale Slash & Storm Silver",
@@ -1077,7 +1093,9 @@
       }
     },
     "actionSticker": "assets/sanemi_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "📿 Nham Trụ — Gyomei Himejima": {
     "concept": "Stone Breathing • Sacred Bodhi Amber & Mossy Bedrock",
@@ -1197,7 +1215,9 @@
       }
     },
     "actionSticker": "assets/gyomei_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "☀️ Tanjiro Kamado — Nhật Luân": {
     "concept": "Hinokami Kagura & Flowing Water • Checkered Emerald & Crimson Sun",
@@ -1317,7 +1337,9 @@
       }
     },
     "actionSticker": "assets/tanjiro_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "🎋 Nezuko Kamado — Hồng Liên": {
     "concept": "Exploding Blood Pink Flame & Bamboo Ribbon • Nezuko Kamado",
@@ -1437,7 +1459,9 @@
       }
     },
     "actionSticker": "assets/nezuko_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "⚡ Zenitsu Agatsuma — Lôi Minh": {
     "concept": "Thunderclap and Flash • Golden Lightning & Sunset Amber",
@@ -1557,7 +1581,9 @@
       }
     },
     "actionSticker": "assets/zenitsu_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "🐗 Inosuke Hashibira — Dã Thú": {
     "concept": "Beast Breathing • Serrated Ice-Steel Blue & Wild Forest Emerald",
@@ -1677,7 +1703,9 @@
       }
     },
     "actionSticker": "assets/inosuke_action.png",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.png",
+    "userSticker": "assets/yoriichi_ornament.svg",
+    "userCornerSvg": "assets/yoriichi_corner.svg"
   },
   "WLOP Cosmic": {
     "concept": "Cosmic Violin & Starlight • High-Contrast Glass",
