@@ -137,12 +137,13 @@ describe('F19 — Gói Bundle Thật & Kiểm Thử Live E2E CDP Không Xâm L�
             'Master IIFE phải gọi pre-clean với { isReinject: true } trước khi khởi tạo 10 EXTRA_MODULES'
         );
 
-        // Cả 11 phân hệ lõi đều hiện diện trong bundle
+        // Cả 12 phân hệ lõi (kể cả 3D VFX Kernel Giai đoạn 2) đều hiện diện trong bundle
         const markers = [
             '__AGY_SEC__',
             '__AGY_KNY_ICONS__',
             '__AGY_BIO_AUDIO__',
             '__AGY_KNY_FX_DRAWERS__',
+            '__AGY_KNY_3D_VFX__',
             '__AGY_KNY_SKILLS__',
             '__AGY_KNY_CHIBI_AURA__',
             '__AGY_SQUAD_RAID__',

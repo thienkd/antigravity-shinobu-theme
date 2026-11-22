@@ -33,6 +33,7 @@ const EXTRA_MODULES = [
   'kny_semantic_icons.js',
   'kny_bio_audio.js',
   'kny_fx_modes.js',
+  'kny_3d_vfx_kernel.js',
   'kny_breathing_skills.js',
   'kny_chibi_aura.js',
   'kny_squad_raid.js',

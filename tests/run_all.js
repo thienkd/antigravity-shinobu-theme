@@ -16,6 +16,7 @@ const SUITES = [
     'test_core_forge.js',
     'test_kny_icons_audio_fx.js',
     'test_kny_skills_hud_cinema.js',
+    'test_3d_breathing_vfx.js',
     'test_scripts_cli.js',
     'test_live_e2e_cdp.js',
 ];

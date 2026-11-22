@@ -1538,7 +1538,8 @@
       window.__AGY_BIO_AUDIO__,
       window.__AGY_CINEMA_DIRECTOR__,
       window.__AGY_KNY_CHIBI_AURA__,
-      window.__AGY_KNY_SKILLS__
+      window.__AGY_KNY_SKILLS__,
+      window.__AGY_KNY_3D_VFX__
     ].forEach((mod) => {
       if (!mod) return;
       try {
