@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <radialGradient id="sanBg" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#0d3b26"/>
+      <stop offset="68%" stop-color="#061f14"/>
+      <stop offset="100%" stop-color="#030f0a"/>
+    </radialGradient>
+    <linearGradient id="sanBlade" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d1fae5"/>
+      <stop offset="48%" stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <filter id="sanGlow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="1.9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="32" cy="32" r="31" fill="url(#sanBg)"/>
+  <circle cx="32" cy="32" r="29.6" stroke="#34d399" stroke-opacity="0.55" stroke-width="1.35"/>
+
+  <!-- Cyclone Slash Arcs -->
+  <path d="M 12 25 A 21 21 0 0 1 45 13" stroke="#a7f3d0" stroke-width="1.3" stroke-linecap="round" opacity="0.72"/>
+  <path d="M 52 39 A 21 21 0 0 1 19 51" stroke="#34d399" stroke-width="1.3" stroke-linecap="round" opacity="0.72"/>
+
+  <!-- Sanemi 8-Blade Pinwheel Storm Tsuba -->
+  <g filter="url(#sanGlow)" transform="translate(32, 32)">
+    <g fill="url(#sanBlade)" stroke="#ecfdf5" stroke-width="0.75">
+      <path d="M 0 0 L -3.2 -9 L 0 -20 L 3.8 -9 Z"/>
+      <path d="M 0 0 L -3.2 -9 L 0 -20 L 3.8 -9 Z" transform="rotate(45)"/>
+      <path d="M 0 0 L -3.2 -9 L 0 -20 L 3.8 -9 Z" transform="rotate(90)"/>
+      <path d="M 0 0 L -3.2 -9 L 0 -20 L 3.8 -9 Z" transform="rotate(135)"/>
+      <path d="M 0 0 L -3.2 -9 L 0 -20 L 3.8 -9 Z" transform="rotate(180)"/>
+      <path d="M 0 0 L -3.2 -9 L 0 -20 L 3.8 -9 Z" transform="rotate(225)"/>
+      <path d="M 0 0 L -3.2 -9 L 0 -20 L 3.8 -9 Z" transform="rotate(270)"/>
+      <path d="M 0 0 L -3.2 -9 L 0 -20 L 3.8 -9 Z" transform="rotate(315)"/>
+    </g>
+    <circle cx="0" cy="0" r="4.8" fill="#061f14" stroke="#a7f3d0" stroke-width="1.3"/>
+    <rect x="-1.8" y="-3.6" width="3.6" height="7.2" rx="0.8" fill="#ecfdf5"/>
+  </g>
+</svg>

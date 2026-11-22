@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <defs>
+    <linearGradient id="nezCorner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbcfe8"/>
+      <stop offset="50%" stop-color="#f472b6"/>
+      <stop offset="100%" stop-color="#4ade80"/>
+    </linearGradient>
+  </defs>
+  <path d="M 2.5 26 L 2.5 8 Q 2.5 2.5 8 2.5 L 26 2.5" stroke="url(#nezCorner)" stroke-width="1.6" stroke-linecap="round"/>
+  <!-- Mini Asanoha Star & Bamboo Node -->
+  <path d="M 7.8 4.2 L 9.2 7.8 L 12.8 9.2 L 9.2 10.6 L 7.8 14.2 L 6.4 10.6 L 2.8 9.2 L 6.4 7.8 Z" fill="#f472b6" opacity="0.9"/>
+  <circle cx="15.5" cy="5.5" r="1.35" fill="#4ade80"/>
+  <circle cx="5.5" cy="17.5" r="1.25" fill="#fbcfe8"/>
+</svg>

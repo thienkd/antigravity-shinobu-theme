@@ -1,5 +1,31 @@
 (() => {
   const THEMES = /*__THEMES_PLACEHOLDER__*/{};
+
+  function resolveThemeAssetUrl(raw) {
+    if (!raw || typeof raw !== 'string') return '';
+    const trimmed = raw.trim();
+    if (
+      !trimmed ||
+      trimmed.startsWith('data:') ||
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://') ||
+      trimmed.startsWith('blob:')
+    ) {
+      return trimmed;
+    }
+    const base = window.__AGY_ASSET_BASE__ || './themes/';
+    return base.replace(/\/?$/, '/') + trimmed.replace(/^\/+/, '');
+  }
+
+  Object.values(THEMES).forEach((cfg) => {
+    if (!cfg || typeof cfg !== 'object') return;
+    ['wallpaper', 'sticker', 'cornerSvg', 'userAvatar', 'agentAvatar'].forEach((k) => {
+      if (typeof cfg[k] === 'string' && cfg[k]) {
+        cfg[k] = resolveThemeAssetUrl(cfg[k]);
+      }
+    });
+  });
+
   const THEME_KEYS = Object.keys(THEMES);
   const DEFAULT_THEME_KEY = THEME_KEYS[0] || 'Default';
 
@@ -105,6 +131,9 @@
       return;
     }
     const img = new Image();
+    if (/^https?:\/\//i.test(wpUrl)) {
+      img.crossOrigin = 'anonymous';
+    }
     img.onload = () => {
       try {
         const w = 640;
@@ -1195,26 +1224,46 @@
         </div>
 
         <div>
-          <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">Theme Presets (${THEME_KEYS.length})</div>
-          <div style="font-size: 12.5px; color: #a1a1aa; margin-bottom: 14px;">Complete backdrop, palette, unified L-glass, and matching ornaments.</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+            <div>
+              <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 3px;">Theme Presets (${THEME_KEYS.length})</div>
+              <div style="font-size: 12.5px; color: #a1a1aa;">Bộ sưu tập Thanh Gươm Diệt Quỷ (Gia Đình Chúa Công, Cửu Trụ &amp; Bộ Tứ Chính) — 60fps Live Glass &amp; NPC.</div>
+            </div>
+            <div id="agy-preset-filter-bar" style="display: flex; flex-wrap: wrap; gap: 6px;">
+              <button type="button" class="agy-filter-chip" data-filter="all" style="padding: 4px 10px; border-radius: 999px; border: 1px solid ${mainTheme.primary}; background: rgba(255,255,255,0.12); color: #fff; font-size: 11.5px; font-weight: 600; cursor: pointer;">Tất cả (${THEME_KEYS.length})</button>
+              <button type="button" class="agy-filter-chip" data-filter="royal" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(250,204,21,0.45); background: rgba(250,204,21,0.12); color: #fef08a; font-size: 11.5px; font-weight: 600; cursor: pointer;">👑 Chúa Công</button>
+              <button type="button" class="agy-filter-chip" data-filter="hashira" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 11.5px; cursor: pointer;">⚔️ Cửu Trụ (9)</button>
+              <button type="button" class="agy-filter-chip" data-filter="kamaboko" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 11.5px; cursor: pointer;">🔥 Nhân Vật Chính</button>
+              <button type="button" class="agy-filter-chip" data-filter="classic" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 11.5px; cursor: pointer;">✨ Khác</button>
+            </div>
+          </div>
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
             ${THEME_KEYS.map(name => {
               const th = THEMES[name];
               const isSelected = name === st.themeName;
+              const isRoyal = th.fxMode === 'royal_wisteria' || /Chúa Công|Ubuyashiki/i.test(name);
+              const groupTag = isRoyal ? 'royal' : (/Trụ|Shinobu/i.test(name) ? 'hashira' : (/(Tanjiro|Nezuko|Zenitsu|Inosuke)/i.test(name) ? 'kamaboko' : 'classic'));
               const thumbBg = th.wallpaper
-                ? `linear-gradient(180deg, rgba(0,0,0,0.15), rgba(14,12,12,0.85)), url('${th.wallpaper}')`
+                ? `linear-gradient(180deg, rgba(0,0,0,0.10), rgba(10,8,18,0.86)), url('${th.wallpaper}')`
                 : (th.pureBg || th.bg);
-              const thumbOrnamentStyle = th.isOrnament
-                ? 'right: 10px; bottom: 8px; width: 76px; height: 24px; background-position: center;'
-                : 'right: 12px; bottom: 4px; width: 42px; height: 38px; background-position: bottom center;';
+              const thumbOrnamentStyle = th.isChibiNpc
+                ? 'right: 8px; bottom: 0px; width: 92px; height: 45px; background-position: bottom right;'
+                : (th.isOrnament
+                  ? 'right: 10px; bottom: 8px; width: 76px; height: 24px; background-position: center;'
+                  : 'right: 12px; bottom: 4px; width: 42px; height: 38px; background-position: bottom center;');
+              const borderStyle = isSelected
+                ? (isRoyal ? '1.8px solid #facc15' : '1.5px solid #f4f4f5')
+                : (isRoyal ? '1.2px solid rgba(250, 204, 21, 0.55)' : '1px solid rgba(255, 255, 255, 0.12)');
+              const cardShadow = isRoyal ? 'box-shadow: 0 6px 22px rgba(250, 204, 21, 0.18), inset 0 1px 0 rgba(254, 240, 138, 0.22);' : '';
               return `
-                <div class="agy-preset-card" data-name="${name}" style="border-radius: 12px; border: ${isSelected ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)'}; background: rgba(14, 12, 12, 0.82); overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: border-color 0.15s ease;">
-                  <div style="height: 68px; width: 100%; background-image: ${thumbBg}; background-size: cover; background-position: ${th.bgPosition || 'center'}; position: relative; display: flex; align-items: flex-end; padding: 8px 14px;">
+                <div class="agy-preset-card" data-name="${name}" data-group="${groupTag}" style="border-radius: 12px; border: ${borderStyle}; background: ${isRoyal ? 'linear-gradient(145deg, rgba(32, 18, 52, 0.92), rgba(18, 12, 32, 0.94))' : 'rgba(14, 12, 18, 0.84)'}; ${cardShadow} overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: border-color 0.15s ease, transform 0.15s ease;">
+                  <div style="height: 78px; width: 100%; background-image: ${thumbBg}; background-size: cover; background-position: ${th.bgPosition || 'center'}; position: relative; display: flex; align-items: flex-end; padding: 8px 14px;">
+                    ${isRoyal ? `<span style="position:absolute; top:7px; left:10px; padding:2px 8px; border-radius:999px; background:linear-gradient(90deg, rgba(250,204,21,0.92), rgba(232,121,249,0.88)); color:#180d2c; font-size:10px; font-weight:800; letter-spacing:0.2px;">★ ĐẶC BIỆT</span>` : ''}
                     ${th.sticker ? `<div style="position: absolute; ${thumbOrnamentStyle} background-image: url('${th.sticker}'); background-size: contain; background-repeat: no-repeat; pointer-events: none;"></div>` : ''}
-                    <span style="font-size: 13.5px; font-weight: 600; color: #fff;">${name}</span>
+                    <span style="font-size: 13.5px; font-weight: 600; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.92); padding-right: 78px;">${name}</span>
                   </div>
-                  <div style="padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 12px; color: #a1a1aa;">${th.concept || ''}</span>
+                  <div style="padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                    <span style="font-size: 12px; color: ${isRoyal ? '#fef08a' : '#a1a1aa'}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${th.concept || ''}</span>
                     <div class="agy-card-check-slot">${isSelected ? CHECK_SVG : ''}</div>
                   </div>
                 </div>
@@ -1497,14 +1546,43 @@
       updateInputPreviews(DEFAULT_THEME_KEY);
     });
 
+    container.querySelectorAll('.agy-filter-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const f = chip.getAttribute('data-filter') || 'all';
+        container.querySelectorAll('.agy-filter-chip').forEach(ch => {
+          const active = ch === chip;
+          ch.style.background = active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.05)';
+          ch.style.borderColor = active ? (mainTheme.primary || '#c084fc') : 'rgba(255,255,255,0.16)';
+          ch.style.fontWeight = active ? '600' : '400';
+        });
+        container.querySelectorAll('.agy-preset-card').forEach(card => {
+          const g = card.getAttribute('data-group') || 'classic';
+          card.style.display = (f === 'all' || g === f) ? 'flex' : 'none';
+        });
+      });
+    });
+
     container.querySelectorAll('.agy-preset-card').forEach(card => {
       card.addEventListener('click', () => {
         const name = card.dataset.name;
-        applyTheme({ themeName: name, bubbleName: name, customWp: '' });
+        const pickedTh = THEMES[name] || {};
+        const nextDim = pickedTh.defaultDimming !== undefined ? pickedTh.defaultDimming : 42;
+        applyTheme({ themeName: name, bubbleName: name, dimming: nextDim, customWp: '' });
+        if (slider) slider.value = nextDim;
+        if (valLabel) valLabel.textContent = nextDim + '%';
+        if (!localStorage.getItem(STORAGE_USER_AVATAR)) {
+          syncAvPreview(userAvPreview, pickedTh.userAvatar || '', 'U');
+        }
+        if (!localStorage.getItem(STORAGE_AGENT_AVATAR)) {
+          syncAvPreview(agentAvPreview, pickedTh.agentAvatar || '', 'AI');
+        }
 
         container.querySelectorAll('.agy-preset-card').forEach(c => {
           const isSel = c.dataset.name === name;
-          c.style.border = isSel ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)';
+          const isRoy = c.dataset.group === 'royal';
+          c.style.border = isSel
+            ? (isRoy ? '1.8px solid #facc15' : '1.5px solid #f4f4f5')
+            : (isRoy ? '1.2px solid rgba(250, 204, 21, 0.55)' : '1px solid rgba(255, 255, 255, 0.12)');
           const slot = c.querySelector('.agy-card-check-slot');
           if (slot) slot.innerHTML = isSel ? CHECK_SVG : '';
         });
@@ -1717,8 +1795,11 @@
         fxRaf: 0,
         fxPaused: localStorage.getItem('agy_fx_paused_v1') === '1',
         fxCleanups: [],
+        activeFxMode: '',
+        fxDrawer: null,
         npcCollapsed: false,
         npcChatOpen: false,
+        activeNpcKey: '',
         typeTimer: 0,
         remindTimer: 0,
         lastKeyEncourageAt: 0,
@@ -1735,6 +1816,8 @@
         cancelAnimationFrame(rt.fxRaf);
         rt.fxRaf = 0;
       }
+      rt.activeFxMode = '';
+      rt.fxDrawer = null;
       if (Array.isArray(rt.fxCleanups)) {
         rt.fxCleanups.forEach(fn => { try { fn(); } catch (_) {} });
         rt.fxCleanups = [];
@@ -1747,19 +1830,21 @@
   function syncLiveWallpaperFx(stOverride, themeOverride) {
     const st = stOverride || getState();
     const th = themeOverride || THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    const fxMode = th.fxMode || (th.liveWallpaperFx ? 'wisteria' : '');
     const shell = document.querySelector('.agy-shell');
-    if (!shell || !st.wpEnabled || !th.liveWallpaperFx) {
+    if (!shell || !st.wpEnabled || !fxMode) {
       teardownLiveWallpaperFx();
       return;
     }
 
     const rt = getShinobuRuntime();
     let host = document.getElementById('agy-live-fx-host');
-    if (host && host.parentElement === shell && rt.fxRaf) {
+    if (host && host.parentElement === shell && rt.activeFxMode === fxMode && (rt.fxRaf || rt.fxPaused)) {
       return;
     }
 
     teardownLiveWallpaperFx();
+    rt.activeFxMode = fxMode;
 
     host = document.createElement('agy-live-fx');
     host.id = 'agy-live-fx-host';
@@ -1790,6 +1875,9 @@
     let viewSkipped = false;
     const reducedMq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 
+    const drawerFactory = typeof window.__AGY_KNY_FX_DRAWERS__ === 'function' ? window.__AGY_KNY_FX_DRAWERS__ : null;
+    let drawer = null;
+
     function resize() {
       const rect = shell.getBoundingClientRect();
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -1798,45 +1886,16 @@
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (drawer && typeof drawer.resize === 'function') {
+        drawer.resize(width, height);
+      }
     }
     resize();
 
-    const petals = Array.from({ length: 18 }, (_, i) => ({
-      x: ((i * 97) % 100) / 100 * width,
-      y: ((i * 53) % 100) / 100 * height,
-      r: 2.6 + (i % 4) * 1.1,
-      vy: 0.28 + (i % 5) * 0.09,
-      vx: -0.18 - (i % 3) * 0.07,
-      sway: (i % 7) * 0.9,
-      rot: (i * 0.7) % 6.28,
-      vrot: 0.008 + (i % 4) * 0.004,
-      hue: i % 3 === 0 ? '#e879f9' : (i % 2 === 0 ? '#c084fc' : '#a855f7'),
-      alpha: 0.38 + (i % 4) * 0.12
-    }));
-
-    const fireflies = Array.from({ length: 15 }, (_, i) => ({
-      x: ((i * 67 + 15) % 100) / 100 * width,
-      y: ((i * 41 + 20) % 100) / 100 * height,
-      r: 1.4 + (i % 3) * 0.8,
-      vx: (i % 2 === 0 ? 1 : -1) * (0.12 + (i % 4) * 0.04),
-      vy: -0.10 - (i % 3) * 0.05,
-      phase: i * 1.1,
-      color: i % 3 === 0 ? '94, 234, 212' : '192, 132, 252'
-    }));
-
-    const butterflies = Array.from({ length: 7 }, (_, i) => ({
-      x: ((i * 137 + 12) % 92 + 4) / 100 * width,
-      y: ((i * 79 + 18) % 76 + 10) / 100 * height,
-      scale: 0.52 + (i % 4) * 0.16,
-      vx: (i % 2 === 0 ? 1 : -1) * (0.26 + (i % 3) * 0.08),
-      vy: -0.14 + (i % 3) * 0.07,
-      phase: i * 1.4,
-      flapSpeed: 0.0055 + (i % 3) * 0.0014,
-      tint: i % 2 === 0 ? 'mint' : 'violet'
-    }));
-
-    let meteor = null;
-    let nextMeteorAt = performance.now() + 2600;
+    if (drawerFactory) {
+      drawer = drawerFactory(fxMode, { width, height });
+      rt.fxDrawer = drawer;
+    }
 
     function shouldAnimate() {
       if (document.hidden || viewSkipped || rt.fxPaused) return false;
@@ -1845,54 +1904,11 @@
     }
 
     function drawStaticGlowFrame() {
-      ctx.clearRect(0, 0, width, height);
-      fireflies.forEach(f => {
-        ctx.beginPath();
-        ctx.fillStyle = `rgba(${f.color}, 0.38)`;
-        ctx.arc(f.x, f.y, f.r * 1.4, 0, Math.PI * 2);
-        ctx.fill();
-      });
-    }
-
-    function drawButterfly(b, now) {
-      const flap = 0.34 + 0.66 * Math.abs(Math.sin(now * b.flapSpeed + b.phase));
-      const tilt = Math.atan2(b.vy, b.vx) * 0.22;
-      ctx.save();
-      ctx.translate(b.x, b.y);
-      ctx.rotate(tilt);
-      ctx.scale(b.scale, b.scale);
-
-      const wingColorTop = b.tint === 'mint' ? 'rgba(94, 234, 212, 0.76)' : 'rgba(232, 121, 249, 0.78)';
-      const wingColorBot = b.tint === 'mint' ? 'rgba(192, 132, 252, 0.68)' : 'rgba(94, 234, 212, 0.68)';
-
-      ctx.shadowColor = b.tint === 'mint' ? 'rgba(94, 234, 212, 0.65)' : 'rgba(192, 132, 252, 0.65)';
-      ctx.shadowBlur = 8;
-
-      [-1, 1].forEach(dir => {
-        ctx.save();
-        ctx.scale(dir * flap, 1);
-        ctx.fillStyle = wingColorTop;
-        ctx.beginPath();
-        ctx.moveTo(0, -1);
-        ctx.bezierCurveTo(5, -12, 16, -12, 14, -2);
-        ctx.bezierCurveTo(13, 3, 6, 4, 0, 1.5);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.fillStyle = wingColorBot;
-        ctx.beginPath();
-        ctx.moveTo(0, 1.5);
-        ctx.bezierCurveTo(7, 4, 11, 11, 5, 12);
-        ctx.bezierCurveTo(2, 12, 0.5, 7, 0, 2.5);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      });
-
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = 'rgba(248, 250, 252, 0.88)';
-      ctx.fillRect(-0.8, -5, 1.6, 10);
-      ctx.restore();
+      if (drawer && typeof drawer.drawStatic === 'function') {
+        drawer.drawStatic(ctx, width, height);
+      } else {
+        ctx.clearRect(0, 0, width, height);
+      }
     }
 
     function render(now) {
@@ -1901,100 +1917,11 @@
         drawStaticGlowFrame();
         return;
       }
-
-      ctx.clearRect(0, 0, width, height);
-
-      // Soft fireflies (slow smooth sine breathing, never rapid flashing)
-      for (let i = 0; i < fireflies.length; i++) {
-        const f = fireflies[i];
-        f.x += f.vx + Math.sin(now * 0.0008 + f.phase) * 0.12;
-        f.y += f.vy;
-        if (f.x < -10) f.x = width + 10;
-        if (f.x > width + 10) f.x = -10;
-        if (f.y < -10) f.y = height + 10;
-        const alpha = 0.22 + 0.36 * (0.5 + 0.5 * Math.sin(now * 0.0014 + f.phase));
-        ctx.beginPath();
-        ctx.fillStyle = `rgba(${f.color}, ${alpha.toFixed(3)})`;
-        ctx.arc(f.x, f.y, f.r * 1.8, 0, Math.PI * 2);
-        ctx.fill();
+      if (drawer && typeof drawer.render === 'function') {
+        drawer.render(ctx, width, height, now);
+      } else {
+        ctx.clearRect(0, 0, width, height);
       }
-
-      // Drifting wisteria petals
-      for (let i = 0; i < petals.length; i++) {
-        const p = petals[i];
-        p.x += p.vx + Math.sin(now * 0.0011 + p.sway) * 0.25;
-        p.y += p.vy;
-        p.rot += p.vrot;
-        if (p.y > height + 14) {
-          p.y = -12;
-          p.x = ((p.x + width * 0.37) % width);
-        }
-        if (p.x < -14) p.x = width + 12;
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.rot);
-        ctx.globalAlpha = p.alpha;
-        ctx.fillStyle = p.hue;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, p.r * 1.45, p.r * 0.78, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // Glowing butterflies
-      for (let i = 0; i < butterflies.length; i++) {
-        const b = butterflies[i];
-        b.x += b.vx + Math.cos(now * 0.0009 + b.phase) * 0.18;
-        b.y += b.vy + Math.sin(now * 0.0013 + b.phase) * 0.22;
-        if (b.x < -28) b.x = width + 24;
-        if (b.x > width + 28) b.x = -24;
-        if (b.y < 24) b.vy = Math.abs(b.vy);
-        if (b.y > height - 36) b.vy = -Math.abs(b.vy);
-        drawButterfly(b, now);
-      }
-
-      // Occasional shooting star across upper night sky
-      if (!meteor && now >= nextMeteorAt) {
-        meteor = {
-          x: width * (0.32 + Math.random() * 0.52),
-          y: height * (0.05 + Math.random() * 0.20),
-          vx: -6.8 - Math.random() * 2.4,
-          vy: 2.9 + Math.random() * 1.2,
-          life: 0,
-          maxLife: 44
-        };
-      }
-      if (meteor) {
-        meteor.x += meteor.vx;
-        meteor.y += meteor.vy;
-        meteor.life++;
-        const p = meteor.life / meteor.maxLife;
-        const opacity = p < 0.2 ? (p / 0.2) : Math.max(0, 1 - (p - 0.2) / 0.8);
-        const tailX = meteor.x - meteor.vx * 11;
-        const tailY = meteor.y - meteor.vy * 11;
-        const grad = ctx.createLinearGradient(meteor.x, meteor.y, tailX, tailY);
-        grad.addColorStop(0, `rgba(240, 253, 250, ${(opacity * 0.92).toFixed(3)})`);
-        grad.addColorStop(0.35, `rgba(94, 234, 212, ${(opacity * 0.65).toFixed(3)})`);
-        grad.addColorStop(1, 'rgba(192, 132, 252, 0)');
-        ctx.save();
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = 1.6;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(meteor.x, meteor.y);
-        ctx.lineTo(tailX, tailY);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.fillStyle = `rgba(255, 255, 255, ${(opacity * 0.95).toFixed(3)})`;
-        ctx.arc(meteor.x, meteor.y, 1.9, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-        if (meteor.life >= meteor.maxLife) {
-          meteor = null;
-          nextMeteorAt = now + 5200 + Math.random() * 4500;
-        }
-      }
-
       rt.fxRaf = requestAnimationFrame(render);
     }
 
@@ -2022,7 +1949,6 @@
       rt.fxCleanups.push(() => reducedMq.removeEventListener('change', onVis));
     }
 
-    // Pause canvas loop automatically when browser skips rendering or off-screen
     if ('contentVisibility' in document.documentElement.style) {
       const onCv = (ev) => {
         viewSkipped = Boolean(ev.skipped);
@@ -2051,72 +1977,121 @@
     resumeOrPause();
   }
 
-  function getShinobuDialogs() {
+  function getDefaultNpcProfile() {
     return {
-      welcome: [
-        'Ara ara~ Mình ngồi canh góc khung hội thoại cho bạn đây, chạm vào mình để trò chuyện nhé! 🦋',
-        'Bạn tập trung lâu rồi kìa, nhớ chớp mắt và uống ngụm nước cho đỡ mỏi nha! 💜',
-        'Đêm trăng hoa tử đằng yên bình quá nhỉ~ Có bài toán hay đoạn code nào khó cứ giao cho tụi mình nhé! ✨',
-        'Moshi moshi~ Hôm nay tiến độ công việc của bạn thế nào rồi? Nhớ giữ nhịp thở đều đặn nha! 🦋'
+      badgeLabel: '🦋 Shinobu',
+      title: 'Shinobu Kocho • Trùng Trụ',
+      placeholder: 'Nói gì đó với Shinobu...',
+      pills: [
+        { key: 'act1', label: '✨ Cổ vũ' },
+        { key: 'act2', label: '🍵 Pha trà' },
+        { key: 'act3', label: '🦋 Điệp Phủ' }
       ],
-      cheer: [
-        'Cố lên nhé! Hơi thở của Côn Trùng sẽ tiếp thêm tốc độ gõ code mượt không một vết bug cho bạn! ✨💜',
-        'Ara ara~ Từng dòng code bạn viết đều đang tiến gần hơn tới kết quả hoàn hảo rồi đó, tự tin lên nha! 🦋',
-        'Đừng áp lực quá nhé! Dù bug có lì lợm đến đâu thì bình tĩnh phân tích từng bước là gỡ sạch ngay thôi! ✨',
-        'Bạn làm tốt lắm rồi! Cứ giữ đà tập trung này nhé, mình luôn ngồi ngay góc khung chat cổ vũ bạn đây~ 💜'
-      ],
-      tea: [
-        'Mình vừa pha một tách trà hoa tử đằng ấm dịu rồi đây~ Thả lỏng hai vai 10 giây rồi làm tiếp nha! 🍵💜',
-        'Uống một ngụm nước ấm hoặc trà thảo mộc sẽ giúp đầu óc tỉnh táo hơn gấp đôi so với cố nhồi code đó nha~ 🍵',
-        'Ara ara~ Ngồi thẳng lưng lên một chút nào, nhấp ngụm trà thơm cho dịu mắt rồi mình chiến tiếp nhé! 🍵✨'
-      ],
-      mansion: [
-        'Ở Điệp Phủ tụi mình luôn nhắc các kiếm sĩ nghỉ mắt quy tắc 20-20-20: mỗi 20 phút nhìn xa 6 mét trong 20 giây đó! 🦋',
-        'Hoa tử đằng nở rộ quanh năm để xua tan mệt mỏi và lũ bug đáng ghét khỏi màn hình của bạn đấy~ 🌸💜',
-        'Mẹo nhỏ từ Điệp Phủ: Chia nhỏ yêu cầu phức tạp thành từng bước rõ ràng sẽ giúp AI xử lý chính xác hơn nhiều nha! 🦋✨'
-      ],
-      typing: [
-        'Ara ara~ Ý tưởng mới đang tuôn trào kìa, cứ gõ thoải mái nhé! ✨',
-        'Mình đang chăm chú xem bạn soạn câu lệnh đây, cố lên nha! 🦋'
-      ],
-      sent: [
-        'Tin nhắn đã bay đi rồi~ Trong lúc đợi phản hồi, thả lỏng cổ tay một chút nhé! 💜',
-        'Tuyệt vời! Để xem nhiệm vụ này được giải quyết gọn gàng thế nào nha~ 🦋✨'
-      ]
+      dialogs: {
+        welcome: [
+          'Ara ara~ Mình ngồi canh góc khung hội thoại cho bạn đây, chạm vào mình để trò chuyện nhé! 🦋',
+          'Bạn tập trung lâu rồi kìa, nhớ chớp mắt và uống ngụm nước cho đỡ mỏi nha! 💜',
+          'Đêm trăng hoa tử đằng yên bình quá nhỉ~ Có bài toán hay đoạn code nào khó cứ giao cho tụi mình nhé! ✨',
+          'Moshi moshi~ Hôm nay tiến độ công việc của bạn thế nào rồi? Nhớ giữ nhịp thở đều đặn nha! 🦋'
+        ],
+        act1: [
+          'Cố lên nhé! Hơi thở của Côn Trùng sẽ tiếp thêm tốc độ gõ code mượt không một vết bug cho bạn! ✨💜',
+          'Ara ara~ Từng dòng code bạn viết đều đang tiến gần hơn tới kết quả hoàn hảo rồi đó, tự tin lên nha! 🦋',
+          'Đừng áp lực quá nhé! Dù bug có lì lợm đến đâu thì bình tĩnh phân tích từng bước là gỡ sạch ngay thôi! ✨'
+        ],
+        act2: [
+          'Mình vừa pha một tách trà hoa tử đằng ấm dịu rồi đây~ Thả lỏng hai vai 10 giây rồi làm tiếp nha! 🍵💜',
+          'Uống một ngụm nước ấm hoặc trà thảo mộc sẽ giúp đầu óc tỉnh táo hơn gấp đôi đó nha~ 🍵',
+          'Ara ara~ Ngồi thẳng lưng lên một chút nào, nhấp ngụm trà thơm cho dịu mắt rồi mình chiến tiếp nhé! 🍵✨'
+        ],
+        act3: [
+          'Ở Điệp Phủ tụi mình luôn nhắc các kiếm sĩ nghỉ mắt quy tắc 20-20-20: mỗi 20 phút nhìn xa 6 mét trong 20 giây đó! 🦋',
+          'Hoa tử đằng nở rộ quanh năm để xua tan mệt mỏi và lũ bug đáng ghét khỏi màn hình của bạn đấy~ 🌸💜',
+          'Mẹo nhỏ từ Điệp Phủ: Chia nhỏ yêu cầu phức tạp thành từng bước rõ ràng sẽ giúp AI xử lý chính xác hơn nhiều nha! 🦋✨'
+        ],
+        typing: [
+          'Ara ara~ Ý tưởng mới đang tuôn trào kìa, cứ gõ thoải mái nhé! ✨',
+          'Mình đang chăm chú xem bạn soạn câu lệnh đây, cố lên nha! 🦋'
+        ],
+        sent: [
+          'Tin nhắn đã bay đi rồi~ Trong lúc đợi phản hồi, thả lỏng cổ tay một chút nhé! 💜',
+          'Tuyệt vời! Để xem nhiệm vụ này được giải quyết gọn gàng thế nào nha~ 🦋✨'
+        ],
+        remind: [
+          'Bạn tập trung lâu rồi kìa, nhớ chớp mắt và uống ngụm nước cho đỡ mỏi nha! 💜'
+        ]
+      },
+      replies: {
+        greet: 'Moshi moshi~ Rất vui được trò chuyện cùng bạn ngay góc khung chat này! Hôm nay bạn đang làm dự án gì thế? 🦋💜',
+        tired: 'Ara ara~ Vất vả cho bạn quá rồi! Dựa lưng nghỉ ngơi vài phút, nhắm mắt hít thở sâu một chút đi, sức khỏe là số một ở Điệp Phủ đó nha! 🍵💜',
+        bug: 'Ara ara, lũ bug này gan thật đấy~ Đừng nóng vội nhé, gửi log lỗi vào khung chat bên dưới để AI truy tận gốc từng dòng cho bạn nha! 🦋⚔️',
+        praise: 'Ara ara~ Bạn khéo khen làm mình ngại ghê đó! Được ngồi dưới ánh trăng tử đằng đồng hành cùng bạn mình cũng vui lắm~ 🌸💜',
+        hungry: 'Bụng đói là không nghĩ ra thuật toán hay được đâu nha! Mau đi nạp năng lượng bằng món gì ngon ấm bụng đi, mình canh máy cho~ 🍙🍵',
+        sleepy: 'Thức khuya quá sẽ hại sức khỏe lắm đó... Nốt phần việc nhỏ này rồi lưu code lại đi ngủ sớm nhé! 🌙💜',
+        deadline: 'Bình tĩnh nào! Hít một hơi thật sâu, ưu tiên phần cốt lõi chạy được trước rồi tinh chỉnh sau—tụi mình cùng tăng tốc về đích nhé! ✨🦋',
+        thanks: 'Không có chi đâu nè~ Giúp bạn có thêm cảm hứng làm việc mỗi ngày là niềm vui của mình mà! 💜🦋',
+        fallback: 'Ara ara~ "{input}" ư? Mình nghe rõ rồi nè! Cứ yên tâm triển khai tiếp nhé, mình luôn ngồi đây tiếp sức cho bạn! 🦋✨'
+      }
     };
   }
 
-  function getShinobuReplyForInput(rawInput) {
+  function getActiveNpcProfile(bThemeOverride) {
+    const st = getState();
+    const bTheme = bThemeOverride || THEMES[st.bubbleName] || THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    const def = getDefaultNpcProfile();
+    if (!bTheme.npc || typeof bTheme.npc !== 'object') return def;
+    return {
+      badgeLabel: bTheme.npc.badgeLabel || def.badgeLabel,
+      title: bTheme.npc.title || def.title,
+      placeholder: bTheme.npc.placeholder || def.placeholder,
+      pills: Array.isArray(bTheme.npc.pills) && bTheme.npc.pills.length > 0 ? bTheme.npc.pills : def.pills,
+      dialogs: { ...def.dialogs, ...(bTheme.npc.dialogs || {}) },
+      replies: { ...def.replies, ...(bTheme.npc.replies || {}) }
+    };
+  }
+
+  function pickReplyVariant(val) {
+    if (Array.isArray(val) && val.length > 0) {
+      return val[Math.floor(Math.random() * val.length)];
+    }
+    return String(val || '');
+  }
+
+  function getNpcReplyForInput(rawInput, profileOverride) {
+    const prof = profileOverride || getActiveNpcProfile();
+    const rep = prof.replies || {};
     const text = String(rawInput || '').trim();
     const low = text.toLowerCase();
     if (!text) {
-      return 'Ara ara~ Bạn định nói gì với mình sao? Cứ gõ tự nhiên nha! 🦋';
+      return pickReplyVariant(rep.greet);
     }
-    if (/(^|\s)(xin chào|chào|chao|hello|hi|hey|alo|moshi)(\s|[!,.?~]|$)/i.test(low)) {
-      return 'Moshi moshi~ Rất vui được trò chuyện cùng bạn ngay góc khung chat này! Hôm nay bạn đang làm dự án gì thế? 🦋💜';
+    if (/(^|\s)(xin chào|chào|chao|hello|hi|hey|alo|moshi|kính chào)(\s|[!,.?~]|$)/i.test(low)) {
+      return pickReplyVariant(rep.greet);
     }
     if (/(mệt|met|đuối|duoi|oải|oai|kiệt sức|đau lưng|mỏi mắt|moi mat)/i.test(low)) {
-      return 'Ara ara~ Vất vả cho bạn quá rồi! Dựa lưng nghỉ ngơi vài phút, nhắm mắt hít thở sâu một chút đi, sức khỏe là số một ở Điệp Phủ đó nha! 🍵💜';
+      return pickReplyVariant(rep.tired);
     }
     if (/(bug|lỗi|loi|error|crash|đỏ lòm|khó quá|kho qua|sai)/i.test(low)) {
-      return 'Ara ara, lũ bug này gan thật đấy~ Đừng nóng vội nhé, gửi log lỗi vào khung chat bên dưới để AI truy tận gốc từng dòng cho bạn nha! 🦋⚔️';
+      return pickReplyVariant(rep.bug);
     }
-    if (/(xinh|đẹp|dep|dễ thương|de thuong|cute|đáng yêu|dang yeu|yêu|thích shinobu)/i.test(low)) {
-      return 'Ara ara~ Bạn khéo khen làm mình ngại ghê đó! Được ngồi dưới ánh trăng tử đằng đồng hành cùng bạn mình cũng vui lắm~ 🌸💜';
+    if (/(xinh|đẹp|dep|dễ thương|de thuong|cute|đáng yêu|dang yeu|yêu|ngầu|đỉnh|tuyệt|hào nhoáng|kính trọng)/i.test(low)) {
+      return pickReplyVariant(rep.praise);
     }
-    if (/(đói|doi|ăn gì|an gi|cơm|mì|trà sữa|bụng)/i.test(low)) {
-      return 'Bụng đói là không nghĩ ra thuật toán hay được đâu nha! Mau đi nạp năng lượng bằng món gì ngon ấm bụng đi, mình canh máy cho~ 🍙🍵';
+    if (/(đói|doi|ăn gì|an gi|cơm|mì|trà sữa|bụng|bento|tempura)/i.test(low)) {
+      return pickReplyVariant(rep.hungry);
     }
     if (/(ngủ|ngu|khuya|muộn|thức đêm|buồn ngủ)/i.test(low)) {
-      return 'Thức khuya quá sẽ hại sức khỏe lắm đó... Nốt phần việc nhỏ này rồi lưu code lại đi ngủ sớm nhé, mai mình lại đồng hành tiếp cùng bạn! 🌙💜';
+      return pickReplyVariant(rep.sleepy);
     }
     if (/(deadline|gấp|gap|kịp không|chạy số|nộp bài)/i.test(low)) {
-      return 'Bình tĩnh nào! Hít một hơi thật sâu, ưu tiên phần cốt lõi chạy được trước rồi tinh chỉnh sau—tụi mình cùng tăng tốc về đích nhé! ✨🦋';
+      return pickReplyVariant(rep.deadline);
     }
-    if (/(cảm ơn|cam on|thank|tks|cám ơn|tuyệt vời|hay quá|xịn)/i.test(low)) {
-      return 'Không có chi đâu nè~ Giúp bạn có thêm cảm hứng làm việc mỗi ngày là niềm vui của mình mà! 💜🦋';
+    if (/(cảm ơn|cam on|thank|tks|cám ơn|hay quá|xịn)/i.test(low)) {
+      return pickReplyVariant(rep.thanks);
     }
-    return `Ara ara~ "${text.slice(0, 46)}${text.length > 46 ? '...' : ''}" ư? Mình nghe rõ rồi nè! Cứ yên tâm triển khai tiếp nhé, mình luôn ngồi đây tiếp sức cho bạn! 🦋✨`;
+    const clipped = text.length > 46 ? text.slice(0, 46) + '...' : text;
+    const tpl = pickReplyVariant(rep.fallback) || '"{input}" — Mình luôn đồng hành cùng bạn! ✨';
+    return tpl.replace(/\{input\}/g, clipped);
   }
 
   function triggerChibiBounce(targetEl) {
@@ -2163,12 +2138,14 @@
         rt.typeTimer = 0;
         delete textEl.dataset.typing;
       }
-    }, 22);
+    }, 20);
   }
 
-  function pickRandomLine(category, currentText) {
-    const dialogs = getShinobuDialogs();
-    const list = dialogs[category] || dialogs.welcome;
+  function pickRandomLine(category, currentText, profileOverride) {
+    const prof = profileOverride || getActiveNpcProfile();
+    const dialogs = prof.dialogs || {};
+    const rawList = dialogs[category] || dialogs.act1 || dialogs.welcome || ['Cố lên nhé! ✨'];
+    const list = Array.isArray(rawList) ? rawList : [String(rawList)];
     const candidates = list.length > 1 ? list.filter(item => item !== currentText) : list;
     return candidates[Math.floor(Math.random() * candidates.length)] || list[0];
   }
@@ -2178,6 +2155,7 @@
     if (rt) {
       if (rt.typeTimer) { clearInterval(rt.typeTimer); rt.typeTimer = 0; }
       if (rt.remindTimer) { clearInterval(rt.remindTimer); rt.remindTimer = 0; }
+      rt.activeNpcKey = '';
     }
     const npcStyle = document.getElementById('antigravity-shinobu-npc-style');
     if (npcStyle) npcStyle.remove();
@@ -2195,7 +2173,7 @@
         position: absolute;
         top: -58px;
         right: 10px;
-        width: 96px;
+        width: 102px;
         height: 60px;
         background: transparent;
         border: none;
@@ -2206,7 +2184,7 @@
         border-radius: 14px;
       }
       .agy-chibi-hitbox:focus-visible {
-        outline: 1.5px solid #5eead4;
+        outline: 1.5px solid var(--npc-secondary, #5eead4);
         outline-offset: 2px;
       }
       #agy-shinobu-npc-wrap {
@@ -2222,43 +2200,46 @@
       .agy-npc-badge {
         position: absolute;
         bottom: 6px;
-        right: 112px;
+        right: 116px;
         display: none;
         align-items: center;
         gap: 5px;
         padding: 3.5px 10px;
         border-radius: 9999px;
-        background: rgba(31, 18, 54, 0.94);
-        border: 1px solid rgba(192, 132, 252, 0.58);
+        background: var(--npc-surface, rgba(21, 14, 43, 0.94));
+        border: 1px solid var(--npc-border, rgba(192, 132, 252, 0.62));
         color: #f8fafc;
         font-size: 11.5px;
         font-weight: 600;
         white-space: nowrap;
         cursor: pointer;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 10px rgba(168, 85, 247, 0.28);
-        transition: transform 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.52), 0 0 10px var(--npc-glow, rgba(168, 85, 247, 0.28));
+        transition: transform 0.16s ease, border-color 0.16s ease;
       }
       .agy-npc-badge:hover {
-        background: rgba(48, 27, 82, 0.96);
-        border-color: #5eead4;
+        border-color: var(--npc-secondary, #5eead4);
         transform: translateY(-1px);
       }
       .agy-npc-popover {
         position: absolute;
         bottom: 10px;
-        right: 112px;
-        width: 294px;
+        right: 116px;
+        width: 304px;
         display: flex;
         flex-direction: column;
         gap: 8px;
         padding: 10px 12px 11px 12px;
         border-radius: 13px;
-        background: rgba(21, 14, 43, 0.95);
-        border: 1px solid rgba(168, 85, 247, 0.62);
-        box-shadow: 0 12px 32px rgba(4, 3, 14, 0.72), 0 0 18px rgba(168, 85, 247, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        background: var(--npc-surface, rgba(21, 14, 43, 0.95));
+        border: 1px solid var(--npc-border, rgba(168, 85, 247, 0.65));
+        box-shadow: 0 12px 32px rgba(4, 3, 14, 0.74), 0 0 18px var(--npc-glow, rgba(168, 85, 247, 0.26)), inset 0 1px 0 rgba(255, 255, 255, 0.10);
         color: #f8fafc;
         pointer-events: auto;
         transform-origin: bottom right;
+      }
+      #agy-shinobu-npc-wrap[data-royal="1"] .agy-npc-popover {
+        border: 1.4px solid rgba(250, 204, 21, 0.78);
+        box-shadow: 0 14px 36px rgba(4, 3, 14, 0.8), 0 0 22px rgba(250, 204, 21, 0.25), 0 0 34px rgba(192, 132, 252, 0.22), inset 0 1px 0 rgba(254, 240, 138, 0.28);
       }
       @media (prefers-reduced-motion: no-preference) {
         .agy-npc-popover {
@@ -2276,10 +2257,14 @@
         bottom: 14px;
         width: 10px;
         height: 10px;
-        background: rgba(21, 14, 43, 0.95);
-        border-right: 1px solid rgba(168, 85, 247, 0.62);
-        border-bottom: 1px solid rgba(168, 85, 247, 0.62);
+        background: var(--npc-surface, rgba(21, 14, 43, 0.95));
+        border-right: 1px solid var(--npc-border, rgba(168, 85, 247, 0.65));
+        border-bottom: 1px solid var(--npc-border, rgba(168, 85, 247, 0.65));
         transform: rotate(-45deg);
+      }
+      #agy-shinobu-npc-wrap[data-royal="1"] .agy-npc-popover::after {
+        border-right-color: rgba(250, 204, 21, 0.78);
+        border-bottom-color: rgba(250, 204, 21, 0.78);
       }
       .agy-npc-header {
         display: flex;
@@ -2297,28 +2282,31 @@
         width: 6.5px;
         height: 6.5px;
         border-radius: 9999px;
-        background: #34d399;
-        box-shadow: 0 0 7px rgba(52, 211, 153, 0.85);
+        background: var(--npc-secondary, #34d399);
+        box-shadow: 0 0 7px var(--npc-secondary, rgba(52, 211, 153, 0.85));
         flex-shrink: 0;
       }
       .agy-npc-title {
         font-size: 11.5px;
         font-weight: 700;
-        color: #e9d5ff;
+        color: var(--npc-title-ink, #f3e8ff);
         letter-spacing: 0.1px;
+        overflow: hidden;
+        text-overflow: ellipsis;
         white-space: nowrap;
       }
       .agy-npc-tools {
         display: flex;
         align-items: center;
         gap: 4px;
+        flex-shrink: 0;
       }
       .agy-npc-icon-btn {
         width: 21px;
         height: 21px;
         border-radius: 6px;
-        background: rgba(168, 85, 247, 0.14);
-        border: 1px solid rgba(192, 132, 252, 0.26);
+        background: rgba(255, 255, 255, 0.07);
+        border: 1px solid var(--npc-border, rgba(192, 132, 252, 0.3));
         color: #e2e8f0;
         font-size: 11px;
         line-height: 1;
@@ -2330,8 +2318,8 @@
         transition: background-color 0.15s ease, border-color 0.15s ease;
       }
       .agy-npc-icon-btn:hover {
-        background: rgba(168, 85, 247, 0.34);
-        border-color: #c084fc;
+        background: rgba(255, 255, 255, 0.18);
+        border-color: var(--npc-primary, #c084fc);
         color: #ffffff;
       }
       .agy-npc-dialog-text {
@@ -2343,7 +2331,7 @@
       }
       .agy-npc-dialog-text[data-typing="1"]::after {
         content: "▍";
-        color: #5eead4;
+        color: var(--npc-secondary, #5eead4);
         margin-left: 2px;
         font-size: 11px;
       }
@@ -2355,9 +2343,9 @@
       .agy-npc-pill {
         padding: 3.5px 9px;
         border-radius: 9999px;
-        background: rgba(58, 28, 88, 0.68);
-        border: 1px solid rgba(192, 132, 252, 0.34);
-        color: #f3e8ff;
+        background: rgba(255, 255, 255, 0.07);
+        border: 1px solid var(--npc-border, rgba(192, 132, 252, 0.36));
+        color: #f8fafc;
         font-size: 11px;
         font-weight: 500;
         cursor: pointer;
@@ -2367,8 +2355,8 @@
         transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
       }
       .agy-npc-pill:hover {
-        background: rgba(88, 42, 132, 0.85);
-        border-color: #5eead4;
+        background: rgba(255, 255, 255, 0.16);
+        border-color: var(--npc-secondary, #5eead4);
         color: #ffffff;
         transform: translateY(-1px);
       }
@@ -2377,13 +2365,13 @@
         align-items: center;
         gap: 5px;
         padding-top: 4px;
-        border-top: 1px solid rgba(192, 132, 252, 0.18);
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
       }
       .agy-npc-chat-input {
         flex: 1;
         min-width: 0;
-        background: rgba(11, 7, 24, 0.85);
-        border: 1px solid rgba(192, 132, 252, 0.38);
+        background: rgba(8, 7, 18, 0.86);
+        border: 1px solid var(--npc-border, rgba(192, 132, 252, 0.38));
         border-radius: 8px;
         padding: 5px 9px;
         color: #f8fafc;
@@ -2391,24 +2379,24 @@
         outline: none;
       }
       .agy-npc-chat-input:focus {
-        border-color: #5eead4;
-        box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.28);
+        border-color: var(--npc-secondary, #5eead4);
+        box-shadow: 0 0 0 1px var(--npc-glow, rgba(94, 234, 212, 0.28));
       }
       .agy-npc-chat-send {
-        padding: 5px 9px;
+        padding: 5px 10px;
         border-radius: 8px;
-        background: linear-gradient(135deg, #a855f7, #ec4899);
+        background: var(--npc-primary, #a855f7);
         border: none;
-        color: #ffffff;
+        color: #09090b;
         font-size: 11px;
-        font-weight: 600;
+        font-weight: 700;
         cursor: pointer;
       }
       @media (max-width: 700px) {
         .agy-npc-popover {
           right: 12px;
           bottom: 62px;
-          width: 262px;
+          width: 266px;
         }
         .agy-npc-popover::after {
           right: 34px;
@@ -2422,7 +2410,8 @@
 
   function syncShinobuNpc(stOverride, bubbleThemeOverride) {
     const st = stOverride || getState();
-    const bTheme = bubbleThemeOverride || THEMES[st.bubbleName] || THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    const activeBubbleKey = st.bubbleName || st.themeName || DEFAULT_THEME_KEY;
+    const bTheme = bubbleThemeOverride || THEMES[activeBubbleKey] || THEMES[DEFAULT_THEME_KEY] || {};
     if (st.inputStyle === 'minimal' || !bTheme.isChibiNpc) {
       teardownShinobuNpc();
       return;
@@ -2430,22 +2419,22 @@
 
     ensureShinobuNpcStyles();
     const rt = getShinobuRuntime();
+    const prof = getActiveNpcProfile(bTheme);
 
-    // Attach clickable hitboxes onto user message bubbles so tapping Chibi on sent messages also triggers joy bounce + dialog
     document.querySelectorAll('.agy-user-bubble-frame').forEach(frame => {
       if (frame.querySelector(':scope > .agy-chibi-hitbox')) return;
       const hit = document.createElement('button');
       hit.type = 'button';
       hit.className = 'agy-chibi-hitbox';
-      hit.title = 'Chạm vào Shinobu Kocho';
-      hit.setAttribute('aria-label', 'Tương tác với NPC Chibi Shinobu');
+      hit.title = prof.title;
+      hit.setAttribute('aria-label', prof.title);
       hit.addEventListener('click', (e) => {
         e.stopPropagation();
         triggerChibiBounce(frame);
         const composerEl = document.querySelector('.surface-composer');
         if (composerEl) triggerChibiBounce(composerEl);
         const curText = document.querySelector('#agy-shinobu-npc-wrap .agy-npc-dialog-text')?.textContent || '';
-        speakShinobuLine(pickRandomLine('cheer', curText), true);
+        speakShinobuLine(pickRandomLine('act1', curText), true);
       });
       frame.appendChild(hit);
     });
@@ -2457,8 +2446,8 @@
       const mainHit = document.createElement('button');
       mainHit.type = 'button';
       mainHit.className = 'agy-chibi-hitbox';
-      mainHit.title = 'Chạm vào Chibi Shinobu để trò chuyện';
-      mainHit.setAttribute('aria-label', 'Mở hộp thoại NPC Chibi Shinobu');
+      mainHit.title = 'Chạm vào Chibi để trò chuyện';
+      mainHit.setAttribute('aria-label', 'Mở hộp thoại NPC Chibi');
       mainHit.addEventListener('click', (e) => {
         e.stopPropagation();
         triggerChibiBounce(composer);
@@ -2490,40 +2479,53 @@
     }
 
     let wrap = document.getElementById('agy-shinobu-npc-wrap');
-    if (wrap && wrap.parentElement !== composer) {
+    if (wrap && (wrap.parentElement !== composer || rt.activeNpcKey !== activeBubbleKey)) {
       wrap.remove();
       wrap = null;
     }
 
     if (!wrap) {
+      rt.activeNpcKey = activeBubbleKey;
       wrap = document.createElement('div');
       wrap.id = 'agy-shinobu-npc-wrap';
       wrap.className = 'agy-shinobu-npc-wrap';
+      const isRoyal = bTheme.fxMode === 'royal_wisteria';
+      if (isRoyal) wrap.dataset.royal = '1';
+
+      wrap.style.setProperty('--npc-primary', bTheme.primary || '#c084fc');
+      wrap.style.setProperty('--npc-secondary', bTheme.secondary || '#5eead4');
+      wrap.style.setProperty('--npc-border', bTheme.borderColor || 'rgba(192, 132, 252, 0.55)');
+      wrap.style.setProperty('--npc-glow', bTheme.glow || 'rgba(192, 132, 252, 0.28)');
+      wrap.style.setProperty('--npc-surface', bTheme.modalBg || 'rgba(18, 13, 34, 0.95)');
+      wrap.style.setProperty('--npc-title-ink', isRoyal ? '#fef08a' : '#f8fafc');
+
       const fxPausedInit = Boolean(rt.fxPaused);
+      const pillsHtml = prof.pills.map(p =>
+        `<button type="button" class="agy-npc-pill" data-npc-cat="${p.key}">${p.label}</button>`
+      ).join('');
+
       wrap.innerHTML = `
-        <button type="button" class="agy-npc-badge" title="Mở hộp thoại Shinobu Kocho">🦋 Shinobu</button>
-        <div class="agy-npc-popover" role="region" aria-label="Shinobu Kocho NPC">
+        <button type="button" class="agy-npc-badge" title="${prof.title}">${prof.badgeLabel}</button>
+        <div class="agy-npc-popover" role="region" aria-label="${prof.title}">
           <div class="agy-npc-header">
             <div class="agy-npc-title-group">
               <span class="agy-npc-dot"></span>
-              <span class="agy-npc-title">Shinobu Kocho • NPC</span>
+              <span class="agy-npc-title">${prof.title}</span>
             </div>
             <div class="agy-npc-tools">
               <button type="button" class="agy-npc-icon-btn" data-npc-act="motion" title="${fxPausedInit ? 'Phát hiệu ứng nền' : 'Tạm dừng hiệu ứng nền'}" aria-label="${fxPausedInit ? 'Phát hiệu ứng nền' : 'Tạm dừng hiệu ứng nền'}">${fxPausedInit ? '▶' : '⏸'}</button>
               <button type="button" class="agy-npc-icon-btn" data-npc-act="random" title="Đổi câu thoại ngẫu nhiên" aria-label="Đổi câu thoại ngẫu nhiên">🎲</button>
-              <button type="button" class="agy-npc-icon-btn" data-npc-act="chat-toggle" title="Nhắn tin riêng với Shinobu" aria-label="Nhắn tin riêng với Shinobu">💬</button>
+              <button type="button" class="agy-npc-icon-btn" data-npc-act="chat-toggle" title="Trò chuyện riêng" aria-label="Trò chuyện riêng">💬</button>
               <button type="button" class="agy-npc-icon-btn" data-npc-act="close" title="Thu gọn hộp thoại" aria-label="Thu gọn hộp thoại">✕</button>
             </div>
           </div>
           <div class="agy-npc-dialog-text"></div>
           <div class="agy-npc-pills">
-            <button type="button" class="agy-npc-pill" data-npc-cat="cheer">✨ Cổ vũ</button>
-            <button type="button" class="agy-npc-pill" data-npc-cat="tea">🍵 Pha trà</button>
-            <button type="button" class="agy-npc-pill" data-npc-cat="mansion">🦋 Điệp Phủ</button>
+            ${pillsHtml}
             <button type="button" class="agy-npc-pill" data-npc-act="chat-open">💬 Trò chuyện</button>
           </div>
           <form class="agy-npc-chat-row">
-            <input type="text" class="agy-npc-chat-input" placeholder="Nói gì đó với Shinobu..." autocomplete="off" />
+            <input type="text" class="agy-npc-chat-input" placeholder="${prof.placeholder}" autocomplete="off" />
             <button type="submit" class="agy-npc-chat-send">Gửi</button>
           </form>
         </div>
@@ -2547,7 +2549,7 @@
         e.stopPropagation();
         rt.npcCollapsed = false;
         triggerChibiBounce(composer);
-        speakShinobuLine(pickRandomLine('welcome', ''), true);
+        speakShinobuLine(pickRandomLine('welcome', '', prof), true);
       });
 
       wrap.querySelectorAll('[data-npc-cat]').forEach(btn => {
@@ -2556,17 +2558,17 @@
           const cat = btn.getAttribute('data-npc-cat');
           triggerChibiBounce(composer);
           const cur = wrap.querySelector('.agy-npc-dialog-text')?.textContent || '';
-          speakShinobuLine(pickRandomLine(cat, cur), true);
+          speakShinobuLine(pickRandomLine(cat, cur, prof), true);
         });
       });
 
       wrap.querySelector('[data-npc-act="random"]').addEventListener('click', (e) => {
         e.stopPropagation();
-        const cats = ['welcome', 'cheer', 'tea', 'mansion'];
+        const cats = ['welcome', ...prof.pills.map(p => p.key)];
         const chosen = cats[Math.floor(Math.random() * cats.length)];
         const cur = wrap.querySelector('.agy-npc-dialog-text')?.textContent || '';
         triggerChibiBounce(composer);
-        speakShinobuLine(pickRandomLine(chosen, cur), true);
+        speakShinobuLine(pickRandomLine(chosen, cur, prof), true);
       });
 
       if (motionBtn) {
@@ -2615,25 +2617,22 @@
         const msg = chatInput.value;
         chatInput.value = '';
         triggerChibiBounce(composer);
-        speakShinobuLine(getShinobuReplyForInput(msg), true);
+        speakShinobuLine(getNpcReplyForInput(msg, prof), true);
       });
 
       popover.style.display = rt.npcCollapsed ? 'none' : 'flex';
       badge.style.display = rt.npcCollapsed ? 'inline-flex' : 'none';
       syncChatVisibility(false);
 
-      const dialogs = getShinobuDialogs();
-      const initialLine = rt.greetedOnce
-        ? dialogs.welcome[1]
-        : dialogs.welcome[0];
-      rt.greetedOnce = true;
-      speakShinobuLine(initialLine, false);
+      const welcomeList = Array.isArray(prof.dialogs.welcome) ? prof.dialogs.welcome : [String(prof.dialogs.welcome || '')];
+      speakShinobuLine(welcomeList[0] || '', false);
     }
 
     if (!rt.remindTimer) {
       rt.remindTimer = setInterval(() => {
         if (!document.hidden && !rt.npcCollapsed) {
-          speakShinobuLine('Bạn tập trung lâu rồi kìa, nhớ chớp mắt và uống ngụm nước cho đỡ mỏi nha! 💜', false);
+          const curProf = getActiveNpcProfile();
+          speakShinobuLine(pickRandomLine('remind', '', curProf), false);
         }
       }, 180000);
     }

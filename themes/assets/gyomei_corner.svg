@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <defs>
+    <linearGradient id="gyoCorner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#84cc16"/>
+    </linearGradient>
+  </defs>
+  <path d="M 2.5 26 L 2.5 8 Q 2.5 2.5 8 2.5 L 26 2.5" stroke="url(#gyoCorner)" stroke-width="1.6" stroke-linecap="round"/>
+  <circle cx="7.2" cy="7.2" r="2.6" fill="#dc2626" stroke="#fef08a" stroke-width="0.9"/>
+  <circle cx="13.5" cy="5.5" r="1.7" fill="#f59e0b"/>
+  <circle cx="5.5" cy="13.5" r="1.7" fill="#f59e0b"/>
+  <circle cx="18.8" cy="5.5" r="1.2" fill="#84cc16"/>
+</svg>

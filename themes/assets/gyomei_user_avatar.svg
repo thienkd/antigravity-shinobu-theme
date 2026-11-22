@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <radialGradient id="gyoBg" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#2c281d"/>
+      <stop offset="68%" stop-color="#191813"/>
+      <stop offset="100%" stop-color="#0d0c09"/>
+    </radialGradient>
+    <radialGradient id="gyoBeadRed" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#fca5a5"/>
+      <stop offset="45%" stop-color="#dc2626"/>
+      <stop offset="100%" stop-color="#7f1d1d"/>
+    </radialGradient>
+    <radialGradient id="gyoBeadGold" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="55%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </radialGradient>
+    <filter id="gyoGlow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="2.0" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="32" cy="32" r="31" fill="url(#gyoBg)"/>
+  <!-- Mossy Stone Inner Ring -->
+  <circle cx="32" cy="32" r="29.5" stroke="#84cc16" stroke-opacity="0.38" stroke-width="1.3"/>
+  <circle cx="32" cy="32" r="26.5" stroke="#f59e0b" stroke-opacity="0.35" stroke-width="0.9"/>
+
+  <!-- Warm Golden Halo -->
+  <circle cx="32" cy="31" r="14.5" stroke="#fde047" stroke-width="1.2" stroke-opacity="0.55" filter="url(#gyoGlow)"/>
+
+  <!-- Sacred Bodhi Prayer Beads Necklace -->
+  <g filter="url(#gyoGlow)">
+    <circle cx="32" cy="14" r="3.9" fill="url(#gyoBeadGold)"/>
+    <circle cx="41.5" cy="16.8" r="3.2" fill="url(#gyoBeadRed)"/>
+    <circle cx="47.8" cy="24.5" r="3.2" fill="url(#gyoBeadRed)"/>
+    <circle cx="48.2" cy="34.5" r="3.2" fill="url(#gyoBeadRed)"/>
+    <circle cx="42.5" cy="43.0" r="3.2" fill="url(#gyoBeadRed)"/>
+    <circle cx="32" cy="46.5" r="4.1" fill="url(#gyoBeadGold)"/>
+    <circle cx="21.5" cy="43.0" r="3.2" fill="url(#gyoBeadRed)"/>
+    <circle cx="15.8" cy="34.5" r="3.2" fill="url(#gyoBeadRed)"/>
+    <circle cx="16.2" cy="24.5" r="3.2" fill="url(#gyoBeadRed)"/>
+    <circle cx="22.5" cy="16.8" r="3.2" fill="url(#gyoBeadRed)"/>
+    <!-- Tassel Cord -->
+    <path d="M 32 50.6 L 29.5 56.5 M 32 50.6 L 34.5 56.5" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round"/>
+    <!-- Center Sacred Lotus / Stone Emblem -->
+    <polygon points="32,24.5 36.5,31 32,37.5 27.5,31" fill="#a3e635" fill-opacity="0.28" stroke="#fef08a" stroke-width="1.15"/>
+  </g>
+</svg>

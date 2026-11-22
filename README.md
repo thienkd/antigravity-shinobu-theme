@@ -1,23 +1,40 @@
-# 🦋 Antigravity Custom Theme — Shinobu Wisteria & Interactive Chibi NPC
+# 👑 Antigravity Custom Theme — Bộ Sưu Tập Thanh Gươm Diệt Quỷ (16 Live Themes & Interactive Chibi NPC)
 
-Bộ tùy biến giao diện **60fps Zero-Live-Blur** dành cho ứng dụng **Google Antigravity 2.x** (đóng gói đồng thời làm **AI Agent Skill**), tích hợp sẵn chủ đề **Shinobu Wisteria**, lớp **Live Wallpaper** và **NPC Chibi Shinobu Kocho tương tác & trò chuyện 2 chiều** ngay trên góc khung hội thoại mà không sửa đổi tệp nhị phân của ứng dụng.
+Bộ tùy biến giao diện **60fps Zero-Live-Blur** dành cho ứng dụng **Google Antigravity 2.x** (đóng gói đồng thời làm **AI Agent Skill**), tích hợp trọn bộ **14 chủ đề Thanh Gươm Diệt Quỷ (Kimetsu no Yaiba)** gồm **Gia Đình Chúa Công Ubuyashiki**, đầy đủ **9 Đại Trụ (Hashira)** và **4 Nhân vật chính**, đi kèm **14 hiệu ứng Hơi Thở 60fps** và **hệ thống NPC Chibi tương tác & trò chuyện 2 chiều** theo đúng tính cách từng nhân vật.
 
 ---
 
-## ✨ Tính năng nổi bật
+## 🌸 Danh sách 16 Chủ đề tích hợp sẵn
 
-- **Chủ đề mặc định `Shinobu Wisteria`** *(kèm thêm `WLOP Cosmic` & `Midnight Obsidian`)*:
-  - Hình nền **Shinobu Kocho** dưới ánh trăng tròn & giàn hoa tử đằng tím, kiến trúc kính mờ dựng sẵn (**Zero Live Blur** — cuộn mượt 60/120fps).
-  - **Live Wallpaper 60fps**: Bướm phát sáng tím–xanh ngọc vỗ cánh bay lượn, cánh hoa tử đằng rơi, đom đóm lơ lửng và sao băng xẹt qua bầu trời đêm.
-  - **Iridescent Composer Strip**: Dải màu chuyển sắc tím – hồng – xanh ngọc trên thanh Composer cùng bộ Avatar tròn đồng bộ (User: Cánh bướm neon, AI: Shinobu Kocho).
-- **NPC Chibi Shinobu Kocho (`themes/assets/shinobu_ornament.svg`)**:
-  - Ngồi tựa hai bàn tay lên góc phải của cả **khung nhập Composer** (`.surface-composer`) và **bong bóng tin nhắn đã gửi** (`.group/user-input-step`).
-  - Chuyển động nghiêng người nhẹ nhàng (`chibiSway`) + bướm vỗ cánh (`wingFlapL` / `wingFlapR`), nảy vui vẻ khi chạm vào.
-- **Hộp thoại RPG & Chat 2 chiều (`Shinobu Kocho • NPC`)**:
-  - Hiệu ứng gõ chữ từng ký tự (*Visual Novel style*).
-  - 4 nút tương tác nhanh: `✨ Cổ vũ`, `🍵 Pha trà`, `🦋 Điệp Phủ`, `💬 Trò chuyện`.
-  - Nhắn tin Tiếng Việt 2 chiều theo ngữ cảnh trực tiếp với Shinobu, nút đổi câu ngẫu nhiên `🎲`, tạm dừng chuyển động `⏸`/`▶`, thu gọn thành huy hiệu `🦋 Shinobu` (`✕`).
-- **Tự biên dịch linh hoạt**: Hỗ trợ cả Node.js thuần (`scripts/build_payload.js`) lẫn Python (`scripts/build_payload.py`) — sang máy mới **chỉ cần Node.js >= 22** (không bắt buộc cài Python).
+### 1. Chủ đề Đặc biệt (Chi tiết & Lộng lẫy nhất)
+- **👑 Gia Đình Chúa Công (Ubuyashiki)**: Đại cảnh đêm trăng rằm dinh thự hoa tử đằng với đầy đủ 7 thành viên gia đình Chúa Công Kagaya & Amane, khung sơn mài chỉ vàng hoàng gia, mưa cánh hoa tử đằng 3 tầng chiều sâu, đèn lồng giấy bay, bụi vàng kim & Chibi đôi Kagaya–Amane.
+
+### 2. Trọn bộ Cửu Trụ (9/9 Hashira)
+1. **🦋 Trùng Trụ — Shinobu Kocho** *(Hồ điệp tím–xanh ngọc, hoa tử đằng & sao băng)*
+2. **🌊 Thủy Trụ — Giyu Tomioka** *(Mặt nước tĩnh lặng, gợn sóng Tĩnh Thủy & sương xanh)*
+3. **🔥 Viêm Trụ — Kyojuro Rengoku** *(Tàn lửa rực cháy Viêm Hô Hấp & hào quang cam vàng)*
+4. **💎 Âm Trụ — Tengen Uzui** *(Pháo hoa kim cương đa sắc & tia sáng hào nhoáng)*
+5. **🌫️ Hà Trụ — Muichiro Tokito** *(Sương mù bạc hà mờ ảo & lá ngân hạnh ngọc bích)*
+6. **🌸 Luyến Trụ — Mitsuri Kanroji** *(Cánh hoa anh đào hồng phấn xoáy gió xuân)*
+7. **🐍 Xà Trụ — Obanai Iguro** *(Đom đóm tím chàm uốn lượn dưới trăng bạc & bạch xà Kaburamaru)*
+8. **🌪️ Phong Trụ — Sanemi Shinazugawa** *(Kiếm phong xanh lục bảo & lốc lá phong)*
+9. **📿 Nham Trụ — Gyomei Himejima** *(Lá ngân hạnh vàng thu & hạt châu sáng hổ phách từ bi)*
+
+### 3. Bộ Tứ Nhân vật chính
+10. **☀️ Tanjiro Kamado — Nhật Luân** *(Lửa Vũ Điệu Hỏa Thần giao thoa dòng nước Thủy Hô Hấp)*
+11. **🎋 Nezuko Kamado — Hồng Liên** *(Đốm lửa Bộc Huyết hồng sakura & lá trúc xanh)*
+12. **⚡ Zenitsu Agatsuma — Lôi Minh** *(Hạt điện tích vàng & tia chớp Nhất Thiểm xẹt ngang trời đêm)*
+13. **🐗 Inosuke Hashibira — Dã Thú** *(Sương băng đại ngàn & vệt trăng khuyết song kiếm răng cưa)*
+
+*(Kèm 2 chủ đề cơ bản: `WLOP Cosmic` & `Midnight Obsidian`).*
+
+---
+
+## ✨ Kiến trúc Hiệu năng cao
+
+- **Local Asset HTTP Server (`127.0.0.1`) + Hybrid Payload (`~300 KB`)**: Tải tức thì toàn bộ hình nền 2K và Chibi SVG tách nền mà không làm nặng bộ nhớ của Electron; chuyển đổi giữa 16 chủ đề trong **0.02 giây**.
+- **Zero Live Blur (60/120fps)**: Sử dụng kính mờ dựng sẵn trên offscreen canvas thay vì `backdrop-filter: blur()` trực tiếp.
+- **NPC Đa Nhân Vật Động**: Tự động đổi Chibi góc khung chat, tiêu đề, màu sắc hộp thoại, các nút hành động đặc trưng và lời đáp Chat 2 chiều Tiếng Việt theo đúng nhân vật đang chọn.
 
 ---
 
@@ -27,53 +44,30 @@ Bộ tùy biến giao diện **60fps Zero-Live-Blur** dành cho ứng dụng **G
 
 ### Trên Windows (PowerShell)
 
-Mở **PowerShell** và dán cụm lệnh sau để vừa tải về thư mục Skill toàn cục của Antigravity vừa tự động biên dịch & kích hoạt giao diện chạy ngầm:
-
 ```powershell
 git clone https://github.com/thienkd/antigravity-shinobu-theme.git "$HOME\.gemini\config\skills\antigravity-custom-theme"
 powershell -ExecutionPolicy Bypass -File "$HOME\.gemini\config\skills\antigravity-custom-theme\scripts\install-win.ps1"
 ```
 
-**Sau khi chạy lệnh lần đầu tiên:**
-1. Nhìn xuống khay hệ thống góc dưới bên phải Windows (**System Tray**), bấm chuột phải vào biểu tượng **Antigravity** → chọn **`Quit`** (Thoát hẳn).
-2. Mở lại **Antigravity** từ **Desktop** hoặc **Start Menu** *(nếu dùng icon ghim dưới Taskbar, hãy bỏ ghim cũ rồi ghim lại từ Start Menu để nhận cờ `--remote-debugging-port=0`)*.
-3. Giao diện **Shinobu Wisteria** và **NPC Chibi Shinobu** sẽ tự động hiện lên! Bấm mục **`Custom theme`** ở thanh bên trái để mở bảng **Custom Theme Studio** tùy chỉnh bất cứ lúc nào.
+**Lưu ý ở lần cài đầu tiên trên máy mới:**
+1. Bấm chuột phải vào biểu tượng **Antigravity** ở khay hệ thống góc dưới phải (**System Tray**) → chọn **`Quit`**.
+2. Mở lại **Antigravity** từ **Desktop** hoặc **Start Menu** *(nếu dùng icon ghim dưới Taskbar, hãy bỏ ghim cũ rồi ghim lại từ Start Menu)*.
+3. Bấm mục **`✨ Custom theme`** ở thanh Sidebar bên trái để đổi tự do giữa **Gia Đình Chúa Công**, **9 Đại Trụ** và **4 Nhân vật chính**!
 
 ---
 
-### Trên macOS / Linux (Terminal)
-
-```bash
-git clone https://github.com/thienkd/antigravity-shinobu-theme.git "$HOME/.gemini/config/skills/antigravity-custom-theme"
-bash "$HOME/.gemini/config/skills/antigravity-custom-theme/scripts/install-unix.sh"
-```
-
-*(Khởi chạy Antigravity kèm cờ `--remote-debugging-port=0`, ví dụ trên macOS: `open -a Antigravity --args --remote-debugging-port=0`).*
-
----
-
-## 🔄 Cập nhật giao diện khi có chỉnh sửa mới
-
-Khi kéo bản cập nhật mới từ GitHub về máy khác:
+## 🔄 Cập nhật trên các máy đã cài trước đó
 
 ```powershell
 cd "$HOME\.gemini\config\skills\antigravity-custom-theme"
 git pull
-node scripts/build_payload.js
+powershell -ExecutionPolicy Bypass -File ".\scripts\install-win.ps1"
 ```
-
-*(Daemon đang chạy ngầm sẽ tự phát hiện `dist/theme_payload.js` mới và hot-reload trực tiếp lên cửa sổ Antigravity ngay lập tức mà không cần khởi động lại app!)*
 
 ---
 
-## 🧹 Gỡ cài đặt (Khôi phục Antigravity mặc định)
+## 🧹 Gỡ cài đặt về mặc định
 
 ```powershell
 node "$HOME\.gemini\config\skills\antigravity-custom-theme\scripts\uninstall.js"
 ```
-
----
-
-## 📄 Giấy phép & Ghi công
-
-Phát hành theo giấy phép **MIT**, phát triển mở rộng dựa trên kiến trúc gốc của [antigravity-custom-theme-skill](https://github.com/giakiet22102006/antigravity-custom-theme-skill).

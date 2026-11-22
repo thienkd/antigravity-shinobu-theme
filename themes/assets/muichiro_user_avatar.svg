@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <radialGradient id="muiBg" cx="50%" cy="48%" r="55%">
+      <stop offset="0%" stop-color="#13383a"/>
+      <stop offset="68%" stop-color="#0a1f24"/>
+      <stop offset="100%" stop-color="#051014"/>
+    </radialGradient>
+    <linearGradient id="muiMist" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ccfbf1"/>
+      <stop offset="50%" stop-color="#5eead4"/>
+      <stop offset="100%" stop-color="#14b8a6"/>
+    </linearGradient>
+    <linearGradient id="muiGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="55%" stop-color="#d4af37"/>
+      <stop offset="100%" stop-color="#926f1b"/>
+    </linearGradient>
+    <filter id="muiGlow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="1.9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="32" cy="32" r="31" fill="url(#muiBg)"/>
+  <circle cx="32" cy="32" r="29.6" stroke="#5eead4" stroke-opacity="0.5" stroke-width="1.3"/>
+
+  <!-- Mist Breathing Wisps -->
+  <g filter="url(#muiGlow)" opacity="0.88">
+    <path d="M 10 24 Q 20 19 32 23 T 54 21" stroke="url(#muiMist)" stroke-width="2.1" stroke-linecap="round"/>
+    <path d="M 11 43 Q 24 47 36 42 T 53 44" stroke="url(#muiMist)" stroke-width="2.1" stroke-linecap="round"/>
+  </g>
+
+  <!-- Muichiro Hollow-Corner Rectangular Tsuba -->
+  <g filter="url(#muiGlow)" transform="translate(32, 32)">
+    <!-- Central Cross Bar -->
+    <rect x="-12.5" y="-12.5" width="25" height="25" rx="2" fill="#0d2629" stroke="url(#muiGold)" stroke-width="2"/>
+    <!-- Four Hollow Corner Cutouts -->
+    <rect x="-9.5" y="-9.5" width="6.5" height="6.5" rx="0.8" fill="#07161a" stroke="#5eead4" stroke-width="0.9"/>
+    <rect x="3" y="-9.5" width="6.5" height="6.5" rx="0.8" fill="#07161a" stroke="#5eead4" stroke-width="0.9"/>
+    <rect x="-9.5" y="3" width="6.5" height="6.5" rx="0.8" fill="#07161a" stroke="#5eead4" stroke-width="0.9"/>
+    <rect x="3" y="3" width="6.5" height="6.5" rx="0.8" fill="#07161a" stroke="#5eead4" stroke-width="0.9"/>
+    <!-- Blade Slot -->
+    <rect x="-2" y="-5.5" width="4" height="11" rx="0.9" fill="#ccfbf1" stroke="url(#muiGold)" stroke-width="1"/>
+  </g>
+
+  <!-- Silver-Mint Ginkgo Leaf -->
+  <path d="M 46 13 C 51 13, 53 18, 49 21 C 47 19, 46 18, 44 19 L 42 22" fill="#e2e8f0" stroke="#99f6e4" stroke-width="0.9" stroke-linecap="round"/>
+  <circle cx="16" cy="16" r="1.4" fill="#99f6e4"/>
+  <circle cx="48" cy="48" r="1.3" fill="#5eead4"/>
+</svg>

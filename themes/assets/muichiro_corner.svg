@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <defs>
+    <linearGradient id="muiCorner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ccfbf1"/>
+      <stop offset="55%" stop-color="#5eead4"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+  </defs>
+  <path d="M 2.5 26 L 2.5 7.5 Q 2.5 2.5 7.5 2.5 L 26 2.5" stroke="url(#muiCorner)" stroke-width="1.55" stroke-linecap="round"/>
+  <rect x="5" y="5" width="5.6" height="5.6" rx="0.8" fill="#0a1f24" stroke="#5eead4" stroke-width="1.1"/>
+  <path d="M 13 6.5 Q 18 4.5 23 6.8" stroke="#99f6e4" stroke-width="1.1" stroke-linecap="round" opacity="0.85"/>
+  <circle cx="6.5" cy="15.5" r="1.25" fill="#ccfbf1"/>
+</svg>

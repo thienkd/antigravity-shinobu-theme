@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <radialGradient id="nezBg" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#4a1532"/>
+      <stop offset="68%" stop-color="#240a1b"/>
+      <stop offset="100%" stop-color="#12040d"/>
+    </radialGradient>
+    <linearGradient id="nezBamboo" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#86efac"/>
+      <stop offset="50%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#15803d"/>
+    </linearGradient>
+    <linearGradient id="nezFlame" x1="50%" y1="100%" x2="50%" y2="0%">
+      <stop offset="0%" stop-color="#e11d48"/>
+      <stop offset="55%" stop-color="#f472b6"/>
+      <stop offset="100%" stop-color="#fdf2f8"/>
+    </linearGradient>
+    <filter id="nezGlow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="1.9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="32" cy="32" r="31" fill="url(#nezBg)"/>
+  <circle cx="32" cy="32" r="29.6" stroke="#f472b6" stroke-opacity="0.58" stroke-width="1.35"/>
+
+  <!-- Asanoha Hemp-Leaf Geometric Star Backdrop -->
+  <g stroke="#f472b6" stroke-opacity="0.34" stroke-width="0.9">
+    <polygon points="32,11 49,21 49,43 32,53 15,43 15,21"/>
+    <line x1="32" y1="11" x2="32" y2="53"/>
+    <line x1="15" y1="21" x2="49" y2="43"/>
+    <line x1="49" y1="21" x2="15" y2="43"/>
+  </g>
+
+  <!-- Pink Exploding Blood Flame Wisps -->
+  <g filter="url(#nezGlow)">
+    <path d="M 19 24 C 15 17, 21 12, 24 17 C 26 12, 32 14, 29 21 Z" fill="url(#nezFlame)" opacity="0.9"/>
+    <path d="M 45 41 C 49 46, 44 52, 40 47 C 38 51, 33 49, 36 43 Z" fill="url(#nezFlame)" opacity="0.9"/>
+  </g>
+
+  <!-- Green Bamboo Muzzle Tied with Crimson Silk Ribbon -->
+  <g filter="url(#nezGlow)" transform="translate(32, 33) rotate(-14)">
+    <!-- Crimson Silk Tie -->
+    <path d="M -21 0 Q -14 -4 -11 0 M 11 0 Q 14 -4 21 0" stroke="#ef4444" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M -16 1 L -20 8 M 16 1 L 20 8" stroke="#f43f5e" stroke-width="1.8" stroke-linecap="round"/>
+    <!-- Bamboo Tube -->
+    <rect x="-15" y="-5.8" width="30" height="11.6" rx="5.2" fill="url(#nezBamboo)" stroke="#bbf7d0" stroke-width="1.1"/>
+    <!-- Bamboo Nodes -->
+    <line x1="-6.5" y1="-5.6" x2="-6.5" y2="5.6" stroke="#dcfce7" stroke-width="1.5"/>
+    <line x1="6.5" y1="-5.6" x2="6.5" y2="5.6" stroke="#dcfce7" stroke-width="1.5"/>
+  </g>
+</svg>

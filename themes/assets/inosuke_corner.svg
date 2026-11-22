@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <defs>
+    <linearGradient id="inoCorner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe"/>
+      <stop offset="50%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#34d399"/>
+    </linearGradient>
+  </defs>
+  <!-- Serrated Beast Fang Corner -->
+  <polyline points="2.5,25 2.5,18 4.5,16 2.5,14 2.5,7.5 7.5,2.5 14,2.5 16,4.5 18,2.5 25,2.5" stroke="url(#inoCorner)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 6.5 12.5 C 5.5 7.5, 7.5 5.5, 12.5 6.5 C 9.5 7.5, 7.5 9.5, 6.5 12.5 Z" fill="#fef3c7"/>
+</svg>

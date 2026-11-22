@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <radialGradient id="inoBg" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#132a4a"/>
+      <stop offset="68%" stop-color="#0a1628"/>
+      <stop offset="100%" stop-color="#050b14"/>
+    </radialGradient>
+    <linearGradient id="inoSteel" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="50%" stop-color="#93c5fd"/>
+      <stop offset="100%" stop-color="#f8fafc"/>
+    </linearGradient>
+    <filter id="inoGlow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="1.9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="32" cy="32" r="31" fill="url(#inoBg)"/>
+  <circle cx="32" cy="32" r="29.6" stroke="#60a5fa" stroke-opacity="0.58" stroke-width="1.35"/>
+
+  <!-- Crossed Serrated Indigo-Grey Nichirin Blades -->
+  <g filter="url(#inoGlow)">
+    <!-- Blade 1 (Bottom-Left to Top-Right) -->
+    <path d="M 14 50 L 20 44 M 20 44 L 46 14 L 49 17 L 45 22 L 42 21 L 39 27 L 36 26 L 33 32 L 30 31 L 23 47 Z"
+          fill="url(#inoSteel)" stroke="#e0f2fe" stroke-width="0.9" stroke-linejoin="round"/>
+    <line x1="13" y1="51" x2="21" y2="43" stroke="#cbd5e1" stroke-width="3.2" stroke-linecap="round"/>
+
+    <!-- Blade 2 (Bottom-Right to Top-Left) -->
+    <path d="M 50 50 L 44 44 M 44 44 L 18 14 L 15 17 L 19 22 L 22 21 L 25 27 L 28 26 L 31 32 L 34 31 L 41 47 Z"
+          fill="url(#inoSteel)" stroke="#e0f2fe" stroke-width="0.9" stroke-linejoin="round"/>
+    <line x1="51" y1="51" x2="43" y2="43" stroke="#cbd5e1" stroke-width="3.2" stroke-linecap="round"/>
+
+    <!-- Fierce Wild Boar Tusks Rising on Both Sides -->
+    <path d="M 18 42 C 11 38, 10 27, 16 21 C 14 28, 16 35, 22 39 Z" fill="#fef3c7" stroke="#fbbf24" stroke-width="0.9"/>
+    <path d="M 46 42 C 53 38, 54 27, 48 21 C 50 28, 48 35, 42 39 Z" fill="#fef3c7" stroke="#fbbf24" stroke-width="0.9"/>
+
+    <!-- Beast Breathing Emerald Eye Spark -->
+    <polygon points="32,37 35,41 32,45 29,41" fill="#34d399" stroke="#ecfdf5" stroke-width="0.8"/>
+  </g>
+</svg>

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <radialGradient id="renBg" cx="50%" cy="52%" r="54%">
+      <stop offset="0%" stop-color="#4c1111"/>
+      <stop offset="68%" stop-color="#240707"/>
+      <stop offset="100%" stop-color="#110304"/>
+    </radialGradient>
+    <linearGradient id="renFlame" x1="50%" y1="100%" x2="50%" y2="0%">
+      <stop offset="0%" stop-color="#dc2626"/>
+      <stop offset="48%" stop-color="#f97316"/>
+      <stop offset="85%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#fef08a"/>
+    </linearGradient>
+    <filter id="renGlow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="2.1" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="32" cy="32" r="31" fill="url(#renBg)"/>
+  <circle cx="32" cy="32" r="29.6" stroke="#f97316" stroke-opacity="0.58" stroke-width="1.35"/>
+  <circle cx="32" cy="32" r="26.8" stroke="#facc15" stroke-opacity="0.26" stroke-width="0.8"/>
+
+  <!-- Rengoku Iconic Flame Tsuba -->
+  <g filter="url(#renGlow)">
+    <path d="M 32 8 C 36 14, 42 15, 40 22 C 45 19, 49 25, 46 32 C 50 36, 46 45, 39 48 C 36 53, 28 53, 25 48 C 18 45, 14 36, 18 32 C 15 25, 19 19, 24 22 C 22 15, 28 14, 32 8 Z"
+          fill="url(#renFlame)" stroke="#dc2626" stroke-width="1.4" stroke-linejoin="round"/>
+    <!-- Inner Flame Swirl -->
+    <path d="M 32 15 C 35 19, 38 22, 37 27 C 40 26, 42 31, 39 36 C 37 42, 27 42, 25 36 C 22 31, 24 26, 27 27 C 26 22, 29 19, 32 15 Z"
+          fill="#fef08a" fill-opacity="0.45" stroke="#ef4444" stroke-width="1.05"/>
+    <!-- Central Sword Slot -->
+    <rect x="29.6" y="25" width="4.8" height="13" rx="1.2" fill="#1c0505" stroke="#facc15" stroke-width="1.15"/>
+  </g>
+
+  <!-- Rising Embers -->
+  <circle cx="15" cy="20" r="1.5" fill="#facc15"/>
+  <circle cx="49" cy="18" r="1.4" fill="#f97316"/>
+  <circle cx="18" cy="47" r="1.2" fill="#fb923c"/>
+  <circle cx="47" cy="46" r="1.6" fill="#fef08a"/>
+</svg>

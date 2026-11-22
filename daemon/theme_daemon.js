@@ -20,10 +20,124 @@ if (typeof globalThis.WebSocket !== 'function') {
 const ROOT_DIR = path.resolve(__dirname, '..');
 const PID_FILE = path.join(ROOT_DIR, 'daemon.pid');
 const CONFIG_FILE = process.env.AGY_CONFIG_PATH || path.join(ROOT_DIR, 'theme_config.json');
+const THEMES_DIR = path.join(ROOT_DIR, 'themes');
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
 const PAYLOAD_PATH = path.join(DIST_DIR, 'theme_payload.js');
 const LOG_FILE = path.join(ROOT_DIR, 'daemon.log');
 const DEFAULT_CONFIG = {};
+
+const ASSET_MIME_TYPES = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.webp': 'image/webp',
+    '.gif': 'image/gif',
+    '.svg': 'image/svg+xml; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+};
+
+let assetServer = null;
+let assetPort = 0;
+
+function startAssetServer() {
+    return new Promise((resolve) => {
+        const safePrefix = THEMES_DIR.endsWith(path.sep) ? THEMES_DIR : THEMES_DIR + path.sep;
+
+        const server = http.createServer((req, res) => {
+            const corsHeaders = {
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=3600',
+            };
+
+            if (req.method === 'OPTIONS') {
+                res.writeHead(204, {
+                    ...corsHeaders,
+                    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+                });
+                res.end();
+                return;
+            }
+
+            if (req.method !== 'GET' && req.method !== 'HEAD') {
+                res.writeHead(405, { ...corsHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Method Not Allowed');
+                return;
+            }
+
+            let rawPathname = '/';
+            try {
+                rawPathname = decodeURIComponent(String(req.url || '/').split(/[?#]/)[0]);
+            } catch (_) {
+                res.writeHead(400, { ...corsHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Bad Request');
+                return;
+            }
+
+            if (rawPathname.includes('\0')) {
+                res.writeHead(400, { ...corsHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Bad Request');
+                return;
+            }
+
+            const relPath = rawPathname.replace(/^[/\\]+/, '');
+            if (!relPath) {
+                res.writeHead(404, { ...corsHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Not Found');
+                return;
+            }
+
+            const resolvedPath = path.resolve(THEMES_DIR, relPath);
+            if (!resolvedPath.startsWith(safePrefix)) {
+                res.writeHead(403, { ...corsHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Forbidden');
+                return;
+            }
+
+            fs.stat(resolvedPath, (err, stat) => {
+                if (err || !stat.isFile()) {
+                    res.writeHead(404, { ...corsHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
+                    res.end('Not Found');
+                    return;
+                }
+
+                const ext = path.extname(resolvedPath).toLowerCase();
+                const contentType = ASSET_MIME_TYPES[ext] || 'application/octet-stream';
+                res.writeHead(200, {
+                    ...corsHeaders,
+                    'Content-Type': contentType,
+                    'Content-Length': stat.size,
+                });
+
+                if (req.method === 'HEAD') {
+                    res.end();
+                    return;
+                }
+
+                const stream = fs.createReadStream(resolvedPath);
+                stream.on('error', () => {
+                    if (!res.headersSent) {
+                        res.writeHead(500, { ...corsHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
+                    }
+                    res.end();
+                });
+                stream.pipe(res);
+            });
+        });
+
+        server.on('error', (err) => {
+            log(`Local asset server error: ${err.message}`);
+            resolve(0);
+        });
+
+        server.listen(0, '127.0.0.1', () => {
+            const addr = server.address();
+            assetPort = addr && typeof addr === 'object' && addr.port ? addr.port : 0;
+            assetServer = server;
+            log(`Local asset server listening on http://127.0.0.1:${assetPort}/ (serving ${THEMES_DIR})`);
+            resolve(assetPort);
+        });
+    });
+}
 
 function resolvePortFile() {
     if (process.env.AGY_PORT_FILE) {
@@ -137,7 +251,10 @@ function buildInjectedSource() {
 
     const cfgJson = JSON.stringify(readConfig());
     const payloadCode = fs.readFileSync(PAYLOAD_PATH, 'utf8');
-    return `window.__AGY_INITIAL_CONFIG__ = ${cfgJson};\n${payloadCode}`;
+    const assetBasePrefix = assetPort > 0
+        ? `window.__AGY_ASSET_BASE__ = "http://127.0.0.1:" + ${assetPort} + "/";\n`
+        : '';
+    return `${assetBasePrefix}window.__AGY_INITIAL_CONFIG__ = ${cfgJson};\n${payloadCode}`;
 }
 
 function getPortInfo() {
@@ -345,6 +462,12 @@ function shutdown(signal) {
         } catch (_) {}
     }
     sessions.clear();
+    if (assetServer) {
+        try {
+            assetServer.close();
+        } catch (_) {}
+        assetServer = null;
+    }
     removePidLock();
     process.exit(0);
 }
@@ -355,6 +478,8 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('exit', removePidLock);
 
 log(`Theme daemon started (PID ${process.pid}, platform=${process.platform}, portFile=${resolvePortFile()}).`);
-watchPayload();
-scanPages();
-setInterval(scanPages, 1500);
+startAssetServer().then(() => {
+    watchPayload();
+    scanPages();
+    setInterval(scanPages, 1500);
+});

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <defs>
+    <linearGradient id="ubuyaCornerGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="50%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="ubuyaCornerWist" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f5d0fe"/>
+      <stop offset="55%" stop-color="#e879f9"/>
+      <stop offset="100%" stop-color="#c084fc"/>
+    </linearGradient>
+  </defs>
+  <!-- Outer & Inner Double Gold Lacquer Frame Lines -->
+  <path d="M 2.2 28 L 2.2 7.2 Q 2.2 2.2 7.2 2.2 L 28 2.2" stroke="url(#ubuyaCornerGold)" stroke-width="1.65" stroke-linecap="round"/>
+  <path d="M 5.4 23 L 5.4 8.6 Q 5.4 5.4 8.6 5.4 L 23 5.4" stroke="#fef08a" stroke-width="0.85" stroke-linecap="round" opacity="0.82"/>
+  <!-- Corner Royal Knot Ornament -->
+  <path d="M 5.4 5.4 L 9.8 9.8" stroke="#fbbf24" stroke-width="1.1" stroke-linecap="round"/>
+  <polygon points="7.5,3.8 9.6,5.9 7.5,8.0 5.4,5.9" fill="#fef08a"/>
+  <!-- Cascading Miniature Wisteria Cluster -->
+  <ellipse cx="10.2" cy="10.5" rx="2.1" ry="1.4" transform="rotate(-25 10.2 10.5)" fill="url(#ubuyaCornerWist)"/>
+  <ellipse cx="8.8" cy="13.6" rx="1.8" ry="1.25" transform="rotate(12 8.8 13.6)" fill="#e879f9"/>
+  <ellipse cx="10.4" cy="16.4" rx="1.45" ry="1.05" fill="#c084fc"/>
+  <circle cx="9.6" cy="19.0" r="0.9" fill="#f5d0fe"/>
+  <!-- Gold Dust Accent -->
+  <circle cx="15.2" cy="8.4" r="1.05" fill="#fef08a" opacity="0.92"/>
+  <circle cx="19.5" cy="3.8" r="0.85" fill="#fbbf24" opacity="0.85"/>
+</svg>

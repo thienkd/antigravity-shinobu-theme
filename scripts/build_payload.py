@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
-Compile themes/themes.json + engine/core.js into dist/theme_payload.js.
-Inlines local SVG and raster wallpaper assets (compressing >2560px rasters to WebP
-when Pillow is available) so the CDP runtime payload stays self-contained.
+Compile themes/themes.json + engine/core.js (+ engine/kny_fx_modes.js) into dist/theme_payload.js.
+Default mode: Hybrid Asset URLs — inlines tiny assets (< 12 KB cornerSvg/userAvatar/small ornaments)
+while keeping heavy wallpapers, > 12 KB Chibi SVG stickers, and agentAvatars as clean "assets/<file>"
+relative paths for instant HTTP loading via theme_daemon.js or preview.html.
+Pass --inline-all to embed every asset (compressing >2560px rasters to WebP when Pillow is available)
+into a single self-contained payload.
 """
 
 from __future__ import annotations
@@ -17,6 +20,8 @@ import urllib.parse
 from pathlib import Path
 
 ASSET_KEYS = ("wallpaper", "sticker", "cornerSvg", "userAvatar", "agentAvatar")
+HYBRID_INLINE_CANDIDATES = {"cornerSvg", "userAvatar", "sticker"}
+HYBRID_INLINE_MAX_BYTES = 12 * 1024
 AVATAR_KEYS = {"userAvatar", "agentAvatar"}
 AVATAR_MAX_DIM = 256
 PLACEHOLDER = "/*__THEMES_PLACEHOLDER__*/{}"
@@ -72,7 +77,27 @@ def encode_raster(img_path: Path, max_dim: int) -> str:
         return f"data:image/webp;base64,{encoded}"
 
 
-def resolve_asset_value(value: object, themes_dir: Path, max_dim: int) -> object:
+def encode_asset_inline(asset_path: Path, max_dim: int) -> str:
+    if asset_path.suffix.lower() == ".svg":
+        return encode_svg(asset_path)
+    return encode_raster(asset_path, max_dim)
+
+
+def to_posix_relative_if_inside(asset_path: Path, themes_dir: Path) -> str | None:
+    try:
+        rel = asset_path.resolve().relative_to(themes_dir.resolve())
+        return rel.as_posix()
+    except ValueError:
+        return None
+
+
+def resolve_asset_value(
+    key: str,
+    value: object,
+    themes_dir: Path,
+    max_dim: int,
+    inline_all: bool,
+) -> object:
     if not isinstance(value, str):
         return value
     trimmed = value.strip()
@@ -90,12 +115,27 @@ def resolve_asset_value(value: object, themes_dir: Path, max_dim: int) -> object
     if not asset_path.is_file():
         raise FileNotFoundError(f"Theme asset not found: {trimmed} (resolved: {asset_path})")
 
-    if asset_path.suffix.lower() == ".svg":
-        return encode_svg(asset_path)
-    return encode_raster(asset_path, max_dim)
+    if inline_all:
+        return encode_asset_inline(asset_path, max_dim)
+
+    rel_posix = to_posix_relative_if_inside(asset_path, themes_dir)
+    if rel_posix is None:
+        return encode_asset_inline(asset_path, max_dim)
+
+    file_size = asset_path.stat().st_size
+    if key in HYBRID_INLINE_CANDIDATES and file_size < HYBRID_INLINE_MAX_BYTES:
+        return encode_asset_inline(asset_path, max_dim)
+
+    return rel_posix
 
 
-def build_payload(themes_path: Path, engine_path: Path, out_path: Path, max_dim: int) -> None:
+def build_payload(
+    themes_path: Path,
+    engine_path: Path,
+    out_path: Path,
+    max_dim: int,
+    inline_all: bool = False,
+) -> None:
     if not themes_path.is_file():
         raise FileNotFoundError(f"themes.json not found: {themes_path}")
     if not engine_path.is_file():
@@ -114,7 +154,9 @@ def build_payload(themes_path: Path, engine_path: Path, out_path: Path, max_dim:
         for key in ASSET_KEYS:
             if key in copied:
                 target_dim = min(max_dim, AVATAR_MAX_DIM) if key in AVATAR_KEYS else max_dim
-                copied[key] = resolve_asset_value(copied[key], themes_dir, target_dim)
+                copied[key] = resolve_asset_value(
+                    key, copied[key], themes_dir, target_dim, inline_all
+                )
         resolved_themes[name] = copied
 
     engine_src = engine_path.read_text(encoding="utf-8")
@@ -127,26 +169,39 @@ def build_payload(themes_path: Path, engine_path: Path, out_path: Path, max_dim:
     themes_json = json.dumps(resolved_themes, ensure_ascii=False)
     compiled = engine_src.replace(PLACEHOLDER, themes_json, 1)
 
+    fx_modes_path = engine_path.parent / "kny_fx_modes.js"
+    if fx_modes_path.is_file() and "__AGY_KNY_FX_DRAWERS__ =" not in engine_src:
+        fx_src = fx_modes_path.read_text(encoding="utf-8")
+        compiled = f"{fx_src}\n{compiled}"
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(compiled, encoding="utf-8")
 
     size_kb = out_path.stat().st_size / 1024.0
+    mode_label = "inline-all" if inline_all else "hybrid"
     print(
-        f"[build_payload] Built {out_path} ({size_kb:.1f} KB) with {len(resolved_themes)} theme(s): "
+        f"[build_payload] Built {out_path} ({size_kb:.1f} KB, mode={mode_label}) with {len(resolved_themes)} theme(s): "
         + ", ".join(resolved_themes.keys())
     )
 
 
 def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
-    parser = argparse.ArgumentParser(description="Compile themes.json + engine/core.js -> dist/theme_payload.js")
+    parser = argparse.ArgumentParser(
+        description="Compile themes.json + engine/core.js -> dist/theme_payload.js"
+    )
     parser.add_argument("--themes", type=Path, default=repo_root / "themes" / "themes.json")
     parser.add_argument("--engine", type=Path, default=repo_root / "engine" / "core.js")
     parser.add_argument("--out", type=Path, default=repo_root / "dist" / "theme_payload.js")
     parser.add_argument("--max-dim", type=int, default=DEFAULT_MAX_DIM)
+    parser.add_argument(
+        "--inline-all",
+        action="store_true",
+        help="Embed all assets (including 2K wallpapers and large Chibi SVGs) as data: URIs.",
+    )
     args = parser.parse_args()
 
-    build_payload(args.themes, args.engine, args.out, args.max_dim)
+    build_payload(args.themes, args.engine, args.out, args.max_dim, args.inline_all)
     return 0
 
 

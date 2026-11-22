@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <defs>
+    <linearGradient id="uzuiCorner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="50%" stop-color="#f43f5e"/>
+      <stop offset="100%" stop-color="#2dd4bf"/>
+    </linearGradient>
+  </defs>
+  <path d="M 2.5 26 L 2.5 8 Q 2.5 2.5 8 2.5 L 26 2.5" stroke="url(#uzuiCorner)" stroke-width="1.65" stroke-linecap="round"/>
+  <polygon points="7.5,4.2 10.6,7.5 7.5,10.8 4.4,7.5" fill="#f43f5e" stroke="#fef08a" stroke-width="0.95"/>
+  <circle cx="14.5" cy="5.5" r="1.4" fill="#2dd4bf"/>
+  <circle cx="5.5" cy="14.5" r="1.4" fill="#fbbf24"/>
+  <path d="M 12.5 11 L 13.2 12.6 L 14.8 13.3 L 13.2 14 L 12.5 15.6 L 11.8 14 L 10.2 13.3 L 11.8 12.6 Z" fill="#fef08a"/>
+</svg>

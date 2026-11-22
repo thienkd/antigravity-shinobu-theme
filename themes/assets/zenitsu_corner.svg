@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <defs>
+    <linearGradient id="zenCorner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="55%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+  </defs>
+  <!-- Lightning Zigzag Corner -->
+  <polyline points="2.5,25 2.5,9 6,9 4,4 9,6 9,2.5 25,2.5" stroke="url(#zenCorner)" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="11,11 14,6 17,11" fill="#fef08a" opacity="0.88"/>
+  <circle cx="6.5" cy="15.5" r="1.25" fill="#facc15"/>
+</svg>

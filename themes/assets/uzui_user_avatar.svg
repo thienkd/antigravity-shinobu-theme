@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <radialGradient id="uzuiBg" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#31103f"/>
+      <stop offset="68%" stop-color="#170924"/>
+      <stop offset="100%" stop-color="#0b0413"/>
+    </radialGradient>
+    <linearGradient id="uzuiGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="50%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="uzuiRuby" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbcfe8"/>
+      <stop offset="45%" stop-color="#f43f5e"/>
+      <stop offset="100%" stop-color="#be123c"/>
+    </linearGradient>
+    <linearGradient id="uzuiTeal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ccfbf1"/>
+      <stop offset="50%" stop-color="#2dd4bf"/>
+      <stop offset="100%" stop-color="#0f766e"/>
+    </linearGradient>
+    <filter id="uzuiGlow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="1.9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="32" cy="32" r="31" fill="url(#uzuiBg)"/>
+  <circle cx="32" cy="32" r="29.6" stroke="url(#uzuiGold)" stroke-width="1.35" opacity="0.88"/>
+
+  <!-- Sound Breathing Flamboyant Firework Rays -->
+  <g filter="url(#uzuiGlow)" stroke-linecap="round">
+    <line x1="32" y1="9" x2="32" y2="15" stroke="#fef08a" stroke-width="1.6"/>
+    <line x1="32" y1="49" x2="32" y2="55" stroke="#f43f5e" stroke-width="1.6"/>
+    <line x1="13" y1="15" x2="18" y2="20" stroke="#2dd4bf" stroke-width="1.5"/>
+    <line x1="51" y1="15" x2="46" y2="20" stroke="#f43f5e" stroke-width="1.5"/>
+    <line x1="13" y1="49" x2="18" y2="44" stroke="#fbbf24" stroke-width="1.5"/>
+    <line x1="51" y1="49" x2="46" y2="44" stroke="#2dd4bf" stroke-width="1.5"/>
+  </g>
+
+  <!-- Shinobi Headband Plate & 3 Sparkling Jewels -->
+  <g filter="url(#uzuiGlow)">
+    <rect x="11" y="23" width="42" height="18" rx="6" fill="#1e293b" stroke="url(#uzuiGold)" stroke-width="1.5"/>
+    <!-- Left Jade Gem -->
+    <polygon points="20,26.5 24.5,32 20,37.5 15.5,32" fill="url(#uzuiTeal)" stroke="#fef08a" stroke-width="0.9"/>
+    <!-- Center Large Ruby Gem -->
+    <polygon points="32,24.5 37.8,32 32,39.5 26.2,32" fill="url(#uzuiRuby)" stroke="#fef08a" stroke-width="1.15"/>
+    <!-- Right Jade Gem -->
+    <polygon points="44,26.5 48.5,32 44,37.5 39.5,32" fill="url(#uzuiTeal)" stroke="#fef08a" stroke-width="0.9"/>
+    <!-- Dangling Pearl Beads -->
+    <circle cx="20" cy="43.5" r="1.5" fill="#fbbf24"/>
+    <circle cx="32" cy="45" r="1.8" fill="#f43f5e"/>
+    <circle cx="44" cy="43.5" r="1.5" fill="#2dd4bf"/>
+  </g>
+
+  <!-- Four-Point Starbursts -->
+  <path d="M 32 14 L 33 16.5 L 35.5 17.5 L 33 18.5 L 32 21 L 31 18.5 L 28.5 17.5 L 31 16.5 Z" fill="#fef08a"/>
+</svg>
