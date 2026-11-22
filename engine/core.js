@@ -1,32 +1,105 @@
 (() => {
-  const THEMES = /*__THEMES_PLACEHOLDER__*/{};
+  const SEC = (typeof __AGY_SEC__ === 'object' && __AGY_SEC__) ? __AGY_SEC__ : {
+    getAssetBase: () => '',
+    getInitialConfig: () => null,
+    saveConfigSecure: () => false,
+    escapeHtml: (raw) => String(raw == null ? '' : raw).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])),
+    stripProtoKeys: (obj) => obj,
+    sanitizeCssUrl: (raw) => (typeof raw === 'string' && !/["'()\\;\r\n\0<>`{}]/.test(raw) ? raw.trim() : ''),
+    sanitizeCssValue: (raw, fb = '') => (typeof raw === 'string' && !/[;{}<>\\`\r\n\0]/.test(raw) ? raw.trim() : (typeof raw === 'number' && Number.isFinite(raw) ? String(raw) : fb)),
+    sanitizeSvgMarkup: (svg) => (typeof svg === 'string' && !/<script|<foreignobject|\bon[a-z]+\s*=/i.test(svg) ? svg.trim() : ''),
+    sanitizeThemeDefinition: (t) => t,
+    resolveAssetUrl: (val) => (typeof val === 'string' ? val.trim() : '')
+  };
 
-  function resolveThemeAssetUrl(raw) {
-    if (!raw || typeof raw !== 'string') return '';
+  const MAX_IMAGE_UPLOAD_BYTES = 15 * 1024 * 1024;
+  const ALLOWED_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+
+  function isValidImageUploadFile(file) {
+    return Boolean(
+      file &&
+      typeof file.size === 'number' &&
+      file.size > 0 &&
+      file.size <= MAX_IMAGE_UPLOAD_BYTES &&
+      ALLOWED_IMAGE_MIMES.includes(file.type)
+    );
+  }
+
+  function strictPercentEncodeSvg(str) {
+    return encodeURIComponent(str).replace(/[!'()*;]/g, (ch) =>
+      '%' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')
+    );
+  }
+
+  function safeCssUrl(raw) {
+    if (typeof raw !== 'string') return '';
+    const viaSec = SEC.sanitizeCssUrl(raw);
+    if (viaSec) return viaSec;
     const trimmed = raw.trim();
-    if (
-      !trimmed ||
-      trimmed.startsWith('data:') ||
-      trimmed.startsWith('http://') ||
-      trimmed.startsWith('https://') ||
-      trimmed.startsWith('blob:')
-    ) {
+    // Safe fallback for pure base64 raster data URIs (cannot contain any CSS/HTML breakout chars)
+    if (/^data:image\/(?:webp|png|jpeg|jpg|gif);base64,[A-Za-z0-9+/=]+$/i.test(trimmed)) {
       return trimmed;
     }
-    const base = window.__AGY_ASSET_BASE__ || './themes/';
-    return base.replace(/\/?$/, '/') + trimmed.replace(/^\/+/, '');
+    return '';
   }
+
+  function resolveAssetUrl(raw) {
+    if (!raw || raw === 'none' || typeof raw !== 'string') return '';
+    const trimmed = raw.trim();
+    if (!trimmed) return '';
+
+    // Normalize SVG data URIs through sanitizeSvgMarkup -> strict percent-encoded URI so __AGY_SEC__.sanitizeCssUrl passes 100%
+    if (/^data:image\/svg\+xml,/i.test(trimmed)) {
+      try {
+        const decoded = decodeURIComponent(trimmed.slice(trimmed.indexOf(',') + 1));
+        const cleanSvg = SEC.sanitizeSvgMarkup(decoded);
+        if (!cleanSvg) return '';
+        return SEC.sanitizeCssUrl(`data:image/svg+xml,${strictPercentEncodeSvg(cleanSvg)}`);
+      } catch (_) {
+        return '';
+      }
+    }
+
+    if (/^data:image\/svg\+xml;base64,/i.test(trimmed)) {
+      try {
+        const b64 = trimmed.slice(trimmed.indexOf(',') + 1);
+        const bin = typeof atob === 'function' ? atob(b64) : '';
+        const utf8 = decodeURIComponent(Array.from(bin).map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join(''));
+        const cleanSvg = SEC.sanitizeSvgMarkup(utf8);
+        if (!cleanSvg) return '';
+        return SEC.sanitizeCssUrl(`data:image/svg+xml,${strictPercentEncodeSvg(cleanSvg)}`);
+      } catch (_) {
+        return '';
+      }
+    }
+
+    if (trimmed.startsWith('data:')) {
+      return safeCssUrl(trimmed);
+    }
+
+    const assetBase = typeof SEC.getAssetBase === 'function' ? SEC.getAssetBase() : '';
+    if (!assetBase && /^assets\//.test(trimmed)) {
+      const localPreviewCandidate = `./themes/${trimmed}`;
+      return SEC.resolveAssetUrl(localPreviewCandidate) || SEC.sanitizeCssUrl(localPreviewCandidate);
+    }
+    return SEC.resolveAssetUrl(trimmed) || SEC.sanitizeCssUrl(trimmed);
+  }
+
+  const THEMES = /*__THEMES_PLACEHOLDER__*/{};
 
   Object.values(THEMES).forEach((cfg) => {
     if (!cfg || typeof cfg !== 'object') return;
     ['wallpaper', 'sticker', 'userSticker', 'actionSticker', 'userActionSticker', 'cornerSvg', 'userCornerSvg', 'userAvatar', 'agentAvatar'].forEach((k) => {
       if (typeof cfg[k] === 'string' && cfg[k]) {
-        cfg[k] = resolveThemeAssetUrl(cfg[k]);
+        cfg[k] = resolveAssetUrl(cfg[k]);
       }
     });
   });
 
   const THEME_KEYS = Object.keys(THEMES);
+  if (typeof window !== 'undefined' && window.__AGY_THEME_FORGE__ && typeof window.__AGY_THEME_FORGE__.hydrateIntoThemesRegistry === 'function') {
+    window.__AGY_THEME_FORGE__.hydrateIntoThemesRegistry(THEMES, THEME_KEYS);
+  }
   const DEFAULT_THEME_KEY = THEME_KEYS[0] || 'Default';
 
   const STORAGE_THEME = 'agy_theme_v3';
@@ -40,6 +113,8 @@
   const STORAGE_GLASS_BLUR = 'agy_glass_blur_v3';
   const STORAGE_AVATAR_SIZE = 'agy_avatar_size_v3';
   const STORAGE_AVATAR_RADIUS = 'agy_avatar_radius_v3';
+  const STORAGE_TRANSPARENT_WORLD = 'agy_transparent_world_v1';
+  const STORAGE_MASTER_PERSONA = 'agy_master_persona_v1';
 
   const CHECK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
@@ -62,33 +137,63 @@
     }
   };
 
+  function clampInt(val, min, max, fallback) {
+    const parsed = parseInt(val, 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(max, Math.max(min, parsed));
+  }
+
   function getState() {
-    const init = window.__AGY_INITIAL_CONFIG__ || {};
+    const init = SEC.getInitialConfig() || {};
     const rawTheme = localStorage.getItem(STORAGE_THEME) || init.themeName || DEFAULT_THEME_KEY;
     const themeName = THEMES[rawTheme] ? rawTheme : DEFAULT_THEME_KEY;
     const rawBubble = localStorage.getItem(STORAGE_BUBBLE) || init.bubbleName || themeName;
     const bubbleName = THEMES[rawBubble] ? rawBubble : themeName;
-    const inputStyle = localStorage.getItem(STORAGE_INPUT) || init.inputStyle || 'sync';
+    const rawInput = localStorage.getItem(STORAGE_INPUT) || init.inputStyle || 'sync';
+    const inputStyle = INPUT_STYLES[rawInput] ? rawInput : 'sync';
     const presetDefaultDim = THEMES[themeName]?.defaultDimming !== undefined ? THEMES[themeName].defaultDimming : 69;
-    const dimming = parseInt(localStorage.getItem(STORAGE_DIMMING) || (init.dimming !== undefined ? init.dimming : String(presetDefaultDim)), 10);
+    const dimming = clampInt(localStorage.getItem(STORAGE_DIMMING) ?? init.dimming ?? presetDefaultDim, 15, 92, 69);
     const wpEnabled = localStorage.getItem(STORAGE_WP_ENABLED) !== null
       ? localStorage.getItem(STORAGE_WP_ENABLED) !== 'false'
-      : (init.wpEnabled !== undefined ? init.wpEnabled : true);
-    const customWp = localStorage.getItem(STORAGE_CUSTOM_WP) || init.customWp || '';
-    const userAvatar = localStorage.getItem(STORAGE_USER_AVATAR) ?? init.userAvatar ?? '';
-    const agentAvatar = localStorage.getItem(STORAGE_AGENT_AVATAR) ?? init.agentAvatar ?? '';
+      : (init.wpEnabled !== undefined ? Boolean(init.wpEnabled) : true);
+    const rawCustomWp = localStorage.getItem(STORAGE_CUSTOM_WP) || init.customWp || '';
+    const customWp = rawCustomWp ? resolveAssetUrl(rawCustomWp) : '';
+    const rawUserAv = localStorage.getItem(STORAGE_USER_AVATAR) ?? init.userAvatar ?? '';
+    const userAvatar = rawUserAv === 'none' ? 'none' : (rawUserAv ? resolveAssetUrl(rawUserAv) : '');
+    const rawAgentAv = localStorage.getItem(STORAGE_AGENT_AVATAR) ?? init.agentAvatar ?? '';
+    const agentAvatar = rawAgentAv === 'none' ? 'none' : (rawAgentAv ? resolveAssetUrl(rawAgentAv) : '');
     const rawBlur = localStorage.getItem(STORAGE_GLASS_BLUR) ?? init.glassBlur;
-    const glassBlur = rawBlur !== undefined && rawBlur !== null && rawBlur !== '' ? parseInt(rawBlur, 10) : 0;
+    const glassBlur = rawBlur !== undefined && rawBlur !== null && rawBlur !== '' ? clampInt(rawBlur, 0, 16, 0) : 0;
     const rawAvSize = localStorage.getItem(STORAGE_AVATAR_SIZE) ?? init.avatarSize;
-    const avatarSize = rawAvSize !== undefined && rawAvSize !== null && rawAvSize !== '' ? parseInt(rawAvSize, 10) : 32;
+    const avatarSize = rawAvSize !== undefined && rawAvSize !== null && rawAvSize !== '' ? clampInt(rawAvSize, 22, 52, 32) : 32;
     const rawAvRad = localStorage.getItem(STORAGE_AVATAR_RADIUS) ?? init.avatarRadius;
-    const avatarRadius = rawAvRad !== undefined && rawAvRad !== null && rawAvRad !== '' ? parseInt(rawAvRad, 10) : 50;
-    return { themeName, bubbleName, inputStyle, dimming, wpEnabled, customWp, userAvatar, agentAvatar, glassBlur, avatarSize, avatarRadius };
+    const avatarRadius = rawAvRad !== undefined && rawAvRad !== null && rawAvRad !== '' ? clampInt(rawAvRad, 0, 50, 50) : 50;
+    const transparentWorld = localStorage.getItem(STORAGE_TRANSPARENT_WORLD) !== null
+      ? localStorage.getItem(STORAGE_TRANSPARENT_WORLD) !== 'false'
+      : (init.transparentWorld !== undefined ? Boolean(init.transparentWorld) : true);
+    const masterPersona = String(localStorage.getItem(STORAGE_MASTER_PERSONA) || init.masterPersona || 'yoriichi').replace(/[^a-zA-Z0-9_-]/g, '') || 'yoriichi';
+    return {
+      themeName,
+      bubbleName,
+      inputStyle,
+      dimming,
+      wpEnabled,
+      customWp,
+      userAvatar,
+      agentAvatar,
+      glassBlur,
+      avatarSize,
+      avatarRadius,
+      transparentWorld,
+      masterPersona
+    };
   }
 
-  // Downscale user/agent avatar uploads to 192x192 WebP once so theme_config.json stays tiny
+  // Downscale user/agent avatar uploads to 192x192 WebP once (strictly validated <= 15MB & image MIME; aborts safely on decode error)
   function compressAvatarFile(file, callback) {
+    if (!isValidImageUploadFile(file)) return;
     const reader = new FileReader();
+    reader.onerror = () => {};
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
@@ -98,6 +203,7 @@
           canvas.width = size;
           canvas.height = size;
           const ctx = canvas.getContext('2d');
+          if (!ctx) return;
           const natW = img.naturalWidth || size;
           const natH = img.naturalHeight || size;
           const side = Math.min(natW, natH);
@@ -105,12 +211,50 @@
           const sy = Math.max(0, Math.floor((natH - side) / 2));
           ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
           const out = canvas.toDataURL('image/webp', 0.88);
-          callback(out && out.startsWith('data:image/webp') ? out : canvas.toDataURL('image/png'));
-        } catch (e) {
-          callback(String(reader.result || ''));
+          const candidate = out && out.startsWith('data:image/webp') ? out : canvas.toDataURL('image/png');
+          const safeUri = safeCssUrl(candidate);
+          if (safeUri) callback(safeUri);
+        } catch (_) {
+          // Abort safely — never pass raw FileReader result on error
         }
       };
-      img.onerror = () => callback(String(reader.result || ''));
+      img.onerror = () => {
+        // Abort safely — never pass raw FileReader result on decode failure
+      };
+      img.src = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // Validate and re-encode custom wallpaper uploads safely (<= 15MB, PNG/JPEG/WebP/GIF, never passes raw untrusted data URL on error)
+  function compressWallpaperFile(file, callback) {
+    if (!isValidImageUploadFile(file)) return;
+    const reader = new FileReader();
+    reader.onerror = () => {};
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxW = 2560;
+          const maxH = 1440;
+          const natW = Math.max(1, img.naturalWidth || 1920);
+          const natH = Math.max(1, img.naturalHeight || 1080);
+          const scale = Math.min(1, maxW / natW, maxH / natH);
+          const w = Math.max(64, Math.round(natW * scale));
+          const h = Math.max(64, Math.round(natH * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.drawImage(img, 0, 0, w, h);
+          const out = canvas.toDataURL('image/webp', 0.88);
+          const candidate = out && out.startsWith('data:image/webp') ? out : canvas.toDataURL('image/jpeg', 0.88);
+          const safeUri = safeCssUrl(candidate);
+          if (safeUri) callback(safeUri);
+        } catch (_) {}
+      };
+      img.onerror = () => {};
       img.src = String(reader.result || '');
     };
     reader.readAsDataURL(file);
@@ -119,13 +263,14 @@
   // Pre-bake L-shaped header/sidebar glass blur once per theme/dimming change to avoid per-frame GPU backdrop readback
   function syncPrebakedGlass(wpUrl, overlayRgb, overlayAlpha, tintBg, blurStr) {
     const shell = document.querySelector('.agy-shell');
+    const safeWp = safeCssUrl(wpUrl || '');
     const pxMatch = String(blurStr !== undefined ? blurStr : '0px').match(/(\d+(?:\.\d+)?)/);
     const rawBlurNum = pxMatch ? parseFloat(pxMatch[1]) : 0;
-    if (!wpUrl || rawBlurNum <= 0.2) {
+    if (!safeWp || rawBlurNum <= 0.2) {
       if (shell) shell.style.removeProperty('--agy-l-glass-bg');
       return;
     }
-    const key = `${wpUrl.slice(0, 64)}|${wpUrl.length}|${overlayRgb}|${overlayAlpha.toFixed(3)}|${tintBg}|${blurStr}`;
+    const key = `${safeWp.slice(0, 64)}|${safeWp.length}|${overlayRgb}|${overlayAlpha.toFixed(3)}|${tintBg}|${blurStr}`;
     window.__AGY_BLUR_CACHE__ = window.__AGY_BLUR_CACHE__ || {};
     const cached = window.__AGY_BLUR_CACHE__[key];
     if (cached) {
@@ -133,7 +278,7 @@
       return;
     }
     const img = new Image();
-    if (/^https?:\/\//i.test(wpUrl)) {
+    if (/^https?:\/\//i.test(safeWp)) {
       img.crossOrigin = 'anonymous';
     }
     img.onload = () => {
@@ -155,52 +300,82 @@
           ctx.fillStyle = tintBg;
           ctx.fillRect(0, 0, w, h);
         }
-        const baked = canvas.toDataURL('image/webp', 0.92);
+        const rawBaked = canvas.toDataURL('image/webp', 0.92);
+        const baked = safeCssUrl(rawBaked);
+        if (!baked) return;
         window.__AGY_BLUR_CACHE__[key] = baked;
         const curShell = document.querySelector('.agy-shell');
         if (curShell) curShell.style.setProperty('--agy-l-glass-bg', 'url("' + baked + '")');
       } catch (e) {}
     };
-    img.src = wpUrl;
+    img.src = safeWp;
+  }
+
+  function getActiveMasterPersona(stOverride) {
+    const st = stOverride || getState();
+    if (typeof window !== 'undefined' && window.__AGY_THEME_FORGE__ && typeof window.__AGY_THEME_FORGE__.getPersona === 'function') {
+      return window.__AGY_THEME_FORGE__.getPersona(st.masterPersona || 'yoriichi');
+    }
+    return {
+      id: 'yoriichi',
+      tagLabel: 'Khai Tổ Hỏa Thần (Anh)',
+      skillId: 'yoriichi',
+      ringColor: '#fde047',
+      glowColor: 'rgba(239, 68, 68, 0.52)',
+      userAvatar: resolveAssetUrl('assets/yoriichi_avatar.jpg'),
+      userSticker: resolveAssetUrl('assets/yoriichi_ornament.svg'),
+      userCornerSvg: resolveAssetUrl('assets/yoriichi_corner.svg'),
+      actionSticker: resolveAssetUrl('assets/yoriichi_action.png')
+    };
   }
 
   function applyTheme(overrides = {}) {
     const st = { ...getState(), ...overrides };
+    st.dimming = clampInt(st.dimming, 15, 92, 69);
+    st.glassBlur = clampInt(st.glassBlur, 0, 16, 0);
+    st.avatarSize = clampInt(st.avatarSize, 22, 52, 32);
+    st.avatarRadius = clampInt(st.avatarRadius, 0, 50, 50);
+    st.inputStyle = INPUT_STYLES[st.inputStyle] ? st.inputStyle : 'sync';
+    st.transparentWorld = st.transparentWorld !== false;
+    st.masterPersona = String(st.masterPersona || 'yoriichi').replace(/[^a-zA-Z0-9_-]/g, '') || 'yoriichi';
+
     try {
       localStorage.setItem(STORAGE_THEME, st.themeName);
       localStorage.setItem(STORAGE_BUBBLE, st.bubbleName);
       localStorage.setItem(STORAGE_INPUT, st.inputStyle);
       localStorage.setItem(STORAGE_DIMMING, String(st.dimming));
       localStorage.setItem(STORAGE_WP_ENABLED, String(st.wpEnabled));
+      localStorage.setItem(STORAGE_TRANSPARENT_WORLD, String(st.transparentWorld));
+      localStorage.setItem(STORAGE_MASTER_PERSONA, st.masterPersona);
       if (overrides.customWp !== undefined) {
-        localStorage.setItem(STORAGE_CUSTOM_WP, overrides.customWp);
+        localStorage.setItem(STORAGE_CUSTOM_WP, overrides.customWp ? safeCssUrl(overrides.customWp) : '');
       }
       if (overrides.userAvatar !== undefined) {
-        localStorage.setItem(STORAGE_USER_AVATAR, overrides.userAvatar);
+        localStorage.setItem(STORAGE_USER_AVATAR, overrides.userAvatar === 'none' ? 'none' : safeCssUrl(overrides.userAvatar));
       }
       if (overrides.agentAvatar !== undefined) {
-        localStorage.setItem(STORAGE_AGENT_AVATAR, overrides.agentAvatar);
+        localStorage.setItem(STORAGE_AGENT_AVATAR, overrides.agentAvatar === 'none' ? 'none' : safeCssUrl(overrides.agentAvatar));
       }
       if (overrides.glassBlur !== undefined) {
-        localStorage.setItem(STORAGE_GLASS_BLUR, String(overrides.glassBlur));
+        localStorage.setItem(STORAGE_GLASS_BLUR, String(st.glassBlur));
       }
       if (overrides.avatarSize !== undefined) {
-        localStorage.setItem(STORAGE_AVATAR_SIZE, String(overrides.avatarSize));
+        localStorage.setItem(STORAGE_AVATAR_SIZE, String(st.avatarSize));
       }
       if (overrides.avatarRadius !== undefined) {
-        localStorage.setItem(STORAGE_AVATAR_RADIUS, String(overrides.avatarRadius));
+        localStorage.setItem(STORAGE_AVATAR_RADIUS, String(st.avatarRadius));
       }
     } catch (e) {}
 
-    if (window.agySaveThemeConfig) {
-      try {
-        window.agySaveThemeConfig(JSON.stringify(st));
-      } catch (e) {}
+    SEC.saveConfigSecure(st);
+    if (typeof syncTransparentWorldSetting === 'function') {
+      syncTransparentWorldSetting(st.transparentWorld);
     }
 
-    const mainTheme = THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY];
+    const mainTheme = THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
     const bubbleTheme = THEMES[st.bubbleName] || mainTheme;
-    const wpUrl = st.customWp || mainTheme.wallpaper || '';
+    const persona = getActiveMasterPersona(st);
+    const wpUrl = safeCssUrl(st.customWp || mainTheme.wallpaper || '');
 
     const oldLegacy = document.getElementById('antigravity-ho-ly-chibi-theme');
     if (oldLegacy) oldLegacy.remove();
@@ -212,22 +387,44 @@
       document.head.appendChild(styleEl);
     }
 
+    // Strictly sanitize every CSS color / gradient / token via __AGY_SEC__.sanitizeCssValue (F-02)
     const overlayAlpha = mainTheme.clearBackdrop
       ? Math.min(0.92, Math.max(0.0, ((st.dimming - 10) / 82) * 0.85))
       : Math.min(0.92, Math.max(0.12, (st.dimming / 100) * 0.78));
-    const overlayRgb = mainTheme.overlayRgb || '10, 7, 6';
-    const bgPosition = mainTheme.bgPosition || 'center center';
-    const secondaryGlowStop = mainTheme.secondaryGlow
-      ? `, radial-gradient(circle at 22% 72%, ${mainTheme.secondaryGlow} 0%, transparent 55%)`
+    const overlayRgb = SEC.sanitizeCssValue(mainTheme.overlayRgb, '10, 7, 6');
+    const bgPosition = SEC.sanitizeCssValue(mainTheme.bgPosition, 'center center');
+    const mainPrimary = SEC.sanitizeCssValue(mainTheme.primary, '#c084fc');
+    const mainAccent = SEC.sanitizeCssValue(mainTheme.accent || mainTheme.secondary, mainPrimary);
+    const mainGlow = SEC.sanitizeCssValue(mainTheme.glow, 'rgba(192, 132, 252, 0.28)');
+    const mainSecondaryGlow = SEC.sanitizeCssValue(mainTheme.secondaryGlow, '');
+    const mainPureBg = SEC.sanitizeCssValue(mainTheme.pureBg, '');
+    const mainBorderColor = SEC.sanitizeCssValue(mainTheme.borderColor, 'rgba(255, 255, 255, 0.18)');
+    const mainHeaderBg = SEC.sanitizeCssValue(mainTheme.headerBg, '');
+    const mainHeaderBorder = SEC.sanitizeCssValue(mainTheme.headerBorder, 'rgba(56, 189, 248, 0.14)');
+    const mainAiCardBg = SEC.sanitizeCssValue(mainTheme.aiCardBg || mainTheme.codeBg, '');
+    const mainAiCardBorder = SEC.sanitizeCssValue(mainTheme.aiCardBorder, '');
+    const mainModalHeaderBg = SEC.sanitizeCssValue(mainTheme.modalHeaderBg, 'rgba(22, 16, 14, 0.85)');
+
+    const bubbleFrameBg = SEC.sanitizeCssValue(bubbleTheme.frameBg, 'linear-gradient(135deg, #c084fc, #5eead4)');
+    const bubbleGlow = SEC.sanitizeCssValue(bubbleTheme.glow, mainGlow);
+    const bubbleBg = SEC.sanitizeCssValue(bubbleTheme.userBubble || bubbleTheme.bg, 'rgba(28, 19, 46, 0.92)');
+    const bubbleTextColor = SEC.sanitizeCssValue(bubbleTheme.textColor || bubbleTheme.textMain, '#f8fafc');
+    const bubbleInnerBorderRaw = SEC.sanitizeCssValue(bubbleTheme.innerBorder, '1px solid rgba(255, 255, 255, 0.07)');
+    const bubbleComposerHeaderBg = SEC.sanitizeCssValue(bubbleTheme.composerHeaderBg, '');
+    const bubbleInputGlassBg = SEC.sanitizeCssValue(bubbleTheme.inputGlassBg, 'rgba(20, 15, 13, 0.52)');
+    const bubbleInputCardBg = SEC.sanitizeCssValue(bubbleTheme.inputCardBg || bubbleTheme.composerBg, 'rgba(28, 19, 16, 0.88)');
+
+    const secondaryGlowStop = mainSecondaryGlow
+      ? `, radial-gradient(circle at 22% 72%, ${mainSecondaryGlow} 0%, transparent 55%)`
       : '';
 
     let bgLayers = '';
     if (wpUrl) {
       bgLayers = mainTheme.clearBackdrop
         ? `linear-gradient(180deg, rgba(${overlayRgb}, ${overlayAlpha}) 0%, rgba(${overlayRgb}, ${overlayAlpha}) 100%), url("${wpUrl}")`
-        : `radial-gradient(circle at 75% 40%, ${mainTheme.glow} 0%, transparent 65%)${secondaryGlowStop}, linear-gradient(180deg, rgba(${overlayRgb}, ${overlayAlpha * 0.85}) 0%, rgba(${overlayRgb}, ${overlayAlpha}) 100%), url("${wpUrl}")`;
+        : `radial-gradient(circle at 75% 40%, ${mainGlow} 0%, transparent 65%)${secondaryGlowStop}, linear-gradient(180deg, rgba(${overlayRgb}, ${overlayAlpha * 0.85}) 0%, rgba(${overlayRgb}, ${overlayAlpha}) 100%), url("${wpUrl}")`;
     } else {
-      bgLayers = mainTheme.pureBg || `radial-gradient(circle at 75% 30%, ${mainTheme.glow} 0%, transparent 60%), linear-gradient(160deg, rgba(${overlayRgb}, 0.96) 0%, #070910 100%)`;
+      bgLayers = mainPureBg || `radial-gradient(circle at 75% 30%, ${mainGlow} 0%, transparent 60%), linear-gradient(160deg, rgba(${overlayRgb}, 0.96) 0%, #070910 100%)`;
     }
 
     const wpCss = st.wpEnabled ? `
@@ -255,6 +452,11 @@
         background: transparent !important;
         background-color: transparent !important;
         background-image: none !important;
+      }
+      /* Yoriichi's Transparent World ("Sukitōru Sekai"): calm backdrop by an extra 5% during deep coding flow */
+      html[data-agy-transparent-world="1"] body:not([data-has-browser-hole="true"]) .agy-shell [data-main-content-body="true"] {
+        background-color: rgba(4, 6, 14, calc(0.05 * var(--agy-tw-factor, 1))) !important;
+        transition: background-color 0.25s ease;
       }
       /* Browser split-pane hole cutout: keep wallpaper & L-glass visible outside [data-browser-hole] without covering live BrowserView */
       body[data-has-browser-hole="true"] .agy-shell[data-agy-hole-active="1"]::after {
@@ -293,12 +495,23 @@
       }
     `;
 
-    const defaultCornerSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M2 20 L2 6 Q2 2 6 2 L20 2' stroke='%23fbbf24' stroke-width='1.5' fill='none' opacity='0.65'/%3E%3Ccircle cx='6' cy='6' r='2' fill='%23fbbf24' opacity='0.75'/%3E%3C/svg%3E";
-    const cornerFiligreeUrl = bubbleTheme.cornerSvg || defaultCornerSvg;
-    const userCornerFiligreeUrl = bubbleTheme.userCornerSvg || cornerFiligreeUrl;
-    const userBubbleStickerUrl = bubbleTheme.userSticker || bubbleTheme.sticker || '';
+    const defaultCornerSvg = 'data:image/svg+xml,' + strictPercentEncodeSvg('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M2 20 L2 6 Q2 2 6 2 L20 2" stroke="#fbbf24" stroke-width="1.5" fill="none" opacity="0.65"/><circle cx="6" cy="6" r="2" fill="#fbbf24" opacity="0.75"/></svg>');
+    const cornerFiligreeUrl = safeCssUrl(bubbleTheme.cornerSvg || '') || defaultCornerSvg;
+    const personaOverrideActive = st.masterPersona && st.masterPersona !== 'yoriichi';
+    const userCornerFiligreeUrl = safeCssUrl(
+      (personaOverrideActive ? persona.userCornerSvg : (bubbleTheme.userCornerSvg || persona.userCornerSvg)) || ''
+    ) || cornerFiligreeUrl;
+    const userBubbleStickerUrl = safeCssUrl(
+      (personaOverrideActive ? persona.userSticker : (bubbleTheme.userSticker || persona.userSticker || bubbleTheme.sticker)) || ''
+    );
+    const composerStickerUrl = safeCssUrl(bubbleTheme.sticker || '');
 
-    const bubblePadTop = Math.max(18, Math.abs(bubbleTheme.stickerTop || 0) + 8);
+    const sTop = Number(bubbleTheme.stickerTop) || -56;
+    const sRight = Number(bubbleTheme.stickerRight ?? 10) || 10;
+    const sW = Number(bubbleTheme.stickerW) || 136;
+    const sH = Number(bubbleTheme.stickerH) || 64;
+
+    const bubblePadTop = Math.max(18, Math.abs(sTop) + 8);
     const bubbleStickerCss = userBubbleStickerUrl ? (bubbleTheme.isOrnament ? `
       .group\\/user-input-step {
         padding-top: ${bubbleTheme.isChibiNpc ? bubblePadTop : 18}px !important;
@@ -307,10 +520,10 @@
       .agy-user-bubble-frame::before {
         content: "";
         position: absolute;
-        top: ${bubbleTheme.stickerTop}px;
-        right: ${bubbleTheme.stickerRight}px;
-        width: ${bubbleTheme.stickerW}px;
-        height: ${bubbleTheme.stickerH}px;
+        top: ${sTop}px;
+        right: ${sRight}px;
+        width: ${sW}px;
+        height: ${sH}px;
         background-image: url("${userBubbleStickerUrl}");
         background-size: contain;
         background-position: ${bubbleTheme.isChibiNpc ? 'bottom center' : 'center'};
@@ -325,15 +538,15 @@
       }
     ` : `
       .group\\/user-input-step {
-        padding-top: ${Math.max(36, Math.abs(bubbleTheme.stickerTop) + 8)}px !important;
+        padding-top: ${Math.max(36, Math.abs(sTop) + 8)}px !important;
       }
       .agy-user-bubble-frame::before {
         content: "";
         position: absolute;
-        top: ${bubbleTheme.stickerTop}px;
-        right: ${bubbleTheme.stickerRight}px;
-        width: ${bubbleTheme.stickerW}px;
-        height: ${bubbleTheme.stickerH}px;
+        top: ${sTop}px;
+        right: ${sRight}px;
+        width: ${sW}px;
+        height: ${sH}px;
         background-image: url("${userBubbleStickerUrl}");
         background-size: contain;
         background-position: bottom center;
@@ -346,8 +559,8 @@
       .agy-user-bubble-frame::before { display: none !important; }
     `;
 
-    const showInputSticker = st.inputStyle !== 'minimal' && bubbleTheme.sticker;
-    const composerMarginTop = Math.max(16, Math.abs(bubbleTheme.stickerTop || 0) + 8);
+    const showInputSticker = st.inputStyle !== 'minimal' && Boolean(composerStickerUrl);
+    const composerMarginTop = Math.max(16, Math.abs(sTop) + 8);
     const inputStickerCss = showInputSticker ? (bubbleTheme.isOrnament ? `
       .surface-composer {
         margin-top: ${bubbleTheme.isChibiNpc ? composerMarginTop : 16}px !important;
@@ -356,11 +569,11 @@
       .surface-composer::before {
         content: "";
         position: absolute;
-        top: ${bubbleTheme.stickerTop}px;
-        right: ${bubbleTheme.isChibiNpc ? (bubbleTheme.stickerRight ?? 10) : 16}px;
-        width: ${bubbleTheme.isChibiNpc ? bubbleTheme.stickerW : (bubbleTheme.stickerW + 8)}px;
-        height: ${bubbleTheme.isChibiNpc ? bubbleTheme.stickerH : (bubbleTheme.stickerH + 2)}px;
-        background-image: url("${bubbleTheme.sticker}");
+        top: ${sTop}px;
+        right: ${bubbleTheme.isChibiNpc ? sRight : 16}px;
+        width: ${bubbleTheme.isChibiNpc ? sW : (sW + 8)}px;
+        height: ${bubbleTheme.isChibiNpc ? sH : (sH + 2)}px;
+        background-image: url("${composerStickerUrl}");
         background-size: contain;
         background-position: ${bubbleTheme.isChibiNpc ? 'bottom center' : 'center'};
         background-repeat: no-repeat;
@@ -395,11 +608,11 @@
       .surface-composer::before {
         content: "";
         position: absolute;
-        top: ${bubbleTheme.stickerTop - 4}px;
+        top: ${sTop - 4}px;
         right: 16px;
-        width: ${bubbleTheme.stickerW + 6}px;
-        height: ${bubbleTheme.stickerH + 6}px;
-        background-image: url("${bubbleTheme.sticker}");
+        width: ${sW + 6}px;
+        height: ${sH + 6}px;
+        background-image: url("${composerStickerUrl}");
         background-size: contain;
         background-position: bottom center;
         background-repeat: no-repeat;
@@ -414,36 +627,41 @@
 
     const inputCardBg =
       st.inputStyle === 'glass'
-        ? (bubbleTheme.inputGlassBg || 'rgba(20, 15, 13, 0.52)')
+        ? bubbleInputGlassBg
         : st.inputStyle === 'double_gold'
         ? 'linear-gradient(145deg, rgba(44, 28, 20, 0.90) 0%, rgba(24, 15, 12, 0.92) 100%)'
-        : (bubbleTheme.inputCardBg || 'rgba(28, 19, 16, 0.88)');
+        : bubbleInputCardBg;
 
     const inputOuterBorder =
       st.inputStyle === 'double_gold'
         ? 'linear-gradient(135deg, #f59e0b 0%, rgba(217, 119, 6, 0.35) 50%, #fbbf24 100%)'
-        : bubbleTheme.frameBg;
+        : bubbleFrameBg;
 
-    const sidebarBg = mainTheme.sidebarBg || 'rgba(14, 10, 8, 0.68)';
-    const sidebarHoverBg = mainTheme.sidebarHoverBg || 'rgba(255, 255, 255, 0.08)';
-    const btnBg = mainTheme.btnBg || 'rgba(48, 30, 22, 0.62)';
-    const modalBg = mainTheme.modalBg || 'rgba(14, 12, 12, 0.96)';
+    const sidebarBg = SEC.sanitizeCssValue(mainTheme.sidebarBg, 'rgba(14, 10, 8, 0.68)');
+    const sidebarHoverBg = SEC.sanitizeCssValue(mainTheme.sidebarHoverBg, 'rgba(255, 255, 255, 0.08)');
+    const btnBg = SEC.sanitizeCssValue(mainTheme.btnBg, 'rgba(48, 30, 22, 0.62)');
+    const modalBg = SEC.sanitizeCssValue(mainTheme.modalBg, 'rgba(14, 12, 12, 0.96)');
     const innerBubbleBorder = bubbleTheme.isScroll
       ? '2px solid #78350f'
-      : (bubbleTheme.innerBorder || '1px solid rgba(255, 255, 255, 0.06)');
+      : bubbleInnerBorderRaw;
 
     const isLight = Boolean(mainTheme.isLight);
-    const uiInk = mainTheme.uiTextColor || (isLight ? '#0f172a' : 'rgba(248, 250, 252, 0.96)');
-    const uiMutedInk = mainTheme.uiMutedColor || (isLight ? '#334155' : 'rgba(241, 245, 249, 0.92)');
+    const uiInk = SEC.sanitizeCssValue(mainTheme.uiTextColor || mainTheme.textMain, isLight ? '#0f172a' : 'rgba(248, 250, 252, 0.96)');
+    const uiMutedInk = SEC.sanitizeCssValue(mainTheme.uiMutedColor || mainTheme.textMuted, isLight ? '#334155' : 'rgba(241, 245, 249, 0.92)');
     const uiShadow = isLight ? 'none' : '0 1px 4px rgba(0, 0, 0, 0.92), 0 0 8px rgba(0, 0, 0, 0.68)';
-    const pillBg = mainTheme.pillBg || (isLight ? 'rgba(255, 255, 255, 0.78)' : 'rgba(6, 11, 24, 0.78)');
-    const pillHoverBg = mainTheme.pillHoverBg || (isLight ? 'rgba(255, 255, 255, 0.94)' : 'rgba(10, 18, 38, 0.92)');
-    const pillText = mainTheme.pillTextColor || (isLight ? '#0f172a' : '#f8fafc');
-    const pillBorder = mainTheme.pillBorder || (isLight ? 'rgba(15, 23, 42, 0.16)' : 'rgba(255, 255, 255, 0.16)');
-    const preCodeBg = isLight ? `rgba(${overlayRgb}, 0.72)` : `rgba(${overlayRgb}, 0.56)`;
+    const pillBg = SEC.sanitizeCssValue(mainTheme.pillBg, isLight ? 'rgba(255, 255, 255, 0.78)' : 'rgba(6, 11, 24, 0.78)');
+    const pillHoverBg = SEC.sanitizeCssValue(mainTheme.pillHoverBg, isLight ? 'rgba(255, 255, 255, 0.94)' : 'rgba(10, 18, 38, 0.92)');
+    const pillText = SEC.sanitizeCssValue(mainTheme.pillTextColor || mainTheme.textMain, isLight ? '#0f172a' : '#f8fafc');
+    const pillBorder = SEC.sanitizeCssValue(mainTheme.pillBorder, isLight ? 'rgba(15, 23, 42, 0.16)' : 'rgba(255, 255, 255, 0.16)');
+    const preCodeBg = SEC.sanitizeCssValue(mainTheme.codeBg, isLight ? `rgba(${overlayRgb}, 0.72)` : `rgba(${overlayRgb}, 0.56)`);
 
-    const effectiveUserAvatar = st.userAvatar === 'none' ? '' : (st.userAvatar || mainTheme.userAvatar || '');
-    const effectiveAgentAvatar = st.agentAvatar === 'none' ? '' : (st.agentAvatar || mainTheme.agentAvatar || '');
+    const rawEffUserAvatar = st.userAvatar === 'none'
+      ? ''
+      : (st.userAvatar || (personaOverrideActive ? persona.userAvatar : (mainTheme.userAvatar || persona.userAvatar)) || '');
+    const effectiveUserAvatar = safeCssUrl(rawEffUserAvatar);
+    const effectiveAgentAvatar = safeCssUrl(st.agentAvatar === 'none' ? '' : (st.agentAvatar || mainTheme.agentAvatar || ''));
+    const personaRingColor = SEC.sanitizeCssValue(persona.ringColor, '#fde047');
+    const personaGlowColor = SEC.sanitizeCssValue(persona.glowColor, 'rgba(239, 68, 68, 0.52)');
     const avSize = Math.min(52, Math.max(22, Number(st.avatarSize) || 32));
     const avAgentSize = Math.max(22, avSize - 2);
     const avRadius = Math.min(50, Math.max(0, Number.isFinite(Number(st.avatarRadius)) ? Number(st.avatarRadius) : 50));
@@ -465,8 +683,8 @@
         background-image: url("${effectiveUserAvatar}");
         background-size: cover;
         background-position: center;
-        border: 1.8px solid #fde047;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.55), 0 0 12px rgba(239, 68, 68, 0.52);
+        border: 1.8px solid ${personaRingColor};
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.55), 0 0 12px ${personaGlowColor};
         pointer-events: none;
       }
       ` : ''}
@@ -491,8 +709,8 @@
         background-image: url("${effectiveAgentAvatar}");
         background-size: cover;
         background-position: center;
-        border: 1.5px solid ${mainTheme.secondary || mainTheme.primary};
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4), 0 0 8px ${mainTheme.secondaryGlow || mainTheme.glow};
+        border: 1.5px solid ${mainAccent};
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4), 0 0 8px ${mainSecondaryGlow || mainGlow};
         pointer-events: none;
       }
       ` : ''}
@@ -511,13 +729,14 @@
       }
     ` : '';
 
-    const aiCardCss = mainTheme.aiCardBg ? `
+    const aiCardBorderSafe = mainAiCardBorder || (isLight ? 'rgba(15, 23, 42, 0.12)' : 'rgba(255, 255, 255, 0.1)');
+    const aiCardCss = mainAiCardBg ? `
       /* Translucent reading card for AI responses (zero live backdrop-filter for max 120fps scroll) */
       .agy-shell [data-testid="agent-response"] {
-        background: ${mainTheme.aiCardBg} !important;
+        background: ${mainAiCardBg} !important;
         ${isLight ? `color: ${uiInk} !important;` : ''}
         backdrop-filter: none !important;
-        border: 1px solid ${mainTheme.aiCardBorder || (isLight ? 'rgba(15, 23, 42, 0.12)' : 'rgba(255, 255, 255, 0.1)')} !important;
+        border: 1px solid ${aiCardBorderSafe} !important;
         border-radius: 14px !important;
         padding: 12px 16px !important;
         box-shadow: ${isLight ? '0 4px 14px rgba(15, 23, 42, 0.08)' : '0 4px 14px rgba(0, 0, 0, 0.28)'} !important;
@@ -634,24 +853,25 @@
       syncShellMetrics();
     }
     if (useUnifiedGlass) {
-      const effectiveBlur = Number.isFinite(st.glassBlur) ? `${st.glassBlur}px` : (mainTheme.headerBlur || '3px');
-      syncPrebakedGlass(wpUrl, overlayRgb, overlayAlpha, mainTheme.headerBg || '', effectiveBlur);
+      const effectiveBlur = Number.isFinite(st.glassBlur) ? `${st.glassBlur}px` : SEC.sanitizeCssValue(mainTheme.headerBlur, '3px');
+      syncPrebakedGlass(wpUrl, overlayRgb, overlayAlpha, mainHeaderBg, effectiveBlur);
     } else {
       syncPrebakedGlass(null);
     }
 
+    const sideBorderSafe = mainAiCardBorder || (isLight ? 'rgba(15, 23, 42, 0.14)' : 'rgba(255, 255, 255, 0.14)');
     const sidePanelCss = st.wpEnabled ? `
       /* Keep right-side Artifact / Text / Diff split panels crystal-clear over native 4K backdrop (never cover right character with blurred canvas) */
       body:not([data-has-browser-hole="true"]) .agy-shell [data-side-panel-body="true"]:not([data-has-browser-hole="true"]):not(:has([data-browser-hole]:not([data-browser-hole="false"]))) {
-        background: ${mainTheme.aiCardBg || `rgba(${overlayRgb}, 0.72)`} !important;
+        background: ${mainAiCardBg || `rgba(${overlayRgb}, 0.72)`} !important;
         ${isLight ? `color: ${uiInk} !important;` : ''}
         backdrop-filter: none !important;
-        border-left: 1px solid ${mainTheme.aiCardBorder || (isLight ? 'rgba(15, 23, 42, 0.14)' : 'rgba(255, 255, 255, 0.14)')} !important;
+        border-left: 1px solid ${sideBorderSafe} !important;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
       }
       body:not([data-has-browser-hole="true"]) .agy-shell [data-side-panel-body="true"]:not([data-has-browser-hole="true"]):not(:has([data-browser-hole]:not([data-browser-hole="false"]))) pre {
         background: ${preCodeBg} !important;
-        border: 1px solid ${mainTheme.aiCardBorder || (isLight ? 'rgba(15, 23, 42, 0.14)' : 'rgba(255, 255, 255, 0.14)')} !important;
+        border: 1px solid ${sideBorderSafe} !important;
         border-radius: 10px !important;
       }
       .agy-shell [data-side-panel-body="true"] :is(h1, h2, h3, h4) {
@@ -660,7 +880,7 @@
       }
     ` : '';
 
-    const headerCss = mainTheme.headerBg ? `
+    const headerCss = mainHeaderBg ? `
       /* Frosted top titlebar & seamless L-shaped unified glass (zero live backdrop-filter) */
       ${useUnifiedGlass ? `
       .agy-shell {
@@ -687,7 +907,7 @@
         inset: 0;
         z-index: 1;
         pointer-events: none;
-        background-color: ${mainTheme.headerBg};
+        background-color: ${mainHeaderBg};
         background-image: var(--agy-l-glass-bg, none);
         background-size: cover;
         background-position: ${bgPosition};
@@ -706,13 +926,13 @@
       .agy-shell [class*="@container/titlebar"] {
         background: transparent !important;
         backdrop-filter: none !important;
-        border-bottom: 1px solid ${mainTheme.headerBorder || 'rgba(56, 189, 248, 0.10)'} !important;
+        border-bottom: 1px solid ${mainHeaderBorder} !important;
       }
       ` : `
       .agy-shell [class*="@container/titlebar"] {
-        background: ${mainTheme.headerBg} !important;
+        background: ${mainHeaderBg} !important;
         backdrop-filter: none !important;
-        border-bottom: 1px solid ${mainTheme.headerBorder || 'rgba(56, 189, 248, 0.15)'} !important;
+        border-bottom: 1px solid ${mainHeaderBorder} !important;
       }
       `}
       .agy-shell [class*="@container/titlebar"] [data-testid="breadcrumb-segment"],
@@ -759,7 +979,7 @@
       .agy-shell .surface-opaque.bg-sidebar,
       .agy-shell .surface-opaque.border-menu-border {
         background: ${modalBg} !important;
-        border-color: ${mainTheme.borderColor} !important;
+        border-color: ${mainBorderColor} !important;
         box-shadow: 0 12px 32px rgba(0, 0, 0, ${isLight ? '0.18' : '0.65'}) !important;
         backdrop-filter: none !important;
       }
@@ -782,7 +1002,7 @@
       /* "+ New Conversation" button glow */
       .agy-button-custom.border.border-border {
         background: ${btnBg} !important;
-        border-color: ${mainTheme.borderColor} !important;
+        border-color: ${mainBorderColor} !important;
         box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3) !important;
       }
 
@@ -794,9 +1014,9 @@
 
       /* User Chat Bubble Double-Border Frame & Ornament */
       .agy-user-bubble-frame {
-        background: ${bubbleTheme.frameBg} !important;
+        background: ${bubbleFrameBg} !important;
         border-radius: ${bubbleTheme.isScroll ? '6px' : '14px'} !important;
-        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 12px ${bubbleTheme.glow} !important;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 12px ${bubbleGlow} !important;
         position: relative !important;
         overflow: visible !important;
         padding: 1.2px !important;
@@ -808,7 +1028,7 @@
         top: 3px;
         left: 3px;
         width: ${bubbleTheme.isOrnament ? '16px' : '14px'};
-        height: ${bubbleTheme.isOrnament ? '16px' : '16px'};
+        height: 16px;
         background-image: url("${userCornerFiligreeUrl}");
         background-size: contain;
         background-repeat: no-repeat;
@@ -817,17 +1037,17 @@
       }
 
       .agy-user-bubble {
-        background: ${bubbleTheme.bg} !important;
+        background: ${bubbleBg} !important;
         border-radius: ${bubbleTheme.isScroll ? '5px' : '13px'} !important;
         padding: 8px 16px !important;
-        color: ${bubbleTheme.textColor} !important;
+        color: ${bubbleTextColor} !important;
         border: ${innerBubbleBorder} !important;
         overflow: visible !important;
         font-weight: 450 !important;
       }
 
       .agy-user-bubble * {
-        color: ${bubbleTheme.textColor} !important;
+        color: ${bubbleTextColor} !important;
       }
 
       /* Double-Border Input Composer */
@@ -835,7 +1055,7 @@
         background: ${inputOuterBorder} !important;
         border-radius: 16px !important;
         padding: 1.5px !important;
-        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), 0 0 14px ${bubbleTheme.glow} !important;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), 0 0 14px ${bubbleGlow} !important;
         position: relative !important;
       }
 
@@ -843,12 +1063,12 @@
         background: ${inputCardBg} !important;
         backdrop-filter: none !important;
         border-radius: 14.5px !important;
-        border: ${bubbleTheme.innerBorder || '1px solid rgba(255, 255, 255, 0.07)'} !important;
+        border: ${bubbleInnerBorderRaw} !important;
       }
 
-      ${bubbleTheme.composerHeaderBg ? `
+      ${bubbleComposerHeaderBg ? `
       .surface-composer > :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(#agy-chibi-skill-bar):not(agy-chibi-aura) {
-        background: ${bubbleTheme.composerHeaderBg} !important;
+        background: ${bubbleComposerHeaderBg} !important;
         border-radius: 14.5px 14.5px 0 0 !important;
         padding: 4px 8px !important;
       }
@@ -886,7 +1106,7 @@
       .surface-composer > :not(.surface-composer-card) [data-testid="input-box-bottom-toolbar"] button:hover,
       .surface-composer > :not(.surface-composer-card) [data-testid="input-box-bottom-toolbar"] [role="button"]:hover {
         background: ${pillHoverBg} !important;
-        border-color: ${mainTheme.borderColor} !important;
+        border-color: ${mainBorderColor} !important;
         color: ${pillText} !important;
       }
       .surface-composer [data-testid="project-selector-trigger"] *,
@@ -916,26 +1136,26 @@
 
       .settings-modal-container {
         background: ${modalBg} !important;
-        border: 1px solid ${mainTheme.borderColor} !important;
-        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.75), 0 0 24px ${mainTheme.glow} !important;
+        border: 1px solid ${mainBorderColor} !important;
+        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.75), 0 0 24px ${mainGlow} !important;
         backdrop-filter: none !important;
       }
 
       #agy-custom-theme-modal-dialog {
         background: ${modalBg} !important;
-        border-color: ${mainTheme.borderColor} !important;
-        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.9), 0 0 32px ${mainTheme.glow} !important;
+        border-color: ${mainBorderColor} !important;
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.9), 0 0 32px ${mainGlow} !important;
       }
       #agy-custom-theme-modal-header {
-        background: ${mainTheme.modalHeaderBg || 'rgba(22, 16, 14, 0.85)'} !important;
+        background: ${mainModalHeaderBg} !important;
       }
       #agy-custom-theme-badge {
-        color: ${mainTheme.primary} !important;
-        border-color: ${mainTheme.borderColor} !important;
-        background: ${mainTheme.glow} !important;
+        color: ${mainPrimary} !important;
+        border-color: ${mainBorderColor} !important;
+        background: ${mainGlow} !important;
       }
       #agy-custom-theme-sidebar-btn svg {
-        color: ${mainTheme.primary} !important;
+        color: ${mainPrimary} !important;
       }
     `;
 
@@ -978,6 +1198,9 @@
     clearTitleBarTimers();
     teardownLiveWallpaperFx();
     teardownShinobuNpc();
+    if (typeof teardownTransparentWorldFlow === 'function') {
+      teardownTransparentWorldFlow();
+    }
     if (window.__AGY_SCROLL_AC__) {
       try { window.__AGY_SCROLL_AC__.abort(); } catch (e) {}
     }
@@ -1056,83 +1279,191 @@
     }
 
     backdrop.style.display = 'flex';
+    const badgeEl = backdrop.querySelector('#agy-custom-theme-badge');
+    if (badgeEl) {
+      badgeEl.textContent = `${THEME_KEYS.length} Preset${THEME_KEYS.length > 1 ? 's' : ''}`;
+    }
     const body = backdrop.querySelector('#agy-theme-modal-body');
     renderThemePanels(body);
   }
 
   function renderThemePanels(container) {
     const st = getState();
-    const mainTheme = THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY];
-    const effUserAv = st.userAvatar === 'none' ? '' : (st.userAvatar || mainTheme.userAvatar || '');
-    const effAgentAv = st.agentAvatar === 'none' ? '' : (st.agentAvatar || mainTheme.agentAvatar || '');
+    const mainTheme = THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    const forge = typeof window !== 'undefined' ? window.__AGY_THEME_FORGE__ : null;
+    const activePersona = getActiveMasterPersona(st);
+
+    const safeMainPrimary = SEC.sanitizeCssValue(mainTheme.primary, '#c084fc');
+    const safeMainAccent = SEC.sanitizeCssValue(mainTheme.accent || mainTheme.secondary, safeMainPrimary);
+    const safeMainBorder = SEC.sanitizeCssValue(mainTheme.borderColor, 'rgba(255, 255, 255, 0.16)');
+    const safeCardBg = SEC.sanitizeCssValue(mainTheme.cardBg, 'rgba(22, 16, 14, 0.72)');
+
+    const personaOverrideActive = st.masterPersona && st.masterPersona !== 'yoriichi';
+    const effUserAv = safeCssUrl(
+      st.userAvatar === 'none'
+        ? ''
+        : (st.userAvatar || (personaOverrideActive ? activePersona.userAvatar : (mainTheme.userAvatar || activePersona.userAvatar)) || '')
+    );
+    const effAgentAv = safeCssUrl(
+      st.agentAvatar === 'none' ? '' : (st.agentAvatar || mainTheme.agentAvatar || '')
+    );
+
+    const personaList = forge && Array.isArray(forge.PERSONA_LIST) ? forge.PERSONA_LIST : [activePersona];
+    const multiversePresets = forge && Array.isArray(forge.MULTIVERSE_PRESETS) ? forge.MULTIVERSE_PRESETS : [];
+    const fxModeOptions = forge && Array.isArray(forge.FX_MODE_OPTIONS)
+      ? forge.FX_MODE_OPTIONS
+      : [{ value: 'wisteria', label: '🦋 Tử Đằng Nguyệt Dạ' }];
 
     container.innerHTML = `
       <div id="agy-theme-scroll-container" style="padding: 24px 32px 48px 32px; max-width: 860px; margin: 0 auto; overflow-y: auto; height: 100%; color: #f4f4f5;">
-        <div style="border: 1px solid ${mainTheme.borderColor}; background: ${mainTheme.cardBg || 'rgba(22, 16, 14, 0.72)'}; border-radius: 12px; padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="border: 1px solid ${safeMainBorder}; background: ${safeCardBg}; border-radius: 12px; padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
-              <div style="font-size: 14.5px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Wallpaper, Pre-Baked Blur & Config</div>
-              <div style="font-size: 12.5px; color: #a1a1aa;">Balance artwork clarity, 120fps pre-baked frosted glass blur, or share config JSON.</div>
+              <div style="font-size: 14.5px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Wallpaper, Pre-Baked Blur &amp; Deep-Focus</div>
+              <div style="font-size: 12.5px; color: #a1a1aa;">120fps pre-baked glass, Single-Window GPU 0% idle &amp; Thế Giới Trong Suốt.</div>
             </div>
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
               <label style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #d4d4d8; cursor: pointer;">
-                <input id="agy-wp-toggle" type="checkbox" ${st.wpEnabled ? 'checked' : ''} style="accent-color: ${mainTheme.primary}; cursor: pointer;" />
+                <input id="agy-wp-toggle" type="checkbox" ${st.wpEnabled ? 'checked' : ''} style="accent-color: ${safeMainPrimary}; cursor: pointer;" />
                 Backdrop
               </label>
               <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #a1a1aa;">
                 Dim
-                <input id="agy-dim-slider" type="range" min="15" max="92" value="${st.dimming}" style="width: 96px; cursor: pointer; accent-color: #ffffff; height: 5px;" />
+                <input id="agy-dim-slider" type="range" min="15" max="92" value="${st.dimming}" style="width: 90px; cursor: pointer; accent-color: #ffffff; height: 5px;" />
                 <span id="agy-dim-val" style="min-width: 32px; text-align: right;">${st.dimming}%</span>
               </label>
               <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #a1a1aa;">
                 Blur
-                <input id="agy-blur-slider" type="range" min="0" max="16" value="${st.glassBlur}" style="width: 78px; cursor: pointer; accent-color: ${mainTheme.primary}; height: 5px;" />
+                <input id="agy-blur-slider" type="range" min="0" max="16" value="${st.glassBlur}" style="width: 72px; cursor: pointer; accent-color: ${safeMainPrimary}; height: 5px;" />
                 <span id="agy-blur-val" style="min-width: 30px; text-align: right;">${st.glassBlur}px</span>
               </label>
-              <label style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${mainTheme.borderColor}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+              <label style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${safeMainBorder}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
                 Custom Image
-                <input id="agy-wp-upload" type="file" accept="image/*" style="display: none;" />
+                <input id="agy-wp-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
               </label>
               <button id="agy-export-btn" type="button" style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
                 Export JSON
               </button>
               <button id="agy-import-toggle" type="button" style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                Import JSON
+                Import JSON / .agytheme
               </button>
               <button id="agy-reset-btn" type="button" style="padding: 5px 10px; border-radius: 8px; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.35); color: #fca5a5; font-size: 12px; cursor: pointer; white-space: nowrap;">
                 Reset
               </button>
             </div>
           </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.07);">
+            <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: #fef08a; font-weight: 500; cursor: pointer;">
+              <input id="agy-tw-toggle" type="checkbox" ${st.transparentWorld ? 'checked' : ''} style="accent-color: #facc15; cursor: pointer;" />
+              <span>👁️ Thế Giới Trong Suốt (Tự dịu khi gõ code)</span>
+            </label>
+            <span style="font-size: 11.5px; color: #a1a1aa;">Tự làm chậm hạt nền 20% &amp; giảm chói 35% khi gõ sâu (&ge; 4 phím/giây) hoặc đọc diff.</span>
+          </div>
           <div id="agy-import-box" style="display: none; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
-            <textarea id="agy-import-text" rows="3" placeholder='Paste exported theme config JSON here (e.g. {"themeName":"WLOP Cosmic","dimming":45,...})' style="width: 100%; box-sizing: border-box; background: rgba(0,0,0,0.35); color: #f4f4f5; border: 1px solid ${mainTheme.borderColor}; border-radius: 8px; padding: 8px 10px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
-            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
-              <span id="agy-import-msg" style="font-size: 12px; color: #fca5a5;"></span>
-              <button id="agy-import-apply" type="button" style="padding: 5px 12px; border-radius: 7px; background: ${mainTheme.primary}; color: #090d16; font-weight: 600; font-size: 12px; border: none; cursor: pointer;">Apply JSON</button>
+            <textarea id="agy-import-text" rows="3" placeholder="Dán JSON cấu hình hoặc nội dung gói .agytheme (schema: agytheme/2.0) vào đây..." style="width: 100%; box-sizing: border-box; background: rgba(0,0,0,0.35); color: #f4f4f5; border: 1px solid ${safeMainBorder}; border-radius: 8px; padding: 8px 10px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+              <label style="padding: 5px 10px; border-radius: 7px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); color: #e4e4e7; font-size: 12px; cursor: pointer;">
+                📂 Chọn file .agytheme / .json
+                <input id="agy-import-file" type="file" accept=".agytheme,.json,application/json" style="display: none;" />
+              </label>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="agy-import-msg" style="font-size: 12px; color: #fca5a5;"></span>
+                <button id="agy-import-apply" type="button" style="padding: 5px 12px; border-radius: 7px; background: ${safeMainPrimary}; color: #090d16; font-weight: 600; font-size: 12px; border: none; cursor: pointer;">Nạp cấu hình</button>
+              </div>
             </div>
           </div>
         </div>
 
-        <div style="border: 1px solid ${mainTheme.borderColor}; background: ${mainTheme.cardBg || 'rgba(22, 16, 14, 0.72)'}; border-radius: 12px; padding: 14px 20px; margin-bottom: 24px; display: flex; flex-direction: column; gap: 10px;">
+        <!-- Master Persona Selector (Independent from Active Theme) -->
+        <div style="border: 1px solid ${safeMainBorder}; background: ${safeCardBg}; border-radius: 12px; padding: 14px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <div style="font-size: 14px; font-weight: 600; color: #fef08a; margin-bottom: 2px;">👑 Bản Ngã Chủ Nhân (Master Persona — Độc lập khỏi Theme nền)</div>
+              <div style="font-size: 12px; color: #a1a1aa;">Mặc định Khai Tổ Hỏa Thần Yoriichi, hoặc hóa thân thành 14 Đại Trụ / Kiếm sĩ &amp; 3 Đế Vương Đa Vũ Trụ!</div>
+            </div>
+            <select id="agy-persona-select" style="padding: 6px 12px; border-radius: 8px; background: rgba(10, 10, 20, 0.88); color: #f8fafc; border: 1px solid ${safeMainPrimary}; font-size: 12.5px; font-weight: 600; cursor: pointer; min-width: 250px;">
+              ${personaList.map((p) => {
+                const sel = p.id === st.masterPersona ? 'selected' : '';
+                return `<option value="${SEC.escapeHtml(p.id)}" ${sel}>${SEC.escapeHtml(p.label)}</option>`;
+              }).join('')}
+            </select>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 7px; padding-top: 4px;">
+            ${personaList.slice(0, 8).map((p) => {
+              const isAct = p.id === st.masterPersona;
+              const pAv = SEC.sanitizeCssUrl(p.userAvatar || '');
+              const pRing = SEC.sanitizeCssValue(p.ringColor, '#fde047');
+              return `
+                <button type="button" class="agy-persona-pill" data-persona="${SEC.escapeHtml(p.id)}" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 5px; border-radius: 999px; border: 1px solid ${isAct ? pRing : 'rgba(255,255,255,0.14)'}; background: ${isAct ? 'rgba(250, 204, 21, 0.16)' : 'rgba(255,255,255,0.05)'}; color: #f8fafc; font-size: 11.5px; font-weight: ${isAct ? '600' : '400'}; cursor: pointer;">
+                  <span style="width: 20px; height: 20px; border-radius: 50%; border: 1px solid ${pRing}; background: rgba(0,0,0,0.4) ${pAv ? `url("${pAv}") center/cover no-repeat` : ''}; flex-shrink: 0;"></span>
+                  <span>${SEC.escapeHtml(p.shortLabel || p.label)}</span>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- Multiverse AI Theme Forge (OKLCH 64x64 + .agytheme) -->
+        ${forge ? `
+        <div style="border: 1px solid rgba(192, 132, 252, 0.42); background: linear-gradient(145deg, rgba(20, 12, 38, 0.88), rgba(11, 15, 30, 0.92)); border-radius: 12px; padding: 15px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 11px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <div style="font-size: 14.5px; font-weight: 700; color: #e9d5ff; margin-bottom: 2px;">⚒️ Lò Rèn Đa Vũ Trụ — AI Theme Forge (OKLCH &amp; .agytheme)</div>
+              <div style="font-size: 12px; color: #cbd5e1;">Thả ảnh 4K bất kỳ để trích xuất 14 biến màu kính mờ chuẩn tương phản đọc code WCAG AA, hoặc mở rộng Đa Vũ Trụ ngay!</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <button id="agy-forge-export-pkg" type="button" style="padding: 5px 11px; border-radius: 8px; background: rgba(56, 189, 248, 0.16); border: 1px solid rgba(56, 189, 248, 0.45); color: #e0f2fe; font-size: 12px; font-weight: 600; cursor: pointer;">
+                📦 Xuất gói .agytheme
+              </button>
+            </div>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            ${multiversePresets.map((mp) => `
+              <button type="button" class="agy-multiverse-preset-btn" data-mv-id="${SEC.escapeHtml(mp.id)}" style="padding: 6px 12px; border-radius: 9px; background: rgba(168, 85, 247, 0.16); border: 1px solid rgba(192, 132, 252, 0.42); color: #f5d0fe; font-size: 12px; font-weight: 600; cursor: pointer;">
+                ${SEC.escapeHtml(mp.shortLabel)}
+              </button>
+            `).join('')}
+            <label id="agy-forge-dropzone" style="flex: 1; min-width: 210px; padding: 6px 12px; border-radius: 9px; border: 1px dashed rgba(94, 234, 212, 0.55); background: rgba(15, 23, 42, 0.55); color: #99f6e4; font-size: 12px; font-weight: 500; text-align: center; cursor: pointer;">
+              🖼️ Thả hoặc Chọn ảnh 4K để rèn bảng màu OKLCH...
+              <input id="agy-forge-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
+            </label>
+          </div>
+          <div id="agy-forge-workbench" style="display: none; flex-direction: column; gap: 9px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.10);">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <input id="agy-forge-name" type="text" maxlength="60" placeholder="Đặt tên Vũ Trụ mới..." style="flex: 1; min-width: 180px; padding: 6px 10px; border-radius: 8px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 12.5px;" />
+              <select id="agy-forge-fx" style="padding: 6px 10px; border-radius: 8px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 12px;">
+                ${fxModeOptions.map((opt) => `<option value="${SEC.escapeHtml(opt.value)}">${SEC.escapeHtml(opt.label)}</option>`).join('')}
+              </select>
+              <button id="agy-forge-commit" type="button" style="padding: 6px 14px; border-radius: 8px; background: linear-gradient(135deg, #a855f7, #38bdf8); border: none; color: #090d16; font-size: 12.5px; font-weight: 700; cursor: pointer;">
+                ⚡ Rèn &amp; Kích Hoạt
+              </button>
+            </div>
+            <div id="agy-forge-swatches" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 11.5px; color: #cbd5e1;"></div>
+          </div>
+          <div id="agy-forge-status" style="font-size: 11.5px; color: #5eead4; display: none;"></div>
+        </div>
+        ` : ''}
+
+        <div style="border: 1px solid ${safeMainBorder}; background: ${safeCardBg}; border-radius: 12px; padding: 14px 20px; margin-bottom: 24px; display: flex; flex-direction: column; gap: 10px;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div>
-              <div style="font-size: 14px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Chat Avatars (User & AI Agent)</div>
-              <div style="font-size: 12px; color: #a1a1aa;">Profile badges rendered beside chat messages (auto-compressed WebP).</div>
+              <div style="font-size: 14px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Chat Avatars (User &amp; AI Agent)</div>
+              <div style="font-size: 12px; color: #a1a1aa;">Profile badges rendered beside chat messages (auto-compressed WebP, &le; 15MB).</div>
             </div>
             <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
               <div style="display: flex; align-items: center; gap: 8px;">
-                <div id="agy-user-av-preview" style="width: 30px; height: 30px; border-radius: ${st.avatarRadius}%; border: 1.5px solid ${mainTheme.primary}; background: rgba(255,255,255,0.06) ${effUserAv ? `url('${effUserAv}') center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effUserAv ? '' : 'U'}</div>
-                <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${mainTheme.borderColor}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+                <div id="agy-user-av-preview" style="width: 30px; height: 30px; border-radius: ${st.avatarRadius}%; border: 1.5px solid ${safeMainPrimary}; background: rgba(255,255,255,0.06) ${effUserAv ? `url("${effUserAv}") center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effUserAv ? '' : 'U'}</div>
+                <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${safeMainBorder}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
                   User
-                  <input id="agy-user-av-upload" type="file" accept="image/*" style="display: none;" />
+                  <input id="agy-user-av-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
                 </label>
                 <button id="agy-user-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Off</button>
               </div>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <div id="agy-agent-av-preview" style="width: 30px; height: 30px; border-radius: ${st.avatarRadius}%; border: 1.5px solid ${mainTheme.secondary || mainTheme.primary}; background: rgba(255,255,255,0.06) ${effAgentAv ? `url('${effAgentAv}') center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effAgentAv ? '' : 'AI'}</div>
-                <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${mainTheme.borderColor}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
+                <div id="agy-agent-av-preview" style="width: 30px; height: 30px; border-radius: ${st.avatarRadius}%; border: 1.5px solid ${safeMainAccent}; background: rgba(255,255,255,0.06) ${effAgentAv ? `url("${effAgentAv}") center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effAgentAv ? '' : 'AI'}</div>
+                <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${safeMainBorder}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
                   Agent
-                  <input id="agy-agent-av-upload" type="file" accept="image/*" style="display: none;" />
+                  <input id="agy-agent-av-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
                 </label>
                 <button id="agy-agent-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Off</button>
               </div>
@@ -1141,12 +1472,12 @@
           <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.07);">
             <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1aa;">
               Size
-              <input id="agy-av-size" type="range" min="22" max="52" value="${st.avatarSize}" style="width: 100px; cursor: pointer; accent-color: ${mainTheme.primary}; height: 5px;" />
+              <input id="agy-av-size" type="range" min="22" max="52" value="${st.avatarSize}" style="width: 100px; cursor: pointer; accent-color: ${safeMainPrimary}; height: 5px;" />
               <span id="agy-av-size-val" style="min-width: 34px;">${st.avatarSize}px</span>
             </label>
             <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1aa;">
               Corner Radius
-              <input id="agy-av-rad" type="range" min="0" max="50" value="${st.avatarRadius}" style="width: 100px; cursor: pointer; accent-color: ${mainTheme.primary}; height: 5px;" />
+              <input id="agy-av-rad" type="range" min="0" max="50" value="${st.avatarRadius}" style="width: 100px; cursor: pointer; accent-color: ${safeMainPrimary}; height: 5px;" />
               <span id="agy-av-rad-val" style="min-width: 34px;">${st.avatarRadius}%</span>
             </label>
           </div>
@@ -1154,26 +1485,33 @@
 
         <div style="margin-bottom: 28px;">
           <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">User Chat Bubble</div>
-          <div style="font-size: 12.5px; color: #a1a1aa; margin-bottom: 14px;">Mix and match bubble frame & ornament independently from the active wallpaper.</div>
+          <div style="font-size: 12.5px; color: #a1a1aa; margin-bottom: 14px;">Mix and match bubble frame &amp; ornament independently from the active wallpaper.</div>
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
             ${THEME_KEYS.map(name => {
-              const th = THEMES[name];
+              const th = THEMES[name] || {};
+              const safeNameHtml = SEC.escapeHtml(name);
               const isSelected = name === st.bubbleName;
-              const stickerTop = th.isOrnament ? Math.round((th.stickerTop || 0) * 0.85) : Math.round((th.stickerTop || 0) * 0.74);
-              const stickerW = Math.round((th.stickerW || 0) * 0.78);
-              const stickerH = th.isOrnament ? Math.round((th.stickerH || 0) * 0.8) : Math.round((th.stickerH || 0) * 0.78);
+              const stickerTop = th.isOrnament ? Math.round((Number(th.stickerTop) || 0) * 0.85) : Math.round((Number(th.stickerTop) || 0) * 0.74);
+              const stickerW = Math.round((Number(th.stickerW) || 0) * 0.78);
+              const stickerH = th.isOrnament ? Math.round((Number(th.stickerH) || 0) * 0.8) : Math.round((Number(th.stickerH) || 0) * 0.78);
+              const safeThFrame = SEC.sanitizeCssValue(th.frameBg, '#c084fc');
+              const safeThGlow = SEC.sanitizeCssValue(th.glow, 'rgba(192,132,252,0.28)');
+              const safeThBg = SEC.sanitizeCssValue(th.userBubble || th.bg, 'rgba(24,18,42,0.9)');
+              const safeThBorder = SEC.sanitizeCssValue(th.innerBorder, '1px solid ' + SEC.sanitizeCssValue(th.borderColor, 'rgba(255,255,255,0.16)'));
+              const safeThText = SEC.sanitizeCssValue(th.textColor || th.textMain, '#f8fafc');
+              const safeStickerUrl = SEC.sanitizeCssUrl(th.sticker || '');
               return `
-                <div class="agy-bubble-card" data-name="${name}" style="position: relative; border-radius: 12px; border: ${isSelected ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)'}; background: ${isSelected ? 'rgba(42, 34, 30, 0.68)' : 'rgba(14, 12, 12, 0.78)'}; padding: 24px 18px 14px 18px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; min-height: 112px; transition: border-color 0.15s ease, background-color 0.15s ease;">
+                <div class="agy-bubble-card" data-name="${safeNameHtml}" style="position: relative; border-radius: 12px; border: ${isSelected ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)'}; background: ${isSelected ? 'rgba(42, 34, 30, 0.68)' : 'rgba(14, 12, 12, 0.78)'}; padding: 24px 18px 14px 18px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; min-height: 112px; transition: border-color 0.15s ease, background-color 0.15s ease;">
                   <div style="display: flex; justify-content: center; align-items: center; width: 100%; margin-top: 6px; margin-bottom: 10px;">
-                    <div style="position: relative; width: 192px; height: 46px; padding: 1.2px; border-radius: ${th.isScroll ? '6px' : '12px'}; background: ${th.frameBg}; box-shadow: 0 4px 14px rgba(0,0,0,0.45), 0 0 10px ${th.glow};">
-                      <div style="position: relative; width: 100%; height: 100%; background: ${th.bg}; border: ${th.innerBorder || '1px solid ' + th.borderColor}; border-radius: ${th.isScroll ? '4px' : '11px'}; display: flex; align-items: center; padding: 0 16px;">
-                        ${th.sticker ? `<div style="position: absolute; top: ${stickerTop}px; right: 8px; width: ${stickerW}px; height: ${stickerH}px; background-image: url('${th.sticker}'); background-size: contain; background-position: ${th.isOrnament ? 'center' : 'bottom center'}; background-repeat: no-repeat; pointer-events: none;"></div>` : ''}
-                        <span style="font-size: 13.5px; font-weight: 500; color: ${th.textColor};">Hello ✨</span>
+                    <div style="position: relative; width: 192px; height: 46px; padding: 1.2px; border-radius: ${th.isScroll ? '6px' : '12px'}; background: ${safeThFrame}; box-shadow: 0 4px 14px rgba(0,0,0,0.45), 0 0 10px ${safeThGlow};">
+                      <div style="position: relative; width: 100%; height: 100%; background: ${safeThBg}; border: ${safeThBorder}; border-radius: ${th.isScroll ? '4px' : '11px'}; display: flex; align-items: center; padding: 0 16px;">
+                        ${safeStickerUrl ? `<div style="position: absolute; top: ${stickerTop}px; right: 8px; width: ${stickerW}px; height: ${stickerH}px; background-image: url(&quot;${safeStickerUrl}&quot;); background-size: contain; background-position: ${th.isOrnament ? 'center' : 'bottom center'}; background-repeat: no-repeat; pointer-events: none;"></div>` : ''}
+                        <span style="font-size: 13.5px; font-weight: 500; color: ${safeThText};">Hello ✨</span>
                       </div>
                     </div>
                   </div>
                   <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 13.5px; font-weight: 500; color: #e4e4e7;">${name}</span>
+                    <span style="font-size: 13.5px; font-weight: 500; color: #e4e4e7;">${safeNameHtml}</span>
                     <div class="agy-card-check-slot">${isSelected ? CHECK_SVG : ''}</div>
                   </div>
                 </div>
@@ -1192,22 +1530,30 @@
               const previewStickerStyle = activeBubbleTh.isOrnament
                 ? 'top: -12px; right: 10px; width: 72px; height: 22px; background-position: center;'
                 : 'top: -22px; right: 10px; width: 32px; height: 28px; background-position: bottom center;';
-              const previewInnerBg = key === 'glass'
-                ? (activeBubbleTh.inputGlassBg || 'rgba(20, 15, 13, 0.45)')
-                : (activeBubbleTh.inputCardBg || 'rgba(26, 18, 15, 0.92)');
+              const previewInnerBg = SEC.sanitizeCssValue(
+                key === 'glass'
+                  ? (activeBubbleTh.inputGlassBg || 'rgba(20, 15, 13, 0.45)')
+                  : (activeBubbleTh.inputCardBg || activeBubbleTh.composerBg || 'rgba(26, 18, 15, 0.92)'),
+                'rgba(26, 18, 15, 0.92)'
+              );
+              const previewFrameBg = key === 'double_gold'
+                ? 'linear-gradient(135deg, #f59e0b, #fbbf24)'
+                : SEC.sanitizeCssValue(activeBubbleTh.frameBg, '#c084fc');
+              const previewStickerUrl = SEC.sanitizeCssUrl(activeBubbleTh.sticker || '');
+              const previewPrimary = SEC.sanitizeCssValue(activeBubbleTh.primary, '#c084fc');
               return `
-                <div class="agy-input-card" data-style="${key}" style="border-radius: 12px; border: ${isSelected ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)'}; background: ${isSelected ? 'rgba(42, 34, 30, 0.68)' : 'rgba(14, 12, 12, 0.78)'}; padding: 16px 18px; cursor: pointer; display: flex; flex-direction: column; gap: 12px; transition: border-color 0.15s ease, background-color 0.15s ease;">
-                  <div class="agy-input-preview-outer" style="position: relative; margin-top: 8px; padding: 1.5px; border-radius: 10px; background: ${key === 'double_gold' ? 'linear-gradient(135deg, #f59e0b, #fbbf24)' : activeBubbleTh.frameBg};">
-                    <div class="agy-input-preview-sticker" style="position: absolute; ${previewStickerStyle} background-image: url('${activeBubbleTh.sticker || ''}'); background-size: contain; background-repeat: no-repeat; display: ${key !== 'minimal' && activeBubbleTh.sticker ? 'block' : 'none'}; pointer-events: none;"></div>
+                <div class="agy-input-card" data-style="${SEC.escapeHtml(key)}" style="border-radius: 12px; border: ${isSelected ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)'}; background: ${isSelected ? 'rgba(42, 34, 30, 0.68)' : 'rgba(14, 12, 12, 0.78)'}; padding: 16px 18px; cursor: pointer; display: flex; flex-direction: column; gap: 12px; transition: border-color 0.15s ease, background-color 0.15s ease;">
+                  <div class="agy-input-preview-outer" style="position: relative; margin-top: 8px; padding: 1.5px; border-radius: 10px; background: ${previewFrameBg};">
+                    <div class="agy-input-preview-sticker" style="position: absolute; ${previewStickerStyle} ${previewStickerUrl ? `background-image: url(&quot;${previewStickerUrl}&quot;);` : ''} background-size: contain; background-repeat: no-repeat; display: ${key !== 'minimal' && previewStickerUrl ? 'block' : 'none'}; pointer-events: none;"></div>
                     <div class="agy-input-preview-inner" style="background: ${previewInnerBg}; border-radius: 9px; padding: 8px 12px; font-size: 12px; color: #a1a1aa; display: flex; justify-content: space-between; align-items: center;">
                       <span>Ask anything, @ to mention...</span>
-                      <span class="agy-input-preview-turbo" style="color: ${activeBubbleTh.primary}; font-size: 11px;">Send →</span>
+                      <span class="agy-input-preview-turbo" style="color: ${previewPrimary}; font-size: 11px;">Send →</span>
                     </div>
                   </div>
                   <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                      <div style="font-size: 13.5px; font-weight: 500; color: #e4e4e7;">${item.label}</div>
-                      <div style="font-size: 11.5px; color: #a1a1aa;">${item.desc}</div>
+                      <div style="font-size: 13.5px; font-weight: 500; color: #e4e4e7;">${SEC.escapeHtml(item.label)}</div>
+                      <div style="font-size: 11.5px; color: #a1a1aa;">${SEC.escapeHtml(item.desc)}</div>
                     </div>
                     <div class="agy-card-check-slot">${isSelected ? CHECK_SVG : ''}</div>
                   </div>
@@ -1221,25 +1567,33 @@
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
             <div>
               <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 3px;">Theme Presets (${THEME_KEYS.length})</div>
-              <div style="font-size: 12.5px; color: #a1a1aa;">Bộ sưu tập Thanh Gươm Diệt Quỷ (Gia Đình Chúa Công, Cửu Trụ &amp; Bộ Tứ Chính) — 60fps Live Glass &amp; NPC.</div>
+              <div style="font-size: 12.5px; color: #a1a1aa;">Bộ sưu tập Thanh Gươm Diệt Quỷ &amp; Đa Vũ Trụ OKLCH — 60fps Live Glass &amp; NPC.</div>
             </div>
             <div id="agy-preset-filter-bar" style="display: flex; flex-wrap: wrap; gap: 6px;">
-              <button type="button" class="agy-filter-chip" data-filter="all" style="padding: 4px 10px; border-radius: 999px; border: 1px solid ${mainTheme.primary}; background: rgba(255,255,255,0.12); color: #fff; font-size: 11.5px; font-weight: 600; cursor: pointer;">Tất cả (${THEME_KEYS.length})</button>
+              <button type="button" class="agy-filter-chip" data-filter="all" style="padding: 4px 10px; border-radius: 999px; border: 1px solid ${safeMainPrimary}; background: rgba(255,255,255,0.12); color: #fff; font-size: 11.5px; font-weight: 600; cursor: pointer;">Tất cả (${THEME_KEYS.length})</button>
               <button type="button" class="agy-filter-chip" data-filter="royal" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(250,204,21,0.45); background: rgba(250,204,21,0.12); color: #fef08a; font-size: 11.5px; font-weight: 600; cursor: pointer;">👑 Chúa Công</button>
               <button type="button" class="agy-filter-chip" data-filter="hashira" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 11.5px; cursor: pointer;">⚔️ Cửu Trụ (9)</button>
               <button type="button" class="agy-filter-chip" data-filter="kamaboko" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 11.5px; cursor: pointer;">🔥 Nhân Vật Chính</button>
+              <button type="button" class="agy-filter-chip" data-filter="forged" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(192,132,252,0.42); background: rgba(168,85,247,0.12); color: #e9d5ff; font-size: 11.5px; cursor: pointer;">🌌 Đa Vũ Trụ / Rèn AI</button>
               <button type="button" class="agy-filter-chip" data-filter="classic" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 11.5px; cursor: pointer;">✨ Khác</button>
             </div>
           </div>
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
             ${THEME_KEYS.map(name => {
-              const th = THEMES[name];
+              const th = THEMES[name] || {};
+              const safeNameHtml = SEC.escapeHtml(name);
               const isSelected = name === st.themeName;
-              const isRoyal = th.fxMode === 'royal_wisteria' || /Chúa Công|Ubuyashiki/i.test(name);
-              const groupTag = isRoyal ? 'royal' : (/Trụ|Shinobu/i.test(name) ? 'hashira' : (/(Tanjiro|Nezuko|Zenitsu|Inosuke)/i.test(name) ? 'kamaboko' : 'classic'));
-              const thumbBg = th.wallpaper
-                ? `linear-gradient(180deg, rgba(0,0,0,0.10), rgba(10,8,18,0.86)), url('${th.wallpaper}')`
-                : (th.pureBg || th.bg);
+              const isRoyal = th.fxMode === 'royal_wisteria' || th.fxMode === 'wisteria_royal' || /Chúa Công|Ubuyashiki/i.test(name);
+              const isForged = Boolean(th.isForged);
+              const groupTag = isForged
+                ? 'forged'
+                : (isRoyal ? 'royal' : (/Trụ|Shinobu/i.test(name) ? 'hashira' : (/(Tanjiro|Nezuko|Zenitsu|Inosuke)/i.test(name) ? 'kamaboko' : 'classic')));
+              const safeWpUrl = SEC.sanitizeCssUrl(th.wallpaper || '');
+              const thumbBg = safeWpUrl
+                ? `linear-gradient(180deg, rgba(0,0,0,0.10), rgba(10,8,18,0.86)), url(&quot;${safeWpUrl}&quot;)`
+                : SEC.sanitizeCssValue(th.pureBg || th.bg, '#111118');
+              const safeBgPos = SEC.sanitizeCssValue(th.bgPosition, 'center');
+              const safeStickerUrl = SEC.sanitizeCssUrl(th.sticker || '');
               const thumbOrnamentStyle = th.isChibiNpc
                 ? 'right: 8px; bottom: 0px; width: 92px; height: 45px; background-position: bottom right;'
                 : (th.isOrnament
@@ -1250,14 +1604,14 @@
                 : (isRoyal ? '1.2px solid rgba(250, 204, 21, 0.55)' : '1px solid rgba(255, 255, 255, 0.12)');
               const cardShadow = isRoyal ? 'box-shadow: 0 6px 22px rgba(250, 204, 21, 0.18), inset 0 1px 0 rgba(254, 240, 138, 0.22);' : '';
               return `
-                <div class="agy-preset-card" data-name="${name}" data-group="${groupTag}" style="border-radius: 12px; border: ${borderStyle}; background: ${isRoyal ? 'linear-gradient(145deg, rgba(32, 18, 52, 0.92), rgba(18, 12, 32, 0.94))' : 'rgba(14, 12, 18, 0.84)'}; ${cardShadow} overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: border-color 0.15s ease, transform 0.15s ease;">
-                  <div style="height: 78px; width: 100%; background-image: ${thumbBg}; background-size: cover; background-position: ${th.bgPosition || 'center'}; position: relative; display: flex; align-items: flex-end; padding: 8px 14px;">
-                    ${isRoyal ? `<span style="position:absolute; top:7px; left:10px; padding:2px 8px; border-radius:999px; background:linear-gradient(90deg, rgba(250,204,21,0.92), rgba(232,121,249,0.88)); color:#180d2c; font-size:10px; font-weight:800; letter-spacing:0.2px;">★ ĐẶC BIỆT</span>` : ''}
-                    ${th.sticker ? `<div style="position: absolute; ${thumbOrnamentStyle} background-image: url('${th.sticker}'); background-size: contain; background-repeat: no-repeat; pointer-events: none;"></div>` : ''}
-                    <span style="font-size: 13.5px; font-weight: 600; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.92); padding-right: 78px;">${name}</span>
+                <div class="agy-preset-card" data-name="${safeNameHtml}" data-group="${SEC.escapeHtml(groupTag)}" style="border-radius: 12px; border: ${borderStyle}; background: ${isRoyal ? 'linear-gradient(145deg, rgba(32, 18, 52, 0.92), rgba(18, 12, 32, 0.94))' : 'rgba(14, 12, 18, 0.84)'}; ${cardShadow} overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: border-color 0.15s ease, transform 0.15s ease;">
+                  <div style="height: 78px; width: 100%; background-image: ${thumbBg}; background-size: cover; background-position: ${safeBgPos}; position: relative; display: flex; align-items: flex-end; padding: 8px 14px;">
+                    ${isRoyal ? `<span style="position:absolute; top:7px; left:10px; padding:2px 8px; border-radius:999px; background:linear-gradient(90deg, rgba(250,204,21,0.92), rgba(232,121,249,0.88)); color:#180d2c; font-size:10px; font-weight:800; letter-spacing:0.2px;">★ ĐẶC BIỆT</span>` : (isForged ? `<span style="position:absolute; top:7px; left:10px; padding:2px 8px; border-radius:999px; background:rgba(168,85,247,0.85); color:#fff; font-size:10px; font-weight:700;">⚒️ OKLCH</span>` : '')}
+                    ${safeStickerUrl ? `<div style="position: absolute; ${thumbOrnamentStyle} background-image: url(&quot;${safeStickerUrl}&quot;); background-size: contain; background-repeat: no-repeat; pointer-events: none;"></div>` : ''}
+                    <span style="font-size: 13.5px; font-weight: 600; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.92); padding-right: 78px;">${safeNameHtml}</span>
                   </div>
                   <div style="padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                    <span style="font-size: 12px; color: ${isRoyal ? '#fef08a' : '#a1a1aa'}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${th.concept || ''}</span>
+                    <span style="font-size: 12px; color: ${isRoyal ? '#fef08a' : '#a1a1aa'}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${SEC.escapeHtml(th.concept || '')}</span>
                     <div class="agy-card-check-slot">${isSelected ? CHECK_SVG : ''}</div>
                   </div>
                 </div>
@@ -1269,26 +1623,30 @@
     `;
 
     function updateInputPreviews(bName) {
-      const activeTh = THEMES[bName] || THEMES[DEFAULT_THEME_KEY];
+      const activeTh = THEMES[bName] || THEMES[DEFAULT_THEME_KEY] || {};
+      const safeFrame = SEC.sanitizeCssValue(activeTh.frameBg, '#c084fc');
+      const safeGlass = SEC.sanitizeCssValue(activeTh.inputGlassBg, 'rgba(20, 15, 13, 0.45)');
+      const safeCard = SEC.sanitizeCssValue(activeTh.inputCardBg || activeTh.composerBg, 'rgba(26, 18, 15, 0.92)');
+      const safeSticker = SEC.sanitizeCssUrl(activeTh.sticker || '');
+      const safePrim = SEC.sanitizeCssValue(activeTh.primary, '#c084fc');
+
       container.querySelectorAll('.agy-input-card').forEach(card => {
         const key = card.dataset.style;
         const outer = card.querySelector('.agy-input-preview-outer');
         if (outer) {
           outer.style.background = key === 'double_gold'
             ? 'linear-gradient(135deg, #f59e0b, #fbbf24)'
-            : activeTh.frameBg;
+            : safeFrame;
         }
         const inner = card.querySelector('.agy-input-preview-inner');
         if (inner) {
-          inner.style.background = key === 'glass'
-            ? (activeTh.inputGlassBg || 'rgba(20, 15, 13, 0.45)')
-            : (activeTh.inputCardBg || 'rgba(26, 18, 15, 0.92)');
+          inner.style.background = key === 'glass' ? safeGlass : safeCard;
         }
         const sticker = card.querySelector('.agy-input-preview-sticker');
         if (sticker) {
-          if (key !== 'minimal' && activeTh.sticker) {
+          if (key !== 'minimal' && safeSticker) {
             sticker.style.display = 'block';
-            sticker.style.backgroundImage = `url('${activeTh.sticker}')`;
+            sticker.style.backgroundImage = `url("${safeSticker}")`;
             if (activeTh.isOrnament) {
               sticker.style.top = '-12px';
               sticker.style.width = '72px';
@@ -1306,7 +1664,7 @@
         }
         const turbo = card.querySelector('.agy-input-preview-turbo');
         if (turbo) {
-          turbo.style.color = activeTh.primary;
+          turbo.style.color = safePrim;
         }
       });
     }
@@ -1314,7 +1672,7 @@
     const slider = container.querySelector('#agy-dim-slider');
     const valLabel = container.querySelector('#agy-dim-val');
     slider.addEventListener('input', (e) => {
-      const v = parseInt(e.target.value, 10);
+      const v = clampInt(e.target.value, 15, 92, 69);
       valLabel.textContent = v + '%';
       applyTheme({ dimming: v });
     });
@@ -1324,18 +1682,175 @@
       applyTheme({ wpEnabled: e.target.checked });
     });
 
+    const twToggle = container.querySelector('#agy-tw-toggle');
+    if (twToggle) {
+      twToggle.addEventListener('change', (e) => {
+        applyTheme({ transparentWorld: e.target.checked });
+      });
+    }
+
+    // Validated & compressed custom wallpaper upload (F-05: <= 15MB, PNG/JPEG/WebP/GIF, never passes raw untrusted data URL on decode error)
     const wpUpload = container.querySelector('#agy-wp-upload');
     wpUpload.addEventListener('change', (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        applyTheme({ customWp: reader.result, wpEnabled: true });
+      compressWallpaperFile(file, (safeDataUrl) => {
+        applyTheme({ customWp: safeDataUrl, wpEnabled: true });
         const toggle = container.querySelector('#agy-wp-toggle');
         if (toggle) toggle.checked = true;
-      };
-      reader.readAsDataURL(file);
+      });
     });
+
+    // Master Persona selector & quick pills
+    const personaSelect = container.querySelector('#agy-persona-select');
+    const applyMasterPersona = (pid) => {
+      const cleanId = String(pid || 'yoriichi').replace(/[^a-zA-Z0-9_-]/g, '') || 'yoriichi';
+      // Clear manual userAvatar override if it was 'none' or empty so persona emblem shows immediately
+      const nextOverrides = { masterPersona: cleanId };
+      if (!localStorage.getItem(STORAGE_USER_AVATAR)) {
+        nextOverrides.userAvatar = '';
+      }
+      applyTheme(nextOverrides);
+      renderThemePanels(container);
+    };
+    if (personaSelect) {
+      personaSelect.addEventListener('change', (e) => applyMasterPersona(e.target.value));
+    }
+    container.querySelectorAll('.agy-persona-pill').forEach((pill) => {
+      pill.addEventListener('click', () => applyMasterPersona(pill.getAttribute('data-persona')));
+    });
+
+    // Multiverse AI Theme Forge handlers
+    if (forge) {
+      let pendingForged = null;
+      const forgeFile = container.querySelector('#agy-forge-file');
+      const forgeDrop = container.querySelector('#agy-forge-dropzone');
+      const forgeBench = container.querySelector('#agy-forge-workbench');
+      const forgeName = container.querySelector('#agy-forge-name');
+      const forgeFx = container.querySelector('#agy-forge-fx');
+      const forgeCommit = container.querySelector('#agy-forge-commit');
+      const forgeSwatches = container.querySelector('#agy-forge-swatches');
+      const forgeStatus = container.querySelector('#agy-forge-status');
+      const forgeExportBtn = container.querySelector('#agy-forge-export-pkg');
+
+      const showForgeStatus = (msg, isError) => {
+        if (!forgeStatus) return;
+        forgeStatus.style.display = 'block';
+        forgeStatus.style.color = isError ? '#fca5a5' : '#5eead4';
+        forgeStatus.textContent = msg;
+      };
+
+      const renderSwatchesPreview = (themeObj) => {
+        if (!forgeSwatches || !themeObj) return;
+        const swatches = [
+          { label: 'Primary', color: themeObj.primary },
+          { label: 'Accent', color: themeObj.accent },
+          { label: 'CodeBg', color: themeObj.codeBg },
+          { label: 'TextMain', color: themeObj.textMain },
+          { label: 'TextMuted', color: themeObj.textMuted },
+          { label: 'PillBg', color: themeObj.pillBg }
+        ];
+        const swHtml = swatches.map((sw) => {
+          const c = SEC.sanitizeCssValue(sw.color, '#1e293b');
+          return `<span title="${SEC.escapeHtml(sw.label)}: ${SEC.escapeHtml(c)}" style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.14);"><i style="width:11px;height:11px;border-radius:3px;background:${c};display:inline-block;"></i>${SEC.escapeHtml(sw.label)}</span>`;
+        }).join('');
+        const ratio = themeObj.wcagReport ? themeObj.wcagReport.textContrast : '12.0';
+        forgeSwatches.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:5px;">${swHtml}</div><span style="color:#fef08a;font-weight:600;">WCAG AA/AAA: ${SEC.escapeHtml(String(ratio))}:1 ✓</span>`;
+      };
+
+      const handleForgeFile = (file) => {
+        if (!file) return;
+        showForgeStatus('⏳ Đang quét histogram 64×64 & giải phương trình màu OKLCH...', false);
+        forge.forgeFromWallpaperFile(file).then((res) => {
+          pendingForged = res;
+          if (forgeBench) forgeBench.style.display = 'flex';
+          if (forgeName) forgeName.value = res.suggestedName;
+          if (forgeFx) forgeFx.value = res.fxMode;
+          renderSwatchesPreview(res.theme);
+          showForgeStatus('✨ Đã trích xuất đủ 14 biến màu kính mờ OKLCH đạt chuẩn tương phản đọc code WCAG AA!', false);
+        }).catch((err) => {
+          showForgeStatus('⚠️ ' + (err && err.message ? err.message : 'Không thể xử lý ảnh.'), true);
+        });
+      };
+
+      if (forgeFile) {
+        forgeFile.addEventListener('change', (e) => {
+          const f = e.target.files && e.target.files[0];
+          handleForgeFile(f);
+        });
+      }
+      if (forgeDrop) {
+        ['dragenter', 'dragover'].forEach((evt) => {
+          forgeDrop.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            forgeDrop.style.borderColor = '#facc15';
+          });
+        });
+        ['dragleave', 'drop'].forEach((evt) => {
+          forgeDrop.addEventListener(evt, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            forgeDrop.style.borderColor = 'rgba(94, 234, 212, 0.55)';
+            if (evt === 'drop' && e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+              handleForgeFile(e.dataTransfer.files[0]);
+            }
+          });
+        });
+      }
+      if (forgeCommit) {
+        forgeCommit.addEventListener('click', () => {
+          if (!pendingForged || !pendingForged.theme) return;
+          const chosenName = (forgeName && forgeName.value.trim()) || pendingForged.suggestedName || '⚒️ Forged Universe';
+          const chosenFx = (forgeFx && forgeFx.value) || pendingForged.fxMode || 'wisteria';
+          pendingForged.theme.fxMode = chosenFx;
+          const saved = forge.registerThemeIntoRegistry(THEMES, THEME_KEYS, chosenName, pendingForged.theme);
+          if (saved) {
+            const badgeEl = document.getElementById('agy-custom-theme-badge');
+            if (badgeEl) badgeEl.textContent = `${THEME_KEYS.length} Presets`;
+            applyTheme({
+              themeName: saved.name,
+              bubbleName: saved.name,
+              dimming: saved.theme.defaultDimming || 28,
+              customWp: '',
+              wpEnabled: true
+            });
+            renderThemePanels(container);
+          }
+        });
+      }
+      container.querySelectorAll('.agy-multiverse-preset-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const mvId = btn.getAttribute('data-mv-id');
+          const preset = multiversePresets.find((p) => p.id === mvId);
+          if (!preset) return;
+          const built = preset.build();
+          const saved = forge.registerThemeIntoRegistry(THEMES, THEME_KEYS, preset.name, built);
+          if (saved) {
+            const badgeEl = document.getElementById('agy-custom-theme-badge');
+            if (badgeEl) badgeEl.textContent = `${THEME_KEYS.length} Presets`;
+            applyTheme({
+              themeName: saved.name,
+              bubbleName: saved.name,
+              masterPersona: preset.personaId || st.masterPersona,
+              dimming: saved.theme.defaultDimming || 25,
+              customWp: '',
+              wpEnabled: true
+            });
+            renderThemePanels(container);
+          }
+        });
+      });
+      if (forgeExportBtn) {
+        forgeExportBtn.addEventListener('click', () => {
+          const curState = getState();
+          const curTheme = THEMES[curState.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+          const pkg = forge.buildAgyThemePackage(curState.themeName, curTheme, curState);
+          forge.downloadAgyThemeFile(pkg);
+          showForgeStatus(`📦 Đã xuất gói "${curState.themeName}.agytheme" (schema: agytheme/2.0)!`, false);
+        });
+      }
+    }
 
     const userAvUpload = container.querySelector('#agy-user-av-upload');
     const userAvPreview = container.querySelector('#agy-user-av-preview');
@@ -1346,8 +1861,9 @@
 
     function syncAvPreview(el, url, fallbackText) {
       if (!el) return;
-      if (url) {
-        el.style.backgroundImage = `url("${url}")`;
+      const safeUrl = safeCssUrl(url || '');
+      if (safeUrl) {
+        el.style.backgroundImage = `url("${safeUrl}")`;
         el.style.backgroundSize = 'cover';
         el.style.backgroundPosition = 'center';
         el.textContent = '';
@@ -1394,7 +1910,7 @@
     const blurLabel = container.querySelector('#agy-blur-val');
     if (blurSlider) {
       blurSlider.addEventListener('input', (e) => {
-        const v = parseInt(e.target.value, 10);
+        const v = clampInt(e.target.value, 0, 16, 0);
         if (blurLabel) blurLabel.textContent = v + 'px';
         applyTheme({ glassBlur: v });
       });
@@ -1404,7 +1920,7 @@
     const avSizeVal = container.querySelector('#agy-av-size-val');
     if (avSizeSlider) {
       avSizeSlider.addEventListener('input', (e) => {
-        const v = parseInt(e.target.value, 10);
+        const v = clampInt(e.target.value, 22, 52, 32);
         if (avSizeVal) avSizeVal.textContent = v + 'px';
         applyTheme({ avatarSize: v });
       });
@@ -1414,7 +1930,7 @@
     const avRadVal = container.querySelector('#agy-av-rad-val');
     if (avRadSlider) {
       avRadSlider.addEventListener('input', (e) => {
-        const v = parseInt(e.target.value, 10);
+        const v = clampInt(e.target.value, 0, 50, 50);
         if (avRadVal) avRadVal.textContent = v + '%';
         if (userAvPreview) userAvPreview.style.borderRadius = v + '%';
         if (agentAvPreview) agentAvPreview.style.borderRadius = v + '%';
@@ -1426,8 +1942,88 @@
     const importToggle = container.querySelector('#agy-import-toggle');
     const importBox = container.querySelector('#agy-import-box');
     const importText = container.querySelector('#agy-import-text');
+    const importFile = container.querySelector('#agy-import-file');
     const importApply = container.querySelector('#agy-import-apply');
     const importMsg = container.querySelector('#agy-import-msg');
+
+    function applyImportedJsonString(rawJsonStr) {
+      const parsedRaw = JSON.parse(String(rawJsonStr || '').trim());
+      const parsed = SEC.stripProtoKeys(parsedRaw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Dữ liệu phải là một JSON Object hợp lệ.');
+      }
+
+      // Support `.agytheme` ("agytheme/2.0") package format natively
+      if ((parsed.schema && String(parsed.schema).startsWith('agytheme/')) || (parsed.theme && typeof parsed.theme === 'object')) {
+        if (!forge || typeof forge.importAgyThemeObject !== 'function') {
+          throw new Error('Mô-đun AI Theme Forge chưa sẵn sàng.');
+        }
+        const imported = forge.importAgyThemeObject(parsed, THEMES, THEME_KEYS);
+        const badgeEl = document.getElementById('agy-custom-theme-badge');
+        if (badgeEl) badgeEl.textContent = `${THEME_KEYS.length} Presets`;
+        const nextPatch = {
+          themeName: imported.name,
+          bubbleName: imported.name,
+          customWp: '',
+          wpEnabled: true
+        };
+        if (imported.masterPersona) nextPatch.masterPersona = imported.masterPersona;
+        if (imported.settings.dimming !== undefined) nextPatch.dimming = imported.settings.dimming;
+        if (imported.settings.glassBlur !== undefined) nextPatch.glassBlur = imported.settings.glassBlur;
+        if (imported.settings.inputStyle && INPUT_STYLES[imported.settings.inputStyle]) nextPatch.inputStyle = imported.settings.inputStyle;
+        if (imported.settings.transparentWorld !== undefined) nextPatch.transparentWorld = imported.settings.transparentWorld;
+        applyTheme(nextPatch);
+        renderThemePanels(container);
+        return;
+      }
+
+      // Strict validation for standard state config JSON
+      const allowed = {};
+      if (typeof parsed.themeName === 'string' && THEMES[parsed.themeName]) {
+        allowed.themeName = parsed.themeName;
+      }
+      if (typeof parsed.bubbleName === 'string' && THEMES[parsed.bubbleName]) {
+        allowed.bubbleName = parsed.bubbleName;
+      }
+      if (typeof parsed.inputStyle === 'string' && INPUT_STYLES[parsed.inputStyle]) {
+        allowed.inputStyle = parsed.inputStyle;
+      }
+      if (typeof parsed.masterPersona === 'string') {
+        allowed.masterPersona = parsed.masterPersona.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) || 'yoriichi';
+      }
+      if (typeof parsed.dimming === 'number' && Number.isFinite(parsed.dimming)) {
+        allowed.dimming = clampInt(parsed.dimming, 15, 92, 69);
+      }
+      if (typeof parsed.glassBlur === 'number' && Number.isFinite(parsed.glassBlur)) {
+        allowed.glassBlur = clampInt(parsed.glassBlur, 0, 16, 0);
+      }
+      if (typeof parsed.avatarSize === 'number' && Number.isFinite(parsed.avatarSize)) {
+        allowed.avatarSize = clampInt(parsed.avatarSize, 22, 52, 32);
+      }
+      if (typeof parsed.avatarRadius === 'number' && Number.isFinite(parsed.avatarRadius)) {
+        allowed.avatarRadius = clampInt(parsed.avatarRadius, 0, 50, 50);
+      }
+      if (typeof parsed.wpEnabled === 'boolean') {
+        allowed.wpEnabled = parsed.wpEnabled;
+      }
+      if (typeof parsed.transparentWorld === 'boolean') {
+        allowed.transparentWorld = parsed.transparentWorld;
+      }
+      ['customWp', 'userAvatar', 'agentAvatar'].forEach((urlKey) => {
+        if (typeof parsed[urlKey] === 'string') {
+          const v = parsed[urlKey].trim();
+          if (v === '' || (urlKey !== 'customWp' && v === 'none')) {
+            allowed[urlKey] = v;
+          } else {
+            const safeU = resolveAssetUrl(v);
+            if (safeU) allowed[urlKey] = safeU;
+          }
+        }
+      });
+
+      applyTheme(allowed);
+      renderThemePanels(container);
+    }
 
     if (exportBtn) {
       exportBtn.addEventListener('click', () => {
@@ -1456,22 +2052,31 @@
         if (importMsg) importMsg.textContent = '';
       });
     }
+    if (importFile) {
+      importFile.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+          if (importMsg) importMsg.textContent = 'File quá lớn (> 15MB).';
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            applyImportedJsonString(String(reader.result || ''));
+          } catch (err) {
+            if (importMsg) importMsg.textContent = 'Lỗi gói: ' + err.message;
+          }
+        };
+        reader.readAsText(file, 'utf-8');
+      });
+    }
     if (importApply && importText) {
       importApply.addEventListener('click', () => {
         try {
-          const parsed = JSON.parse(importText.value.trim());
-          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            throw new Error('Config must be a JSON object');
-          }
-          const allowed = {};
-          const keys = ['themeName', 'bubbleName', 'inputStyle', 'dimming', 'wpEnabled', 'customWp', 'userAvatar', 'agentAvatar', 'glassBlur', 'avatarSize', 'avatarRadius'];
-          keys.forEach((k) => {
-            if (parsed[k] !== undefined) allowed[k] = parsed[k];
-          });
-          applyTheme(allowed);
-          renderThemePanels(container);
+          applyImportedJsonString(importText.value);
         } catch (err) {
-          if (importMsg) importMsg.textContent = 'Invalid JSON: ' + err.message;
+          if (importMsg) importMsg.textContent = 'JSON không hợp lệ: ' + err.message;
         }
       });
     }
@@ -1489,6 +2094,8 @@
       localStorage.removeItem(STORAGE_INPUT);
       localStorage.removeItem(STORAGE_DIMMING);
       localStorage.removeItem(STORAGE_WP_ENABLED);
+      localStorage.removeItem(STORAGE_TRANSPARENT_WORLD);
+      localStorage.removeItem(STORAGE_MASTER_PERSONA);
       applyTheme({
         themeName: DEFAULT_THEME_KEY,
         bubbleName: DEFAULT_THEME_KEY,
@@ -1500,44 +2107,11 @@
         agentAvatar: '',
         glassBlur: 3,
         avatarSize: 32,
-        avatarRadius: 50
+        avatarRadius: 50,
+        transparentWorld: true,
+        masterPersona: 'yoriichi'
       });
-      const defTh = THEMES[DEFAULT_THEME_KEY] || {};
-      syncAvPreview(userAvPreview, defTh.userAvatar || '', 'U');
-      syncAvPreview(agentAvPreview, defTh.agentAvatar || '', 'AI');
-      if (userAvPreview) userAvPreview.style.borderRadius = '50%';
-      if (agentAvPreview) agentAvPreview.style.borderRadius = '50%';
-      if (slider) slider.value = 69;
-      if (valLabel) valLabel.textContent = '69%';
-      if (blurSlider) blurSlider.value = 3;
-      if (blurLabel) blurLabel.textContent = '3px';
-      if (avSizeSlider) avSizeSlider.value = 32;
-      if (avSizeVal) avSizeVal.textContent = '32px';
-      if (avRadSlider) avRadSlider.value = 50;
-      if (avRadVal) avRadVal.textContent = '50%';
-      if (wpToggle) wpToggle.checked = true;
-
-      container.querySelectorAll('.agy-preset-card').forEach(c => {
-        const isSel = c.dataset.name === DEFAULT_THEME_KEY;
-        c.style.border = isSel ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)';
-        const slot = c.querySelector('.agy-card-check-slot');
-        if (slot) slot.innerHTML = isSel ? CHECK_SVG : '';
-      });
-      container.querySelectorAll('.agy-bubble-card').forEach(b => {
-        const isSel = b.dataset.name === DEFAULT_THEME_KEY;
-        b.style.border = isSel ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)';
-        b.style.background = isSel ? 'rgba(42, 34, 30, 0.68)' : 'rgba(14, 12, 12, 0.78)';
-        const slot = b.querySelector('.agy-card-check-slot');
-        if (slot) slot.innerHTML = isSel ? CHECK_SVG : '';
-      });
-      container.querySelectorAll('.agy-input-card').forEach(c => {
-        const isSel = c.dataset.style === 'sync';
-        c.style.border = isSel ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)';
-        c.style.background = isSel ? 'rgba(42, 34, 30, 0.68)' : 'rgba(14, 12, 12, 0.78)';
-        const slot = c.querySelector('.agy-card-check-slot');
-        if (slot) slot.innerHTML = isSel ? CHECK_SVG : '';
-      });
-      updateInputPreviews(DEFAULT_THEME_KEY);
+      renderThemePanels(container);
     });
 
     container.querySelectorAll('.agy-filter-chip').forEach(chip => {
@@ -1546,7 +2120,7 @@
         container.querySelectorAll('.agy-filter-chip').forEach(ch => {
           const active = ch === chip;
           ch.style.background = active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.05)';
-          ch.style.borderColor = active ? (mainTheme.primary || '#c084fc') : 'rgba(255,255,255,0.16)';
+          ch.style.borderColor = active ? safeMainPrimary : 'rgba(255,255,255,0.16)';
           ch.style.fontWeight = active ? '600' : '400';
         });
         container.querySelectorAll('.agy-preset-card').forEach(card => {
@@ -1559,13 +2133,16 @@
     container.querySelectorAll('.agy-preset-card').forEach(card => {
       card.addEventListener('click', () => {
         const name = card.dataset.name;
+        if (!THEMES[name]) return;
         const pickedTh = THEMES[name] || {};
         const nextDim = pickedTh.defaultDimming !== undefined ? pickedTh.defaultDimming : 42;
         applyTheme({ themeName: name, bubbleName: name, dimming: nextDim, customWp: '' });
         if (slider) slider.value = nextDim;
         if (valLabel) valLabel.textContent = nextDim + '%';
         if (!localStorage.getItem(STORAGE_USER_AVATAR)) {
-          syncAvPreview(userAvPreview, pickedTh.userAvatar || '', 'U');
+          const curP = getActiveMasterPersona();
+          const pOverride = getState().masterPersona !== 'yoriichi';
+          syncAvPreview(userAvPreview, pOverride ? curP.userAvatar : (pickedTh.userAvatar || curP.userAvatar || ''), 'U');
         }
         if (!localStorage.getItem(STORAGE_AGENT_AVATAR)) {
           syncAvPreview(agentAvPreview, pickedTh.agentAvatar || '', 'AI');
@@ -1596,6 +2173,7 @@
     container.querySelectorAll('.agy-bubble-card').forEach(card => {
       card.addEventListener('click', () => {
         const name = card.dataset.name;
+        if (!THEMES[name]) return;
         applyTheme({ bubbleName: name });
 
         container.querySelectorAll('.agy-bubble-card').forEach(b => {
@@ -1613,6 +2191,7 @@
     container.querySelectorAll('.agy-input-card').forEach(card => {
       card.addEventListener('click', () => {
         const styleKey = card.dataset.style;
+        if (!INPUT_STYLES[styleKey]) return;
         applyTheme({ inputStyle: styleKey });
 
         container.querySelectorAll('.agy-input-card').forEach(c => {
@@ -1783,11 +2362,167 @@
     syncShellMetrics();
   }
 
+  /* ==========================================================================
+   * TRANSPARENT WORLD ("SUKITŌRU SEKAI") DEEP-FOCUS FLOW ENGINE
+   * Smoothly lerps window.__AGY_TRANSPARENT_WORLD__ (0.0 -> 1.0) during deep
+   * coding (>= 4 keys/sec for 2s) or sustained diff scrolling; restores after 2.8s.
+   * ========================================================================== */
+  if (typeof window.__AGY_TRANSPARENT_WORLD__ !== 'number') {
+    window.__AGY_TRANSPARENT_WORLD__ = 0;
+  }
+
+  let twEnabledFlag = true;
+  let twTargetVal = 0;
+  let twCurrentVal = Number(window.__AGY_TRANSPARENT_WORLD__) || 0;
+  let twLerpRafId = 0;
+  let twIdleTimerId = 0;
+  let twLastFrameMs = 0;
+  let twLastScrollSampleMs = 0;
+  const twKeyRing = [];
+  const twScrollRing = [];
+
+  function commitTransparentWorldDom(val) {
+    const c = Math.max(0, Math.min(1, Number(val) || 0));
+    twCurrentVal = c;
+    window.__AGY_TRANSPARENT_WORLD__ = Number(c.toFixed(4));
+    if (c >= 0.03 || twTargetVal === 1) {
+      document.documentElement.dataset.agyTransparentWorld = '1';
+      document.documentElement.style.setProperty('--agy-tw-factor', c.toFixed(3));
+    } else {
+      delete document.documentElement.dataset.agyTransparentWorld;
+      document.documentElement.style.removeProperty('--agy-tw-factor');
+    }
+  }
+
+  function stepTransparentWorldLerp(now) {
+    twLerpRafId = 0;
+    const safeNow = Number.isFinite(now) ? now : performance.now();
+    const dtSec = twLastFrameMs > 0
+      ? Math.min(0.05, Math.max(0.004, (safeNow - twLastFrameMs) / 1000))
+      : (1 / 60);
+    twLastFrameMs = safeNow;
+    const diff = twTargetVal - twCurrentVal;
+    if (Math.abs(diff) <= 0.004) {
+      commitTransparentWorldDom(twTargetVal);
+      twLastFrameMs = 0;
+      return;
+    }
+    const rate = twTargetVal > twCurrentVal ? 2.8 : 1.85;
+    commitTransparentWorldDom(twCurrentVal + diff * Math.min(1, dtSec * rate));
+    twLerpRafId = requestAnimationFrame(stepTransparentWorldLerp);
+  }
+
+  function setTransparentWorldTarget(nextTarget) {
+    const goal = twEnabledFlag ? (nextTarget ? 1 : 0) : 0;
+    if (twTargetVal === goal && Math.abs(twCurrentVal - goal) <= 0.004) return;
+    twTargetVal = goal;
+    if (goal === 1) {
+      document.documentElement.dataset.agyTransparentWorld = '1';
+    }
+    if (!twLerpRafId) {
+      twLastFrameMs = 0;
+      twLerpRafId = requestAnimationFrame(stepTransparentWorldLerp);
+    }
+  }
+
+  function pulseTransparentWorldActivity() {
+    if (!twEnabledFlag) return;
+    setTransparentWorldTarget(1);
+    clearTimeout(twIdleTimerId);
+    twIdleTimerId = setTimeout(() => {
+      twIdleTimerId = 0;
+      setTransparentWorldTarget(0);
+    }, 2800);
+  }
+
+  function syncTransparentWorldSetting(enabled) {
+    twEnabledFlag = enabled !== false;
+    if (!twEnabledFlag) {
+      clearTimeout(twIdleTimerId);
+      twIdleTimerId = 0;
+      if (twLerpRafId) {
+        cancelAnimationFrame(twLerpRafId);
+        twLerpRafId = 0;
+      }
+      twTargetVal = 0;
+      twKeyRing.length = 0;
+      twScrollRing.length = 0;
+      commitTransparentWorldDom(0);
+    }
+  }
+
+  function teardownTransparentWorldFlow() {
+    syncTransparentWorldSetting(false);
+  }
+
+  function bindTransparentWorldListeners(signal) {
+    twEnabledFlag = getState().transparentWorld !== false;
+    window.addEventListener('keydown', (e) => {
+      if (!twEnabledFlag || !e || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'Shift' || e.key === 'CapsLock' || e.key === 'Tab' || e.key === 'Escape') return;
+      const t = e.target;
+      if (!t || !t.tagName) return;
+      if (t.closest && t.closest('#agy-custom-theme-modal-backdrop')) return;
+      const tag = t.tagName.toUpperCase();
+      const isCodingOrTyping =
+        tag === 'TEXTAREA' ||
+        tag === 'INPUT' ||
+        t.isContentEditable ||
+        Boolean(t.closest && t.closest('.monaco-editor, .cm-editor, .surface-composer, [contenteditable="true"]'));
+      if (!isCodingOrTyping) return;
+
+      const now = performance.now();
+      if (twTargetVal === 1) {
+        pulseTransparentWorldActivity();
+        return;
+      }
+      twKeyRing.push(now);
+      const cutoff = now - 2000;
+      while (twKeyRing.length > 0 && twKeyRing[0] < cutoff) {
+        twKeyRing.shift();
+      }
+      let firstSecCount = 0;
+      let secondSecCount = 0;
+      const mid = now - 1000;
+      for (let i = 0; i < twKeyRing.length; i++) {
+        if (twKeyRing[i] < mid) firstSecCount++;
+        else secondSecCount++;
+      }
+      // Deep Coding threshold: >= 4 keys/sec sustained across 2 consecutive seconds
+      if (firstSecCount >= 4 && secondSecCount >= 4) {
+        pulseTransparentWorldActivity();
+      }
+    }, { capture: true, passive: true, signal });
+
+    const onFlowScroll = (e) => {
+      if (!twEnabledFlag) return;
+      if (e && e.target && e.target.closest && e.target.closest('#agy-custom-theme-modal-backdrop')) return;
+      const now = performance.now();
+      if (now - twLastScrollSampleMs < 75) return;
+      twLastScrollSampleMs = now;
+      if (twTargetVal === 1) {
+        pulseTransparentWorldActivity();
+        return;
+      }
+      twScrollRing.push(now);
+      const cutoff = now - 1200;
+      while (twScrollRing.length > 0 && twScrollRing[0] < cutoff) {
+        twScrollRing.shift();
+      }
+      if (twScrollRing.length >= 6 && (now - twScrollRing[0]) >= 450) {
+        pulseTransparentWorldActivity();
+      }
+    };
+    window.addEventListener('wheel', onFlowScroll, { capture: true, passive: true, signal });
+    document.addEventListener('scroll', onFlowScroll, { capture: true, passive: true, signal });
+  }
+
   function getShinobuRuntime() {
     if (!window.__AGY_SHINOBU_RT__) {
       window.__AGY_SHINOBU_RT__ = {
         fxRaf: 0,
         fxPaused: localStorage.getItem('agy_fx_paused_v1') === '1',
+        fxFocusPaused: false,
         fxCleanups: [],
         activeFxMode: '',
         fxDrawer: null,
@@ -1810,6 +2545,7 @@
         cancelAnimationFrame(rt.fxRaf);
         rt.fxRaf = 0;
       }
+      rt.fxFocusPaused = false;
       rt.activeFxMode = '';
       rt.fxDrawer = null;
       if (Array.isArray(rt.fxCleanups)) {
@@ -1833,7 +2569,7 @@
 
     const rt = getShinobuRuntime();
     let host = document.getElementById('agy-live-fx-host');
-    if (host && host.parentElement === shell && rt.activeFxMode === fxMode && (rt.fxRaf || rt.fxPaused)) {
+    if (host && host.parentElement === shell && rt.activeFxMode === fxMode && (rt.fxRaf || rt.fxPaused || rt.fxFocusPaused)) {
       return;
     }
 
@@ -1867,6 +2603,7 @@
     let width = 1280;
     let height = 720;
     let viewSkipped = false;
+    let blurPauseTimer = 0;
     const reducedMq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
 
     const drawerFactory = typeof window.__AGY_KNY_FX_DRAWERS__ === 'function' ? window.__AGY_KNY_FX_DRAWERS__ : null;
@@ -1892,7 +2629,7 @@
     }
 
     function shouldAnimate() {
-      if (document.hidden || viewSkipped || rt.fxPaused) return false;
+      if (document.hidden || viewSkipped || rt.fxPaused || rt.fxFocusPaused) return false;
       if (reducedMq && reducedMq.matches) return false;
       return true;
     }
@@ -1931,12 +2668,59 @@
       }
     }
 
+    // Single-Active-Window GPU Arbitration: 800ms after losing focus -> 0 FPS static 4K frame; instant 60fps on focus/mouseenter
+    const scheduleBlurArbitration = () => {
+      clearTimeout(blurPauseTimer);
+      blurPauseTimer = setTimeout(() => {
+        blurPauseTimer = 0;
+        if (document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus())) {
+          rt.fxFocusPaused = true;
+          resumeOrPause();
+        }
+      }, 800);
+    };
+
+    const wakeFromFocusOrHover = () => {
+      clearTimeout(blurPauseTimer);
+      blurPauseTimer = 0;
+      if (rt.fxFocusPaused) {
+        rt.fxFocusPaused = false;
+        if (drawer && typeof drawer.resetClock === 'function') {
+          drawer.resetClock();
+        }
+      }
+      resumeOrPause();
+    };
+
     const onResize = () => resize();
-    const onVis = () => resumeOrPause();
+    const onVis = () => {
+      if (document.hidden) {
+        clearTimeout(blurPauseTimer);
+        blurPauseTimer = 0;
+        resumeOrPause();
+      } else if (typeof document.hasFocus === 'function' && !document.hasFocus()) {
+        scheduleBlurArbitration();
+      } else {
+        wakeFromFocusOrHover();
+      }
+    };
+
     window.addEventListener('resize', onResize, { passive: true });
+    window.addEventListener('blur', scheduleBlurArbitration, { passive: true });
+    window.addEventListener('focus', wakeFromFocusOrHover, { passive: true });
+    window.addEventListener('mouseenter', wakeFromFocusOrHover, { passive: true });
     document.addEventListener('visibilitychange', onVis);
+
+    rt.fxCleanups.push(() => { clearTimeout(blurPauseTimer); blurPauseTimer = 0; });
     rt.fxCleanups.push(() => window.removeEventListener('resize', onResize));
+    rt.fxCleanups.push(() => window.removeEventListener('blur', scheduleBlurArbitration));
+    rt.fxCleanups.push(() => window.removeEventListener('focus', wakeFromFocusOrHover));
+    rt.fxCleanups.push(() => window.removeEventListener('mouseenter', wakeFromFocusOrHover));
     rt.fxCleanups.push(() => document.removeEventListener('visibilitychange', onVis));
+
+    if (typeof document.hasFocus === 'function' && !document.hasFocus()) {
+      scheduleBlurArbitration();
+    }
 
     if (reducedMq && typeof reducedMq.addEventListener === 'function') {
       reducedMq.addEventListener('change', onVis);
@@ -2462,6 +3246,8 @@
     ensureShinobuNpcStyles();
     const rt = getShinobuRuntime();
     const prof = getActiveNpcProfile(bTheme);
+    const persona = getActiveMasterPersona(st);
+    const personaOverrideActive = st.masterPersona && st.masterPersona !== 'yoriichi';
 
     document.querySelectorAll('.agy-user-bubble-frame').forEach(frame => {
       let hit = frame.querySelector(':scope > .agy-chibi-hitbox');
@@ -2469,19 +3255,24 @@
         hit = document.createElement('button');
         hit.type = 'button';
         hit.className = 'agy-chibi-hitbox';
-        // Never leave :empty inside .agy-user-bubble-frame (triggers [&:has(>.agy-user-bubble-frame>:empty)]:hidden)
+        // CRITICAL ANTIGRAVITY 2.0 DOM GUARD: Never leave :empty inside .agy-user-bubble-frame (prevents [&:has(>.agy-user-bubble-frame>:empty)]:hidden)
         hit.innerHTML = '<i aria-hidden="true"></i>';
         hit.addEventListener('click', (e) => {
           e.stopPropagation();
-          // Clicking Yoriichi Chibi on the User's own message frame launches Yoriichi's Sun Breathing!
+          const curSt = getState();
+          const curPersona = getActiveMasterPersona(curSt);
+          const skillCharId = curPersona.skillId || 'yoriichi';
+          const actSticker = (curSt.masterPersona && curSt.masterPersona !== 'yoriichi')
+            ? curPersona.actionSticker
+            : (bTheme.userActionSticker || curPersona.actionSticker);
           if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.castSkill === 'function') {
             rt.yoriBubbleCombo = ((rt.yoriBubbleCombo || 0) + 1) % 4;
-            window.__AGY_KNY_SKILLS__.castSkill('yoriichi', rt.yoriBubbleCombo, {
-              charId: 'yoriichi',
+            window.__AGY_KNY_SKILLS__.castSkill(skillCharId, rt.yoriBubbleCombo, {
+              charId: skillCharId,
               originRect: e.currentTarget.getBoundingClientRect(),
               sourceFrameEl: frame,
               composerEl: frame,
-              actionSticker: bTheme.userActionSticker
+              actionSticker: actSticker
             });
             return;
           }
@@ -2489,8 +3280,9 @@
         });
         frame.appendChild(hit);
       }
-      hit.title = '☀️ Khai Tổ Vũ Điệu Hỏa Thần (Anh) — Nhấn để Chibi Yoriichi nhảy ra xuất chiêu!';
-      hit.setAttribute('aria-label', hit.title);
+      const personaTitle = `${persona.tagLabel || 'Khai Tổ Hỏa Thần (Anh)'} — Nhấn để xuất chiêu Hơi Thở!`;
+      hit.title = personaTitle;
+      hit.setAttribute('aria-label', personaTitle);
       if (hit.children.length === 0) hit.innerHTML = '<i aria-hidden="true"></i>';
     });
 
@@ -2543,39 +3335,50 @@
       }, true);
     }
 
+    const compositeNpcKey = `${activeBubbleKey}::${st.masterPersona || 'yoriichi'}`;
     let wrap = document.getElementById('agy-shinobu-npc-wrap');
-    if (wrap && (wrap.parentElement !== composer || rt.activeNpcKey !== activeBubbleKey)) {
+    if (wrap && (wrap.parentElement !== composer || rt.activeNpcKey !== compositeNpcKey)) {
       wrap.remove();
       wrap = null;
     }
 
     if (!wrap) {
-      rt.activeNpcKey = activeBubbleKey;
+      rt.activeNpcKey = compositeNpcKey;
       wrap = document.createElement('div');
       wrap.id = 'agy-shinobu-npc-wrap';
       wrap.className = 'agy-shinobu-npc-wrap';
-      const isRoyal = bTheme.fxMode === 'royal_wisteria';
+      const isRoyal = bTheme.fxMode === 'royal_wisteria' || bTheme.fxMode === 'wisteria_royal';
       if (isRoyal) wrap.dataset.royal = '1';
 
-      wrap.style.setProperty('--npc-primary', bTheme.primary || '#c084fc');
-      wrap.style.setProperty('--npc-secondary', bTheme.secondary || '#5eead4');
-      wrap.style.setProperty('--npc-border', bTheme.borderColor || 'rgba(192, 132, 252, 0.55)');
-      wrap.style.setProperty('--npc-glow', bTheme.glow || 'rgba(192, 132, 252, 0.28)');
-      wrap.style.setProperty('--npc-surface', bTheme.modalBg || 'rgba(18, 13, 34, 0.95)');
+      wrap.style.setProperty('--npc-primary', SEC.sanitizeCssValue(bTheme.primary, '#c084fc'));
+      wrap.style.setProperty('--npc-secondary', SEC.sanitizeCssValue(bTheme.accent || bTheme.secondary, '#5eead4'));
+      wrap.style.setProperty('--npc-border', SEC.sanitizeCssValue(bTheme.borderColor, 'rgba(192, 132, 252, 0.55)'));
+      wrap.style.setProperty('--npc-glow', SEC.sanitizeCssValue(bTheme.glow, 'rgba(192, 132, 252, 0.28)'));
+      wrap.style.setProperty('--npc-surface', SEC.sanitizeCssValue(bTheme.modalBg, 'rgba(18, 13, 34, 0.95)'));
       wrap.style.setProperty('--npc-title-ink', isRoyal ? '#fef08a' : '#f8fafc');
 
       const fxPausedInit = Boolean(rt.fxPaused);
-      const pillsHtml = prof.pills.map(p =>
-        `<button type="button" class="agy-npc-pill" data-npc-cat="${p.key}">${p.label}</button>`
-      ).join('');
+      const pillsHtml = prof.pills.map((p) => {
+        const safeKey = SEC.escapeHtml(String((p && p.key) || '').replace(/[^a-zA-Z0-9_-]/g, ''));
+        const safeLbl = SEC.escapeHtml(String((p && p.label) || ''));
+        return `<button type="button" class="agy-npc-pill" data-npc-cat="${safeKey}">${safeLbl}</button>`;
+      }).join('');
+
+      const safeTitle = SEC.escapeHtml(prof.title || '');
+      const safeBadge = SEC.escapeHtml(prof.badgeLabel || '');
+      const safePlaceholder = SEC.escapeHtml(prof.placeholder || '');
+      const safePersonaTag = SEC.escapeHtml(persona.tagLabel || 'Khai Tổ Hỏa Thần (Anh)');
+      const safeNpcUserAv = safeCssUrl(
+        (personaOverrideActive ? persona.userAvatar : (bTheme.userAvatar || persona.userAvatar)) || ''
+      );
 
       wrap.innerHTML = `
-        <button type="button" class="agy-npc-badge" title="${prof.title}">${prof.badgeLabel}</button>
-        <div class="agy-npc-popover" role="region" aria-label="${prof.title}">
+        <button type="button" class="agy-npc-badge" title="${safeTitle}">${safeBadge}</button>
+        <div class="agy-npc-popover" role="region" aria-label="${safeTitle}">
           <div class="agy-npc-header">
             <div class="agy-npc-title-group">
               <span class="agy-npc-dot"></span>
-              <span class="agy-npc-title">${prof.title}</span>
+              <span class="agy-npc-title">${safeTitle}</span>
             </div>
             <div class="agy-npc-tools">
               <button type="button" class="agy-npc-icon-btn" data-npc-act="motion" title="${fxPausedInit ? 'Phát hiệu ứng nền' : 'Tạm dừng hiệu ứng nền'}" aria-label="${fxPausedInit ? 'Phát hiệu ứng nền' : 'Tạm dừng hiệu ứng nền'}">${fxPausedInit ? '▶' : '⏸'}</button>
@@ -2585,9 +3388,9 @@
             </div>
           </div>
           <div class="agy-npc-user-sent">
-            <span class="agy-npc-user-av" style="background-image: url('${bTheme.userAvatar || ''}')"></span>
+            <span class="agy-npc-user-av" style="${safeNpcUserAv ? `background-image: url(&quot;${safeNpcUserAv}&quot;);` : ''} border-color: ${SEC.sanitizeCssValue(persona.ringColor, '#fde047')};"></span>
             <div class="agy-npc-user-col">
-              <span class="agy-npc-user-tag">Khai Tổ Hỏa Thần (Anh)</span>
+              <span class="agy-npc-user-tag" style="color: ${SEC.sanitizeCssValue(persona.ringColor, '#fde047')};">${safePersonaTag}</span>
               <span class="agy-npc-user-msg"></span>
             </div>
           </div>
@@ -2597,7 +3400,7 @@
             <button type="button" class="agy-npc-pill" data-npc-act="chat-open">💬 Trò chuyện</button>
           </div>
           <form class="agy-npc-chat-row">
-            <input type="text" class="agy-npc-chat-input" placeholder="${prof.placeholder}" autocomplete="off" />
+            <input type="text" class="agy-npc-chat-input" placeholder="${safePlaceholder}" autocomplete="off" />
             <button type="submit" class="agy-npc-chat-send">Gửi</button>
           </form>
         </div>
@@ -2797,6 +3600,7 @@
     try { window.__AGY_SCROLL_AC__.abort(); } catch (e) {}
   }
   window.__AGY_SCROLL_AC__ = new AbortController();
+  bindTransparentWorldListeners(window.__AGY_SCROLL_AC__.signal);
   window.addEventListener('load', () => scheduleTitleBarSync(), { signal: window.__AGY_SCROLL_AC__.signal });
   window.addEventListener('focus', () => syncTitleBarOverlay(), { signal: window.__AGY_SCROLL_AC__.signal });
   document.addEventListener('visibilitychange', () => {
@@ -2815,7 +3619,6 @@
   try { document.querySelectorAll('.agy-yoriichi-msg-hit').forEach(el => el.remove()); } catch (e) {}
   try { if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.teardown === 'function') window.__AGY_TOKEN_HUD__.teardown(); } catch (e) {}
   try { if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.stopActiveSkill === 'function') window.__AGY_KNY_SKILLS__.stopActiveSkill(); } catch (e) {}
-  try { applyStyles(); } catch (e) {}
 
   window.__AGY_HOLE_EL__ = null;
   if (window.__AGY_MODAL_OBSERVER__) {

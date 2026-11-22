@@ -3,19 +3,45 @@
 
 /**
  * Zero-dependency Node.js payload compiler (matches scripts/build_payload.py).
- * Default mode: Hybrid Asset URLs — inlines tiny assets (< 12 KB cornerSvg/userAvatar/small ornaments)
- * while keeping heavy wallpapers, > 12 KB Chibi SVG stickers, and agentAvatars as clean "assets/<file>"
- * relative paths for instant HTTP loading via theme_daemon.js or preview.html.
- * Pass --inline-all to embed every asset as a self-contained data: URI.
+ * - Strips UTF-8 BOM across JSON, JS, and SVG sources
+ * - Enforces build-time SVG security sanitization check (blocks active scripts/handlers)
+ * - Uses reproducible 8-char SHA-256 content hashes (?v=<hash8>) instead of local mtime timestamps
+ * - Wraps output inside Master IIFE Closure receiving lexical __AGY_BOOT__
  */
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const ASSET_KEYS = ['wallpaper', 'sticker', 'userSticker', 'actionSticker', 'userActionSticker', 'cornerSvg', 'userCornerSvg', 'userAvatar', 'agentAvatar'];
+const ASSET_KEYS = [
+  'wallpaper',
+  'sticker',
+  'userSticker',
+  'actionSticker',
+  'userActionSticker',
+  'cornerSvg',
+  'userCornerSvg',
+  'userAvatar',
+  'agentAvatar'
+];
 const HYBRID_INLINE_CANDIDATES = new Set(['cornerSvg', 'userCornerSvg', 'userAvatar', 'sticker', 'userSticker']);
 const HYBRID_INLINE_MAX_BYTES = 12 * 1024;
 const PLACEHOLDER = '/*__THEMES_PLACEHOLDER__*/{}';
+
+const EXTRA_MODULES = [
+  'agy_security.js',
+  'kny_semantic_icons.js',
+  'kny_bio_audio.js',
+  'kny_fx_modes.js',
+  'kny_breathing_skills.js',
+  'kny_chibi_aura.js',
+  'kny_squad_raid.js',
+  'kny_token_hud.js',
+  'agy_theme_forge.js',
+  'kny_cinema_director.js'
+];
+
+const UNSAFE_SVG_PATTERN = /<script|<foreignobject|<iframe|\bon[a-z]+\s*=|javascript:/i;
 
 const MIME_BY_EXT = {
   '.webp': 'image/webp',
@@ -26,10 +52,21 @@ const MIME_BY_EXT = {
   '.svg': 'image/svg+xml'
 };
 
+function readUtf8NoBom(filePath) {
+  return fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '');
+}
+
+function assertSafeSvgContent(svgText, assetPath) {
+  if (UNSAFE_SVG_PATTERN.test(svgText)) {
+    throw new Error(`Security violation: unsafe executable markup detected in SVG asset: ${assetPath}`);
+  }
+}
+
 function encodeFileAsDataUri(assetPath) {
   const ext = path.extname(assetPath).toLowerCase();
   if (ext === '.svg') {
-    const svgText = fs.readFileSync(assetPath, 'utf8');
+    const svgText = readUtf8NoBom(assetPath);
+    assertSafeSvgContent(svgText, assetPath);
     return 'data:image/svg+xml,' + encodeURIComponent(svgText);
   }
   const raw = fs.readFileSync(assetPath);
@@ -59,6 +96,10 @@ function resolveAssetValue(key, value, themesDir, inlineAll) {
     throw new Error(`Theme asset not found: ${trimmed} (resolved: ${assetPath})`);
   }
 
+  if (path.extname(assetPath).toLowerCase() === '.svg') {
+    assertSafeSvgContent(readUtf8NoBom(assetPath), assetPath);
+  }
+
   if (inlineAll) {
     return encodeFileAsDataUri(assetPath);
   }
@@ -68,14 +109,13 @@ function resolveAssetValue(key, value, themesDir, inlineAll) {
     return encodeFileAsDataUri(assetPath);
   }
 
-  const st = fs.statSync(assetPath);
-  const fileSize = st.size;
-  if (HYBRID_INLINE_CANDIDATES.has(key) && fileSize < HYBRID_INLINE_MAX_BYTES) {
+  const rawBytes = fs.readFileSync(assetPath);
+  if (HYBRID_INLINE_CANDIDATES.has(key) && rawBytes.length < HYBRID_INLINE_MAX_BYTES) {
     return encodeFileAsDataUri(assetPath);
   }
 
-  const ver = Math.floor(st.mtimeMs).toString(36);
-  return `${relPosix}?v=${ver}`;
+  const hash8 = crypto.createHash('sha256').update(rawBytes).digest('hex').slice(0, 8);
+  return `${relPosix}?v=${hash8}`;
 }
 
 function parseArgs(argv, repoRoot) {
@@ -105,7 +145,7 @@ function main() {
   const repoRoot = path.resolve(__dirname, '..');
   const { themesPath, enginePath, outPath, inlineAll } = parseArgs(process.argv.slice(2), repoRoot);
 
-  const themesRaw = JSON.parse(fs.readFileSync(themesPath, 'utf8'));
+  const themesRaw = JSON.parse(readUtf8NoBom(themesPath));
   const themesDir = path.dirname(themesPath);
   const resolved = {};
 
@@ -119,24 +159,26 @@ function main() {
     resolved[name] = copied;
   }
 
-  const engineSrc = fs.readFileSync(enginePath, 'utf8');
+  const engineSrc = readUtf8NoBom(enginePath);
   if (!engineSrc.includes(PLACEHOLDER)) {
     throw new Error(`Placeholder ${PLACEHOLDER} not found in ${enginePath}`);
   }
 
   let compiled = engineSrc.replace(PLACEHOLDER, () => JSON.stringify(resolved));
 
-  const extraModules = ['kny_semantic_icons.js', 'kny_fx_modes.js', 'kny_breathing_skills.js', 'kny_chibi_aura.js', 'kny_token_hud.js'];
   const prepends = [];
-  for (const modName of extraModules) {
-    const modPath = path.join(path.dirname(enginePath), modName);
+  const engineDir = path.dirname(enginePath);
+  for (const modName of EXTRA_MODULES) {
+    const modPath = path.join(engineDir, modName);
     if (fs.existsSync(modPath)) {
-      prepends.push(fs.readFileSync(modPath, 'utf8'));
+      prepends.push(readUtf8NoBom(modPath));
     }
   }
   if (prepends.length > 0) {
     compiled = `${prepends.join('\n')}\n${compiled}`;
   }
+
+  compiled = `(function(__AGY_BOOT__) {\n${compiled}\n})(typeof __AGY_INJECT_BOOT__ !== "undefined" ? __AGY_INJECT_BOOT__ : null);\n`;
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, compiled, 'utf8');

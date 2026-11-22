@@ -13,6 +13,29 @@ LOG_FILE="$REPO_ROOT/daemon.log"
 SERVICE_LABEL="io.antigravity.custom-theme"
 SYSTEMD_UNIT="antigravity-custom-theme.service"
 
+xml_escape() {
+    local s="$1"
+    s="${s//&/&amp;}"
+    s="${s//</&lt;}"
+    s="${s//>/&gt;}"
+    s="${s//\"/&quot;}"
+    s="${s//\'/&apos;}"
+    printf '%s' "$s"
+}
+
+systemd_escape_dq() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//%/%%}"
+    printf '%s' "$s"
+}
+
+ensure_private_log() {
+    touch "$LOG_FILE"
+    chmod 600 "$LOG_FILE"
+}
+
 find_node() {
     if ! command -v node >/dev/null 2>&1; then
         echo "[install-unix] Error: Node.js not found in PATH. Install Node.js >= 22." >&2
@@ -52,10 +75,12 @@ stop_existing_pid() {
     if [ -f "$PID_FILE" ]; then
         local old_pid
         old_pid="$(tr -d '[:space:]' < "$PID_FILE" || true)"
-        if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
-            echo "[install-unix] Stopping existing daemon (PID $old_pid)..."
-            kill "$old_pid" 2>/dev/null || true
-            sleep 0.4
+        if [[ "$old_pid" =~ ^[0-9]+$ ]] && kill -0 "$old_pid" 2>/dev/null; then
+            if ps -p "$old_pid" -o command= 2>/dev/null | grep -q "theme_daemon.js"; then
+                echo "[install-unix] Stopping existing daemon (PID $old_pid)..."
+                kill "$old_pid" 2>/dev/null || true
+                sleep 0.4
+            fi
         fi
         rm -f "$PID_FILE"
     fi
@@ -66,32 +91,44 @@ install_macos() {
     local plist_dir="$HOME/Library/LaunchAgents"
     local plist_path="$plist_dir/$SERVICE_LABEL.plist"
     mkdir -p "$plist_dir"
+    ensure_private_log
 
-    cat > "$plist_path" <<EOF
+    local esc_label esc_node esc_daemon esc_repo esc_log
+    esc_label="$(xml_escape "$SERVICE_LABEL")"
+    esc_node="$(xml_escape "$node_bin")"
+    esc_daemon="$(xml_escape "$DAEMON_JS")"
+    esc_repo="$(xml_escape "$REPO_ROOT")"
+    esc_log="$(xml_escape "$LOG_FILE")"
+
+    (
+        umask 077
+        cat > "$plist_path" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>$SERVICE_LABEL</string>
+    <string>$esc_label</string>
     <key>ProgramArguments</key>
     <array>
-        <string>$node_bin</string>
-        <string>$DAEMON_JS</string>
+        <string>$esc_node</string>
+        <string>$esc_daemon</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>$REPO_ROOT</string>
+    <string>$esc_repo</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>$LOG_FILE</string>
+    <string>$esc_log</string>
     <key>StandardErrorPath</key>
-    <string>$LOG_FILE</string>
+    <string>$esc_log</string>
 </dict>
 </plist>
 EOF
+    )
+    chmod 600 "$plist_path"
 
     local uid_num
     uid_num="$(id -u)"
@@ -106,26 +143,37 @@ EOF
 
 install_linux() {
     local node_bin="$1"
+    ensure_private_log
+
     if command -v systemctl >/dev/null 2>&1 && systemctl --user status >/dev/null 2>&1; then
         local unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
         local unit_path="$unit_dir/$SYSTEMD_UNIT"
         mkdir -p "$unit_dir"
 
-        cat > "$unit_path" <<EOF
+        local esc_repo esc_node esc_daemon
+        esc_repo="$(systemd_escape_dq "$REPO_ROOT")"
+        esc_node="$(systemd_escape_dq "$node_bin")"
+        esc_daemon="$(systemd_escape_dq "$DAEMON_JS")"
+
+        (
+            umask 077
+            cat > "$unit_path" <<EOF
 [Unit]
 Description=Antigravity Custom Theme Daemon
 After=graphical-session.target
 
 [Service]
 Type=simple
-WorkingDirectory=$REPO_ROOT
-ExecStart=$node_bin $DAEMON_JS
+WorkingDirectory="$esc_repo"
+ExecStart="$esc_node" "$esc_daemon"
 Restart=always
 RestartSec=3
 
 [Install]
 WantedBy=default.target
 EOF
+        )
+        chmod 600 "$unit_path"
 
         systemctl --user daemon-reload
         systemctl --user enable --now "$SYSTEMD_UNIT"
@@ -143,6 +191,7 @@ case "$cmd" in
         NODE_BIN="$(find_node)"
         ensure_payload
         stop_existing_pid
+        ensure_private_log
         exec "$NODE_BIN" "$DAEMON_JS"
         ;;
     stop)
@@ -157,9 +206,11 @@ case "$cmd" in
     status)
         if [ -f "$PID_FILE" ]; then
             pid="$(tr -d '[:space:]' < "$PID_FILE" || true)"
-            if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-                echo "[install-unix] Running (PID $pid)"
-                exit 0
+            if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+                if ps -p "$pid" -o command= 2>/dev/null | grep -q "theme_daemon.js"; then
+                    echo "[install-unix] Running (PID $pid)"
+                    exit 0
+                fi
             fi
         fi
         echo "[install-unix] Not running."
@@ -175,6 +226,7 @@ case "$cmd" in
             Linux)  install_linux "$NODE_BIN" ;;
             *)
                 echo "[install-unix] Unsupported OS '$OS_NAME' for auto-start; running in background."
+                ensure_private_log
                 nohup "$NODE_BIN" "$DAEMON_JS" >> "$LOG_FILE" 2>&1 &
                 ;;
         esac

@@ -2,12 +2,25 @@
 dist/
 daemon.log
 daemon.pid
+daemon.lock
+*.lock
 theme_config.json
+custom_theme_backup.json
 silent-start.vbs
 
-# OS / Python / Node junk
+# Environment, secrets & backups
+.env
+.env.*
+*.bak
+*.tmp
+*.swp
+npm-debug.log*
+
+# OS / Python / Node / IDE artifacts
 __pycache__/
-*.pyc
+*.py[cod]
 node_modules/
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db

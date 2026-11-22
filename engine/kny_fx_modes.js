@@ -32,7 +32,9 @@
     'sun_water',
     'nezuko',
     'thunder',
-    'beast'
+    'beast',
+    'sun',
+    'moon'
   ];
 
   function isCanvasContext(obj) {
@@ -173,11 +175,12 @@
     ctx.fillStyle = grad;
 
     // Three nested soft-tapered trapezoids eliminate sharp polygon borders
+    const parentAlpha = ctx.globalAlpha;
     const bands = [1.0, 0.64, 0.34];
     const weights = [0.30, 0.38, 0.36];
     for (let i = 0; i < 3; i++) {
       const s = bands[i];
-      ctx.globalAlpha = weights[i];
+      ctx.globalAlpha = parentAlpha * weights[i];
       const hw0 = topWidth * 0.5 * s;
       const hw1 = bottomWidth * 0.5 * s;
       ctx.beginPath();
@@ -2320,17 +2323,185 @@
           ctx.restore();
         }
       };
+    },
+
+    /* ------------------------------------------------------------------------
+     * 15. SUN (Nhật Chi Hô Hấp — Khai Tổ Yoriichi / Golden Solar Halo)
+     * - Sacred crimson-gold solar corona breathing gently at the upper-right margin
+     * - 24 buoyant solar embers & golden motes rising cleanly along outer margins
+     * ------------------------------------------------------------------------ */
+    sun(initW, initH) {
+      const embers = [];
+      for (let i = 0; i < 24; i++) {
+        const layer = i < 3 ? 2 : (i < 16 ? 1 : 0);
+        const r = layer === 2 ? (9 + (i % 3) * 2.5) : (layer === 1 ? (1.6 + seededFrac(i, 47, 13) * 1.8) : (0.9 + seededFrac(i, 61, 7) * 0.9));
+        embers.push({
+          x: layer === 2 ? strictMarginX(seededFrac(i, 79, 17), i % 2 === 0 ? -1 : 1, initW) : edgeWeightedFrac(seededFrac(i, 79, 17)) * initW,
+          y: seededFrac(i, 97, 31) * initH,
+          r,
+          vx: (seededFrac(i, 37, 11) - 0.5) * 0.18,
+          vy: -(0.34 + seededFrac(i, 53, 19) * 0.42) * (layer === 0 ? 0.68 : 1),
+          phase: seededFrac(i, 89, 23) * TWO_PI,
+          haloRgb: i % 3 === 0 ? '239, 68, 68' : (i % 3 === 1 ? '249, 115, 22' : '250, 204, 21'),
+          coreRgb: '254, 249, 195',
+          layer,
+          alpha: layer === 2 ? 0.055 : (layer === 1 ? 0.25 : 0.15)
+        });
+      }
+
+      function drawSolarCorona(ctx, width, height, alpha) {
+        const sx = width * 0.86;
+        const sy = height * 0.24;
+        const sr = Math.max(width, height) * 0.48;
+        const grad = safeRadialGradient(ctx, sx, sy, 0, sx, sy, sr);
+        grad.addColorStop(0, `rgba(254, 240, 138, ${fmtA(alpha)})`);
+        grad.addColorStop(0.32, `rgba(249, 115, 22, ${fmtA(alpha * 0.62)})`);
+        grad.addColorStop(0.68, `rgba(220, 38, 38, ${fmtA(alpha * 0.24)})`);
+        grad.addColorStop(1, 'rgba(220, 38, 38, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      function drawStatic(ctx, width, height) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        drawSolarCorona(ctx, width, height, 0.068);
+        for (let i = 3; i < 13; i++) {
+          const e = embers[i];
+          drawGlowMote(ctx, e.x, e.y, e.r, e.haloRgb, e.coreRgb, e.alpha * 0.85, 3.4);
+        }
+        ctx.restore();
+      }
+
+      return {
+        pools: [embers],
+        drawStatic,
+        step(ctx, width, height, now, dt) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'screen';
+          const coronaAlpha = 0.055 + 0.028 * (0.5 + 0.5 * Math.sin(now * 0.0008));
+          drawSolarCorona(ctx, width, height, coronaAlpha);
+
+          for (let i = 0; i < embers.length; i++) {
+            const e = embers[i];
+            e.x += (e.vx + Math.sin(now * 0.0014 + e.phase) * 0.16) * dt;
+            e.y += e.vy * dt;
+            if (e.y < -20) {
+              e.y = height + 16;
+              const u = seededFrac(i + Math.floor(now * 0.001), 79, 17);
+              e.x = e.layer === 2 ? strictMarginX(u, i % 2 === 0 ? -1 : 1, width) : edgeWeightedFrac(u) * width;
+            }
+            const flicker = 0.68 + 0.32 * Math.sin(now * 0.0032 + e.phase);
+            const att = centerAttenuation(e.x, width);
+            if (e.layer === 2) {
+              drawOpticalBokeh(ctx, e.x, e.y, e.r, e.haloRgb, e.alpha * flicker);
+            } else {
+              drawGlowMote(ctx, e.x, e.y, e.r, e.haloRgb, e.coreRgb, e.alpha * flicker * att, 3.4);
+            }
+          }
+          ctx.restore();
+        }
+      };
+    },
+
+    /* ------------------------------------------------------------------------
+     * 16. MOON (Nguyệt Tử Linh — Abyssal Moonbeams & Necro-AzureCrescents)
+     * - Cool abyssal violet & cyan-ice moonbeams + drifting crescent shards
+     * ------------------------------------------------------------------------ */
+    moon(initW, initH) {
+      const motes = [];
+      for (let i = 0; i < 24; i++) {
+        const isCrescent = i >= 14;
+        motes.push({
+          x: edgeWeightedFrac(seededFrac(i, 83, 19)) * initW,
+          y: seededFrac(i, 97, 29) * initH,
+          r: isCrescent ? (3.2 + seededFrac(i, 41, 7) * 2.4) : (1.1 + seededFrac(i, 53, 11) * 1.5),
+          vx: (seededFrac(i, 31, 5) - 0.5) * 0.16,
+          vy: isCrescent ? (0.22 + seededFrac(i, 67, 13) * 0.22) : -(0.14 + seededFrac(i, 43, 17) * 0.20),
+          rot: seededFrac(i, 71, 23) * TWO_PI,
+          vrot: (seededFrac(i, 29, 3) - 0.5) * 0.022,
+          phase: seededFrac(i, 89, 7) * TWO_PI,
+          isCrescent,
+          rgb: i % 2 === 0 ? '168, 85, 247' : '56, 189, 248',
+          alpha: isCrescent ? 0.22 : 0.20
+        });
+      }
+
+      function drawCrescentShard(ctx, x, y, r, rot, rgb, alpha) {
+        const a = clamp(alpha, 0, 1);
+        if (a <= 0.004) return;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rot);
+        ctx.fillStyle = `rgba(${rgb}, ${fmtA(a)})`;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, -0.75 * Math.PI, 0.75 * Math.PI, false);
+        ctx.quadraticCurveTo(r * 0.22, 0, r * Math.cos(-0.75 * Math.PI), r * Math.sin(-0.75 * Math.PI));
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function drawStatic(ctx, width, height) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'screen';
+        drawCausticLightShaft(ctx, width * 0.84, -10, 56, 148, height * 0.68, -16 * DEG, '168, 85, 247', 0.052);
+        drawCausticLightShaft(ctx, width * 0.15, -10, 42, 114, height * 0.58, 14 * DEG, '56, 189, 248', 0.044);
+        for (let i = 0; i < 10; i++) {
+          const m = motes[i];
+          drawGlowMote(ctx, m.x, m.y, m.r, m.rgb, '240, 249, 255', m.alpha * 0.8, 3.2);
+        }
+        ctx.restore();
+      }
+
+      return {
+        pools: [motes],
+        drawStatic,
+        step(ctx, width, height, now, dt) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'screen';
+          const breathe = 0.82 + 0.18 * Math.sin(now * 0.00065);
+          drawCausticLightShaft(ctx, width * 0.84, -10, 56, 148, height * 0.68, (-16 + Math.sin(now * 0.0004) * 1.4) * DEG, '168, 85, 247', 0.054 * breathe);
+          drawCausticLightShaft(ctx, width * 0.15, -10, 42, 114, height * 0.58, (14 + Math.cos(now * 0.00045) * 1.2) * DEG, '56, 189, 248', 0.044 * breathe);
+
+          for (let i = 0; i < motes.length; i++) {
+            const m = motes[i];
+            m.x += (m.vx + Math.sin(now * 0.0011 + m.phase) * 0.12) * dt;
+            m.y += m.vy * dt;
+            m.rot += m.vrot * dt;
+            if (m.y < -18) m.y = height + 16;
+            if (m.y > height + 18) m.y = -16;
+            if (m.x < -18) m.x = width + 16;
+            if (m.x > width + 18) m.x = -16;
+
+            const pulse = 0.60 + 0.40 * Math.sin(now * 0.0022 + m.phase);
+            const att = centerAttenuation(m.x, width);
+            if (m.isCrescent) {
+              drawCrescentShard(ctx, m.x, m.y, m.r, m.rot, m.rgb, m.alpha * pulse * att);
+            } else {
+              drawGlowMote(ctx, m.x, m.y, m.r, m.rgb, '240, 249, 255', m.alpha * pulse * att, 3.2);
+            }
+          }
+          ctx.restore();
+        }
+      };
     }
   };
 
   /* ==========================================================================
-   * UNIVERSAL FACTORY & ADAPTER (Preserves exact API contract)
+   * UNIVERSAL FACTORY & ADAPTER (Preserves exact API contract + Transparent World)
    * ========================================================================== */
 
   const directCanvasCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  const MODE_ALIASES = {
+    wisteria_royal: 'royal_wisteria',
+    solar: 'sun',
+    shadow: 'moon'
+  };
 
   function normalizeMode(mode) {
-    const key = String(mode || 'wisteria').trim().toLowerCase();
+    const raw = String(mode || 'wisteria').trim().toLowerCase();
+    const key = MODE_ALIASES[raw] || raw;
     return MODE_BUILDERS[key] ? key : 'wisteria';
   }
 
@@ -2373,6 +2544,11 @@
 
     const scene = MODE_BUILDERS[resolvedMode](curW, curH);
     let lastNow = 0;
+    let simNow = 0;
+
+    function resetClock() {
+      lastNow = 0;
+    }
 
     function resize(nextW, nextH) {
       const nw = Math.max(320, Number(nextW) || curW);
@@ -2430,13 +2606,33 @@
       }
 
       const safeNow = Number.isFinite(now) ? now : 0;
-      const dt = lastNow > 0 ? clamp((safeNow - lastNow) / 16.6667, 0.35, 2.2) : 1.0;
+      // Clamp frame delta strictly to <= 0.05s (50ms) and recover smoothly from multi-window focus pause
+      const elapsedMs = lastNow > 0 ? (safeNow - lastNow) : 16.6667;
+      const deltaSec = (elapsedMs <= 0 || elapsedMs > 250)
+        ? (1 / 60)
+        : clamp(elapsedMs / 1000, 0.004, 0.05);
       lastNow = safeNow;
+
+      // Yoriichi's Transparent World ("Sukitōru Sekai"): slow particle velocity down to 20% & soften glare by 35%
+      const tw = clamp(
+        Number(typeof window !== 'undefined' && window.__AGY_TRANSPARENT_WORLD__ != null ? window.__AGY_TRANSPARENT_WORLD__ : 0) || 0,
+        0,
+        1
+      );
+      const velScale = 1.0 - 0.80 * tw;
+      const alphaScale = 1.0 - 0.35 * tw;
+      const effectiveDt = (deltaSec * 60) * velScale;
+      simNow += (deltaSec * 1000) * velScale;
 
       if (autoClear) {
         ctx.clearRect(0, 0, curW, curH);
       }
-      scene.step(ctx, curW, curH, safeNow, dt);
+      ctx.save();
+      if (tw > 0.001) {
+        ctx.globalAlpha = alphaScale;
+      }
+      scene.step(ctx, curW, curH, simNow, effectiveDt);
+      ctx.restore();
     }
 
     function renderStaticFrame(arg0, arg1, arg2) {
@@ -2459,6 +2655,7 @@
 
     callableDrawer.mode = resolvedMode;
     callableDrawer.resize = resize;
+    callableDrawer.resetClock = resetClock;
     callableDrawer.render = renderFrame;
     callableDrawer.draw = renderFrame;
     callableDrawer.frame = renderFrame;

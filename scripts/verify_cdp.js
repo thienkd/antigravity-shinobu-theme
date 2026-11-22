@@ -3,8 +3,8 @@
 
 /**
  * Non-destructive live CDP verifier for Antigravity Custom Theme.
- * Inspects injected DOM layers, Zero-Live-Blur compliance, composer pill contrast,
- * split-browser hole cutout state, and scroll/layout metrics on open Antigravity pages.
+ * Strictly filters candidate Antigravity URLs and verifies authentic Antigravity DOM
+ * so Split Browser / localhost user apps are never mistakenly probed as IDE windows.
  */
 
 const fs = require('fs');
@@ -43,21 +43,58 @@ function resolvePortFile() {
     return candidates.find((p) => fs.existsSync(p)) || candidates[0];
 }
 
+function isCandidateAntigravityUrl(rawUrl) {
+    if (typeof rawUrl !== 'string') return false;
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return false;
+    const lower = trimmed.toLowerCase();
+    if (
+        lower.startsWith('devtools://') ||
+        lower.startsWith('chrome-extension://') ||
+        lower.startsWith('about:') ||
+        lower.startsWith('data:') ||
+        lower.startsWith('blob:')
+    ) {
+        return false;
+    }
+    if (lower.startsWith('vscode-file:') || lower.startsWith('file:')) {
+        return lower.includes('workbench') || lower.includes('antigravity');
+    }
+    try {
+        const u = new URL(trimmed);
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+        if (u.hostname !== '127.0.0.1' && u.hostname !== 'localhost') return false;
+        const p = u.pathname || '/';
+        return (
+            p === '/' ||
+            p === '/launchpad' ||
+            p.startsWith('/launchpad/') ||
+            p === '/workbench' ||
+            p.startsWith('/workbench/') ||
+            p.startsWith('/c/')
+        );
+    } catch (_) {
+        return false;
+    }
+}
+
 function fetchJson(url) {
     return new Promise((resolve, reject) => {
-        http.get(url, { timeout: 2500 }, (res) => {
+        const req = http.get(url, { timeout: 2500 }, (res) => {
             let body = '';
             res.on('data', (c) => {
                 body += c;
             });
             res.on('end', () => {
                 try {
-                    resolve(JSON.parse(body));
+                    resolve(JSON.parse(body.replace(/^\uFEFF/, '')));
                 } catch (err) {
                     reject(err);
                 }
             });
-        }).on('error', reject);
+        });
+        req.on('timeout', () => req.destroy(new Error('HTTP timeout')));
+        req.on('error', reject);
     });
 }
 
@@ -103,6 +140,14 @@ function evaluatePage(wsUrl, expression) {
 }
 
 const INSPECT_EXPR = `(() => {
+    const isAntigravityDom = Boolean(
+        document.querySelector('.agy-shell, .monaco-workbench, [data-launchpad], #workbench\\\\.parts\\\\.editor') ||
+        /Antigravity/i.test(document.title || '') ||
+        /^\\/(c\\/[0-9a-f-]{36}|launchpad)/i.test(location.pathname || '')
+    );
+    if (!isAntigravityDom) {
+        return { isAntigravityDom: false };
+    }
     const styleEl = document.getElementById('antigravity-custom-theme-active');
     const shellEl = document.querySelector('.agy-shell');
     const mainGrid = document.querySelector('div.flex.h-full.flex-col.overflow-hidden.relative > div.flex.flex-1.flex-row.overflow-hidden.relative');
@@ -112,8 +157,14 @@ const INSPECT_EXPR = `(() => {
     const liveBlurScrollers = scrollers.filter((el) => /blur\\(/i.test(getComputedStyle(el).backdropFilter || ''));
     const shellBackdrop = shellEl ? (getComputedStyle(shellEl).backdropFilter || 'none') : 'none';
     const hasLiveBlurRule = /blur\\(/i.test(shellBackdrop) || liveBlurScrollers.length > 0;
+    const leakedWindowToken = Boolean(
+        typeof window.__AGY_AUTH_TOKEN__ !== 'undefined' ||
+        typeof window.__AGY_INJECT_BOOT__ !== 'undefined' ||
+        typeof window.__AGY_BOOT__ !== 'undefined'
+    );
     return {
-        url: location.href,
+        isAntigravityDom: true,
+        url: location.pathname,
         viewport: { width: window.innerWidth, height: window.innerHeight },
         themeActive: Boolean(styleEl),
         activeTheme: localStorage.getItem('agy_theme_v3') || null,
@@ -127,6 +178,7 @@ const INSPECT_EXPR = `(() => {
         scrollerCount: scrollers.length,
         liveBlurScrollerCount: liveBlurScrollers.length,
         hasLiveBlurRule,
+        leakedWindowToken,
         settingsTriggerPresent: Boolean(document.getElementById('agy-custom-theme-sidebar-btn')),
         composerPresent: Boolean(document.querySelector('div.relative.flex.flex-col.rounded-lg.border')),
     };
@@ -139,35 +191,46 @@ async function main() {
         process.exit(1);
     }
 
-    const port = parseInt(fs.readFileSync(portFile, 'utf8').trim().split(/\r?\n/)[0], 10);
+    const port = parseInt(fs.readFileSync(portFile, 'utf8').replace(/^\uFEFF/, '').trim().split(/\r?\n/)[0], 10);
     const targets = await fetchJson(`http://127.0.0.1:${port}/json`);
-    const pages = (Array.isArray(targets) ? targets : []).filter(
-        (t) => t && t.type === 'page' && t.webSocketDebuggerUrl && String(t.url || '').includes('127.0.0.1')
+    const candidatePages = (Array.isArray(targets) ? targets : []).filter(
+        (t) => t && t.type === 'page' && t.webSocketDebuggerUrl && isCandidateAntigravityUrl(String(t.url || ''))
     );
 
-    if (pages.length === 0) {
-        console.error(`[verify-cdp] No Antigravity CDP page targets found on port ${port}.`);
+    if (candidatePages.length === 0) {
+        console.error(`[verify-cdp] No candidate Antigravity CDP page targets found on port ${port}.`);
         process.exit(1);
     }
 
     const results = [];
-    for (const page of pages) {
+    for (const page of candidatePages) {
         const report = await evaluatePage(page.webSocketDebuggerUrl, INSPECT_EXPR);
-        results.push({ id: page.id, title: page.title, ...report });
+        if (report && report.isAntigravityDom) {
+            results.push({ id: page.id, title: page.title, ...report });
+        }
+    }
+
+    if (results.length === 0) {
+        console.error(`[verify-cdp] No verified Antigravity DOM targets found among ${candidatePages.length} candidate(s).`);
+        process.exit(1);
     }
 
     console.log(JSON.stringify(results, null, 2));
 
     const themedPages = results.filter((r) => r.themeActive);
     if (themedPages.length === 0) {
-        console.error('[verify-cdp] FAIL: #antigravity-custom-theme-active not active on any page.');
+        console.error('[verify-cdp] FAIL: #antigravity-custom-theme-active not active on any verified Antigravity page.');
         process.exit(1);
     }
     if (themedPages.some((r) => r.hasLiveBlurRule)) {
         console.error('[verify-cdp] FAIL: Detected backdrop-filter blur rule in injected style.');
         process.exit(1);
     }
-    console.log(`[verify-cdp] PASS: ${themedPages.length}/${results.length} page(s) themed with zero live blur.`);
+    if (themedPages.some((r) => r.leakedWindowToken)) {
+        console.error('[verify-cdp] FAIL: Ephemeral boot/auth token leaked onto global window object.');
+        process.exit(1);
+    }
+    console.log(`[verify-cdp] PASS: ${themedPages.length}/${results.length} verified page(s) themed with zero live blur and zero token leak.`);
 }
 
 main().catch((err) => {

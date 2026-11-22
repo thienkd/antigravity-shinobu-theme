@@ -24,7 +24,8 @@
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   function parseSessionIdentity(rawTitle, cid) {
@@ -363,6 +364,25 @@
         body = `
           <circle cx="12" cy="12" r="5" fill="#ef4444" stroke="#fde047" stroke-width="1.7"/>
           <path d="M12 2.2v2.8M12 19v2.8M2.2 12H5M19 12h2.8M5.1 5.1l2 2M16.9 16.9l2 2M18.9 5.1l-2 2M7.1 16.9l-2 2" stroke="#fde047" stroke-width="1.75" stroke-linecap="round"/>
+        `;
+        break;
+
+      case 'kagura_bell': // Kagura Furin wind-chime bell + fluttering Tanzaku slip & acoustic waves
+        body = `
+          <line x1="12" y1="2" x2="12" y2="4.4" stroke="#fde047" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M6.6 11.2a5.4 5.4 0 0 1 10.8 0v2.1H6.6v-2.1Z" fill="rgba(250,204,21,0.24)" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"/>
+          <circle cx="12" cy="13.4" r="1.45" fill="#fde047"/>
+          <path d="M12 14.8l-1.1 2.1h3.2l-1.3 4.8-3.1-.7 1.2-4.1" fill="rgba(239,68,68,0.72)" stroke="#fca5a5" stroke-width="1.2" stroke-linejoin="round"/>
+          <path d="M4.2 8.2a7.5 7.5 0 0 0-.8 4.4M19.8 8.2a7.5 7.5 0 0 1 .8 4.4" stroke="#fde047" stroke-width="1.45" stroke-linecap="round" fill="none"/>
+        `;
+        break;
+
+      case 'cinema_mask': // Urokodaki Warding Fox Mask (Kitsune Privacy & Cinema Director Shield)
+        body = `
+          <path d="M5.2 9.4L6.4 3.2l4.1 3.6h3l4.1-3.6 1.2 6.2c.4 5.2-2.9 9.4-6.8 11.4-3.9-2-7.2-6.2-6.8-11.4Z" fill="rgba(248,250,252,0.16)" stroke="currentColor" stroke-width="1.65" stroke-linejoin="round"/>
+          <circle cx="12" cy="9.4" r="1.75" fill="#ef4444" stroke="#fde047" stroke-width="0.9"/>
+          <path d="M8.1 12.6c1-.9 2.2-.9 3 .1M15.9 12.6c-1-.9-2.2-.9-3 .1" stroke="#fde047" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+          <path d="M7.3 15.6l2.1.8M16.7 15.6l-2.1.8" stroke="#ef4444" stroke-width="1.45" stroke-linecap="round"/>
         `;
         break;
 

@@ -1,6 +1,7 @@
-MIT License
+MIT License (Software Source Code)
 
 Copyright (c) 2026 Antigravity Custom Theme Contributors
+Original Foundation Copyright (c) 2026 Gia Kiet (antigravity-custom-theme-skill)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +20,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+-------------------------------------------------------------------------------
+IMPORTANT NOTICE REGARDING ARTWORK, CHARACTERS & TRADEMARKS:
+The MIT License above applies strictly to the original software source code
+(`daemon/`, `engine/`, `scripts/`, custom procedural shaders, and documentation).
+Third-party character likenesses, names, and sample artwork included in
+`themes/assets/` remain the intellectual property of their respective copyright
+and trademark owners and are provided solely for personal, non-commercial
+desktop customization. See `NOTICE` for full attribution and legal disclaimers.

@@ -460,7 +460,7 @@
           <div class="composer-host" id="composer-slot-welcome">
             <div class="surface-composer" id="shared-composer">
               <div class="composer-top-strip" id="composer-project-strip">
-                <button type="button" class="composer-pill-btn" data-testid="project-selector-trigger">📁 mod ▾</button>
+                <button type="button" class="composer-pill-btn" data-testid="project-selector-trigger">📁 antigravity-studio ▾</button>
                 <button type="button" class="composer-pill-btn" aria-label="Select Environment">💻 Local Checkout ▾</button>
               </div>
               <div class="surface-composer-card">
@@ -536,6 +536,46 @@
   <script src="./dist/theme_payload.js"></script>
   <script>
     (function () {
+      if (typeof window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__ !== 'function') {
+        const notice = document.createElement('div');
+        notice.id = 'agy-build-missing-banner';
+        notice.style.cssText = [
+          'position: fixed',
+          'top: 84px',
+          'left: 50%',
+          'transform: translateX(-50%)',
+          'z-index: 99999',
+          'max-width: 640px',
+          'width: calc(100% - 32px)',
+          'padding: 14px 20px',
+          'border-radius: 14px',
+          'background: rgba(18, 12, 36, 0.88)',
+          'backdrop-filter: blur(14px)',
+          'border: 1px solid rgba(250, 204, 21, 0.55)',
+          'box-shadow: 0 16px 40px rgba(0, 0, 0, 0.72), 0 0 24px rgba(192, 132, 252, 0.25)',
+          'color: #f8fafc',
+          'font-size: 13px',
+          'line-height: 1.55',
+          'display: flex',
+          'align-items: flex-start',
+          'justify-content: space-between',
+          'gap: 14px'
+        ].join(';');
+        notice.innerHTML =
+          '<div>' +
+            '<div style="font-weight:700; color:#fef08a; margin-bottom:4px;">⚡ Chưa tìm thấy gói biên dịch <code>dist/theme_payload.js</code></div>' +
+            '<div style="color:#cbd5e1;">Nếu bạn vừa tải mã nguồn về qua <code>git clone</code>, hãy mở Terminal tại thư mục gốc và chạy <code style="padding:2px 6px;border-radius:5px;background:rgba(168,85,247,0.22);color:#f5d0fe;">npm run build</code> (hoặc <code style="padding:2px 6px;border-radius:5px;background:rgba(56,189,248,0.18);color:#bae6fd;">node scripts/build_payload.js</code>) rồi tải lại trang để kích hoạt giao diện 60fps Live Glass!</div>' +
+          '</div>' +
+          '<button type="button" aria-label="Đóng thông báo" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.16);color:#e2e8f0;border-radius:7px;width:26px;height:26px;cursor:pointer;flex-shrink:0;">✕</button>';
+        notice.querySelector('button').addEventListener('click', function () {
+          notice.remove();
+        });
+        document.body.appendChild(notice);
+      }
+    })();
+  </script>
+  <script>
+    (function () {
       const btnWelcome = document.getElementById('btn-view-welcome');
       const btnChat = document.getElementById('btn-view-chat');
       const btnStudio = document.getElementById('btn-open-studio');
@@ -560,7 +600,7 @@
           btnWelcome.classList.remove('active');
           btnChat.classList.add('active');
           convLink.classList.add('active');
-          breadcrumb.textContent = 'mod / Thêm NPC Chibi Vào Hội Thoại';
+          breadcrumb.textContent = 'antigravity-studio / Khai Mở Vũ Điệu Hỏa Thần';
         } else {
           chatView.style.display = 'none';
           welcomeView.style.display = 'flex';

@@ -29,6 +29,15 @@
   const SKILL_BAR_ID = 'agy-chibi-skill-bar';
   const SFX_MUTE_STORAGE_KEY = 'agy_kny_sfx_muted';
   const FX_PAUSE_STORAGE_KEY = 'agy_fx_paused_v1';
+  const FINISHER_COOLDOWN_MS = 12000;
+
+  function safeResolveAsset(val) {
+    if (!val || typeof val !== 'string') return '';
+    if (typeof __AGY_SEC__ !== 'undefined' && __AGY_SEC__) {
+      return __AGY_SEC__.resolveAssetUrl(val) || __AGY_SEC__.sanitizeCssUrl(val);
+    }
+    return val;
+  }
 
   /* ==========================================================================
    * CHARACTER & AURA MODE RESOLUTION + 56 BREATHING FORMS FALLBACK CATALOG
@@ -1590,6 +1599,7 @@
     uiOnSkillCast: null,
     uiSkills: [],
     comboIdxByChar: Object.create(null),
+    lastFinisherAt: 0,
     dropdownOpen: false,
     npcDrawerOpen: false,
     badgeObserver: null,
@@ -1747,7 +1757,8 @@
     // Preload Full-Body Action Chibi PNG sprite into memory so 1st click leaps with 0ms latency!
     if (typeof window !== 'undefined' && window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.preloadActionSprite === 'function') {
       try {
-        window.__AGY_KNY_SKILLS__.preloadActionSprite(meta.charId, themeCfg && themeCfg.actionSticker);
+        const safeAct = safeResolveAsset(themeCfg && themeCfg.actionSticker);
+        window.__AGY_KNY_SKILLS__.preloadActionSprite(meta.charId, safeAct);
       } catch (_) {}
     }
 
@@ -2018,7 +2029,7 @@
           originRect,
           sourceFrameEl: opts.sourceFrameEl || null,
           themeCfg: state.uiThemeCfg,
-          actionSticker: state.uiThemeCfg && state.uiThemeCfg.actionSticker,
+          actionSticker: safeResolveAsset(state.uiThemeCfg && state.uiThemeCfg.actionSticker),
           composerEl: composer,
           muted,
           sound: !muted,
@@ -2226,7 +2237,13 @@
     const hdrTitle = document.createElement('span');
     hdrTitle.className = 'agy-skill-menu-title';
     hdrTitle.style.cssText = 'display: inline-flex; align-items: center; gap: 5px;';
-    hdrTitle.innerHTML = `${iconMarkup('elemental', 13, meta.auraMode || meta.charId)}<span>${meta.styleTitle}</span>`;
+    const hdrIcoWrap = document.createElement('span');
+    hdrIcoWrap.style.cssText = 'display: inline-flex; align-items: center; line-height: 1;';
+    hdrIcoWrap.innerHTML = iconMarkup('elemental', 13, meta.auraMode || meta.charId);
+    const hdrTitleTxt = document.createElement('span');
+    hdrTitleTxt.textContent = meta.styleTitle;
+    hdrTitle.appendChild(hdrIcoWrap);
+    hdrTitle.appendChild(hdrTitleTxt);
     hdr.appendChild(hdrTitle);
     hdr.appendChild(createSfxToggleButton());
 
@@ -2341,6 +2358,81 @@
    * FULL TEARDOWN & PUBLIC API
    * ========================================================================== */
 
+  /**
+   * Safe public finisher trigger (with minimum 12s cooldown) for Crisis-to-Slash & Cinema Director.
+   * Unleashes either the active Hashira's Ultimate Form or First Swordsman Yoriichi's Sun Breathing.
+   */
+  function triggerFinisher(rawOpts) {
+    const opts = rawOpts && typeof rawOpts === 'object' ? rawOpts : {};
+    const now = Date.now();
+    if (now - state.lastFinisherAt < FINISHER_COOLDOWN_MS) {
+      return {
+        ok: false,
+        reason: 'cooldown',
+        cooldownRemainingMs: FINISHER_COOLDOWN_MS - (now - state.lastFinisherAt)
+      };
+    }
+    state.lastFinisherAt = now;
+
+    const requestedHero = typeof opts.charId === 'string' ? opts.charId.trim().toLowerCase() : '';
+    const hostHero = state.uiCharId || state.auraCharId || '';
+    const useYoriichi =
+      requestedHero === 'yoriichi' ||
+      Boolean(opts.preferYoriichi) ||
+      (!requestedHero && !hostHero);
+
+    if (useYoriichi) {
+      const hud = typeof window !== 'undefined' ? window.__AGY_TOKEN_HUD__ : null;
+      if (hud && typeof hud.castYoriichiSunBreathing === 'function' && typeof opts.skillIndex !== 'number') {
+        const crestBtn = typeof document !== 'undefined' ? document.querySelector('.agy-yoriichi-crest-btn') : null;
+        hud.castYoriichiSunBreathing(opts.originEl || crestBtn || null);
+        return { ok: true, charId: 'yoriichi', mode: 'sun_crest' };
+      }
+      const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
+      if (ext && typeof ext.castSkill === 'function') {
+        const fIdx = typeof opts.skillIndex === 'number' ? ((opts.skillIndex % 4) + 4) % 4 : 3;
+        const crestBtn = typeof document !== 'undefined' ? document.querySelector('.agy-yoriichi-crest-btn') : null;
+        const originNode = opts.originEl || crestBtn || null;
+        const originRect = originNode && typeof originNode.getBoundingClientRect === 'function'
+          ? originNode.getBoundingClientRect()
+          : null;
+        ext.castSkill('yoriichi', fIdx, {
+          charId: 'yoriichi',
+          originRect,
+          actionSticker: safeResolveAsset('assets/yoriichi_action.png'),
+          composerEl: null
+        });
+        return { ok: true, charId: 'yoriichi', skillIndex: fIdx };
+      }
+      playFallbackKatanaWhoosh();
+      return { ok: true, charId: 'yoriichi', fallback: true };
+    }
+
+    if (requestedHero && requestedHero !== hostHero) {
+      const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
+      if (ext && typeof ext.castSkill === 'function') {
+        const fIdx = typeof opts.skillIndex === 'number' ? ((opts.skillIndex % 4) + 4) % 4 : 3;
+        const originRect = opts.originEl && typeof opts.originEl.getBoundingClientRect === 'function'
+          ? opts.originEl.getBoundingClientRect()
+          : null;
+        ext.castSkill(requestedHero, fIdx, {
+          charId: requestedHero,
+          originRect,
+          actionSticker: safeResolveAsset(`assets/${requestedHero.replace(/[^a-z0-9_]/g, '')}_action.png`),
+          composerEl: null
+        });
+        return { ok: true, charId: requestedHero, skillIndex: fIdx };
+      }
+    }
+
+    const finIdx = typeof opts.skillIndex === 'number' ? opts.skillIndex : 3;
+    const castSkillObj = executeSkillCast(finIdx, {
+      fromFinisher: true,
+      originEl: opts.originEl || null
+    });
+    return { ok: true, charId: hostHero || 'shinobu', skill: castSkillObj };
+  }
+
   function teardown() {
     teardownAura();
     teardownSkillUi();
@@ -2359,6 +2451,7 @@
     teardownSkillUi,
     castNextComboSkill,
     castSkillByIndex: executeSkillCast,
+    triggerFinisher,
     resolveCharacterMeta,
     resumeOrPauseAura,
     isSfxMuted,
@@ -2367,8 +2460,10 @@
 
   if (typeof window !== 'undefined') {
     window.__AGY_KNY_CHIBI_AURA__ = api;
+    window.__AGY_TRIGGER_FINISHER__ = triggerFinisher;
   }
   if (typeof globalThis !== 'undefined') {
     globalThis.__AGY_KNY_CHIBI_AURA__ = api;
+    globalThis.__AGY_TRIGGER_FINISHER__ = triggerFinisher;
   }
 })();

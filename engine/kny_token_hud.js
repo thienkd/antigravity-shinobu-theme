@@ -2,15 +2,14 @@
   'use strict';
 
   /**
-   * Antigravity Live Context, Elemental Turn Token HUD & First Swordsman (Yoriichi) Command Echo
-   * Mounts on .surface-composer:
-   *  1. Left-side HUD (#agy-token-context-bar):
-   *     - First Swordsman Yoriichi Crest (User's personal emblem — 1-click unleashes Primordial Sun Breathing!)
-   *     - Session Emblem + Live Context Window Pill (avatar bespoke to active session/workspace)
-   *     - Theme Elemental Attribute Icon + Live Turn Token Odometer Pill (Water for Giyu, Flame for Rengoku, etc.)
-   *  2. Instant Enter Message Echo (#agy-yoriichi-msg-echo):
-   *     - Captures user's message on Enter / Submit before React clears the editor so the user's message
-   *       is ALWAYS visibly displayed right away (especially vital while AI is busy and queues messages).
+   * Antigravity Live Streaming Telemetry HUD, Bright Red Nichirin Forge (赫刀),
+   * Crisis-to-Slash Battlefield Reflex & First Swordsman (Yoriichi) Command Echo.
+   *
+   * Security & Performance:
+   *  - Reads assetBase & X-Agy-Token strictly via __AGY_SEC__ closure vault.
+   *  - Sanitizes all CSS URLs via __AGY_SEC__.sanitizeCssUrl(...).
+   *  - Connects to SSE byte-stream GET ${assetBase}__events?cid=${cid} (< 30ms latency)
+   *    with AbortController lifecycle cleanup + resilient /__telemetry fallback backoff.
    */
 
   const HUD_BAR_ID = 'agy-token-context-bar';
@@ -32,6 +31,20 @@
     turnBtnEl: null,
     turnIconEl: null,
     turnTextEl: null,
+
+    // Bright Red Nichirin (赫刀) Blade Gauge Elements & State
+    bladeBtnEl: null,
+    bladeFillRectEl: null,
+    bladeGlowPathEl: null,
+    bladeLabelEl: null,
+    bladeHeat: 0,
+    bladeBonusHeat: 0,
+    bladeTier: 'black',
+
+    // Quick Action SVG Buttons (Kagura Bell & Cinema Fox Mask)
+    kaguraBtnEl: null,
+    cinemaBtnEl: null,
+
     popoverEl: null,
     popoverOpen: false,
 
@@ -39,6 +52,7 @@
     echoTextEl: null,
     echoAvatarEl: null,
     echoTimer: 0,
+    echoShownAt: 0,
     baselineUserMsgCount: 0,
 
     // Detail rows inside popover
@@ -49,6 +63,7 @@
     detCacheVal: null,
     detTurnIcon: null,
     detTurnVal: null,
+    detBladeVal: null,
     detDraftVal: null,
     detSessionVal: null,
     detModelVal: null,
@@ -60,6 +75,7 @@
     lastElemKey: '',
     isWorking: false,
     wasWorking: false,
+    serverIsWorking: null,
     workStartedAt: 0,
     lastStepSeenAt: 0,
     lastServerStepIdx: -1,
@@ -69,8 +85,15 @@
     serverTurnTokens: 0,
     serverTotalOutTokens: 0,
     serverTurnSteps: 0,
+    serverTurnCount: 0,
+    serverStepCount: 0,
     serverTurnCtxDelta: 0,
     hasTelemetry: false,
+
+    // Crisis & Bug-Slash state
+    crisisState: false,
+    lastSlashSeq: -1,
+    lastTurnFinishedSeq: -1,
 
     turnBaselineDomChars: 0,
     stepBaselineDomChars: 0,
@@ -84,11 +107,47 @@
     targetCtxTokens: 0,
     targetTurnTokens: 0,
 
+    // Streaming SSE & Fallback Polling State
+    streamAbort: null,
+    streamCid: '',
+    streamConnected: false,
+    streamReconnectTimer: 0,
+    streamFailCount: 0,
+    fallbackBackoffMs: 1400,
+    nextFallbackAt: 0,
+
     rafId: 0,
     pollTimer: 0,
     fetchInFlight: false,
     cleanups: []
   };
+
+  /* ==========================================================================
+   * SECURITY HELPERS (__AGY_SEC__ INTEGRATION)
+   * ========================================================================== */
+
+  function getSecureAssetBase() {
+    if (typeof __AGY_SEC__ !== 'undefined' && __AGY_SEC__ && typeof __AGY_SEC__.getAssetBase === 'function') {
+      return __AGY_SEC__.getAssetBase() || '';
+    }
+    return '';
+  }
+
+  function getSecureAuthHeaders(extra) {
+    if (typeof __AGY_SEC__ !== 'undefined' && __AGY_SEC__ && typeof __AGY_SEC__.authHeaders === 'function') {
+      return __AGY_SEC__.authHeaders(extra);
+    }
+    return Object.assign({}, extra || {});
+  }
+
+  function sanitizeCssAssetUrl(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== 'string') return '';
+    if (typeof __AGY_SEC__ !== 'undefined' && __AGY_SEC__) {
+      const resolved = __AGY_SEC__.resolveAssetUrl(rawUrl) || rawUrl;
+      return __AGY_SEC__.sanitizeCssUrl(resolved);
+    }
+    return '';
+  }
 
   function resolveComposerRoot() {
     if (typeof document === 'undefined') return null;
@@ -101,18 +160,18 @@
 
   function resolveYoriichiAvatarUrl(themeCfg) {
     if (themeCfg && typeof themeCfg.userAvatar === 'string' && themeCfg.userAvatar) {
-      return themeCfg.userAvatar;
+      const cleaned = sanitizeCssAssetUrl(themeCfg.userAvatar);
+      if (cleaned) return cleaned;
     }
-    const base = (typeof window !== 'undefined' && window.__AGY_ASSET_BASE__) || './themes/';
-    return String(base).replace(/\/?$/, '/') + 'assets/yoriichi_avatar.jpg';
+    return sanitizeCssAssetUrl('assets/yoriichi_avatar.jpg');
   }
 
   function resolveYoriichiActionUrl(themeCfg) {
     if (themeCfg && typeof themeCfg.userActionSticker === 'string' && themeCfg.userActionSticker) {
-      return themeCfg.userActionSticker;
+      const cleaned = sanitizeCssAssetUrl(themeCfg.userActionSticker);
+      if (cleaned) return cleaned;
     }
-    const base = (typeof window !== 'undefined' && window.__AGY_ASSET_BASE__) || './themes/';
-    return String(base).replace(/\/?$/, '/') + 'assets/yoriichi_action.png';
+    return sanitizeCssAssetUrl('assets/yoriichi_action.png');
   }
 
   function formatCompactTokens(n) {
@@ -132,6 +191,10 @@
     return typeof window !== 'undefined' ? window.__AGY_KNY_ICONS__ : null;
   }
 
+  /* ==========================================================================
+   * STYLES (HUD + BRIGHT RED NICHIRIN + SUN SLAYER MARK + CRISIS VEIN)
+   * ========================================================================== */
+
   function ensureStyles() {
     if (typeof document === 'undefined') return;
     let st = document.getElementById(STYLE_ID);
@@ -148,16 +211,17 @@
         z-index: 59;
         display: inline-flex;
         align-items: center;
-        gap: 5px;
+        gap: 4.5px;
         pointer-events: auto;
         font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
         font-variant-numeric: tabular-nums;
         user-select: none;
       }
 
-      @media (max-width: 820px) {
+      @media (max-width: 960px) {
         #${HUD_BAR_ID} .agy-tok-ctx-prefix,
-        #${HUD_BAR_ID} .agy-tok-turn-prefix {
+        #${HUD_BAR_ID} .agy-tok-turn-prefix,
+        #${HUD_BAR_ID} .agy-blade-tier-txt {
           display: none;
         }
       }
@@ -212,12 +276,56 @@
         pointer-events: none;
       }
 
+      /* Bright Red Blade (赫刀) Awakened -> Primordial Sun Demon Slayer Mark Halo on Yoriichi Avatars */
+      html[data-agy-red-blade="1"] .agy-yoriichi-crest-btn,
+      html[data-agy-red-blade="1"] .agy-shell [data-testid="user-message"]::after {
+        border-color: #fde047 !important;
+        box-shadow:
+          0 0 14px rgba(239, 68, 68, 0.92),
+          0 0 26px rgba(249, 115, 22, 0.68),
+          0 0 36px rgba(253, 224, 71, 0.42) !important;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        html[data-agy-red-blade="1"] .agy-yoriichi-crest-btn {
+          animation: agySunSlayerMarkHalo 2.4s ease-in-out infinite;
+        }
+      }
+      @keyframes agySunSlayerMarkHalo {
+        0%, 100% {
+          box-shadow: 0 0 12px rgba(239, 68, 68, 0.85), 0 0 22px rgba(250, 204, 21, 0.55);
+        }
+        50% {
+          box-shadow: 0 0 20px rgba(239, 68, 68, 1), 0 0 32px rgba(253, 224, 71, 0.85);
+        }
+      }
+
+      /* Subtle Blood Demon Vein Border on .surface-composer during Crisis (0% text occlusion, 0% shake) */
+      .surface-composer[data-agy-crisis="1"] {
+        box-shadow:
+          0 0 0 1.2px rgba(220, 38, 38, 0.72),
+          0 0 18px rgba(185, 28, 28, 0.36) !important;
+        transition: box-shadow 0.35s ease;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .surface-composer[data-agy-crisis="1"] {
+          animation: agyBloodDemonCrisisPulse 2.2s ease-in-out infinite;
+        }
+      }
+      @keyframes agyBloodDemonCrisisPulse {
+        0%, 100% {
+          box-shadow: 0 0 0 1px rgba(185, 28, 28, 0.52), 0 0 12px rgba(153, 27, 27, 0.24);
+        }
+        50% {
+          box-shadow: 0 0 0 1.5px rgba(239, 68, 68, 0.85), 0 0 22px rgba(220, 38, 38, 0.46);
+        }
+      }
+
       .agy-tok-pill {
         position: relative;
         display: inline-flex;
         align-items: center;
         gap: 4.5px;
-        padding: 3.5px 9px;
+        padding: 3.5px 8.5px;
         border-radius: 9999px;
         background: var(--tok-surface, rgba(16, 12, 34, 0.94));
         border: 1px solid var(--tok-border, rgba(192, 132, 252, 0.58));
@@ -313,12 +421,85 @@
         gap: 2px;
       }
 
+      /* ======================================================================
+       * BRIGHT RED NICHIRIN BLADE PILL (赫刀 — FORGE PROGRESS KATANA SVG)
+       * ====================================================================== */
+      .agy-nichirin-pill {
+        gap: 4px;
+        padding: 3px 7.5px;
+      }
+      .agy-nichirin-pill[data-tier="ember"] {
+        border-color: rgba(249, 115, 22, 0.72);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 12px rgba(249, 115, 22, 0.34);
+      }
+      .agy-nichirin-pill[data-tier="red"] {
+        border-color: rgba(253, 224, 71, 0.88);
+        background: linear-gradient(135deg, rgba(48, 8, 12, 0.95) 0%, rgba(22, 9, 18, 0.96) 100%);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 18px rgba(239, 68, 68, 0.65);
+      }
+      .agy-nichirin-svg {
+        display: block;
+        flex-shrink: 0;
+        overflow: visible;
+      }
+      .agy-nichirin-pill[data-tier="red"] .agy-nichirin-svg {
+        filter: drop-shadow(0 0 5px rgba(239, 68, 68, 0.95));
+      }
+      .agy-blade-label {
+        font-size: 10px;
+        font-weight: 800;
+        color: #cbd5e1;
+        letter-spacing: 0.2px;
+      }
+      .agy-nichirin-pill[data-tier="ember"] .agy-blade-label {
+        color: #fdba74;
+      }
+      .agy-nichirin-pill[data-tier="red"] .agy-blade-label {
+        color: #fde047;
+        text-shadow: 0 0 8px rgba(239, 68, 68, 0.9);
+      }
+
+      /* ======================================================================
+       * QUICK UTILITY ICON BUTTONS (KAGURA BELL & UROKODAKI FOX MASK)
+       * ====================================================================== */
+      .agy-hud-util-btn {
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        border-radius: 9999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--tok-surface, rgba(16, 12, 34, 0.94));
+        border: 1px solid var(--tok-border, rgba(148, 163, 184, 0.45));
+        color: #e2e8f0;
+        cursor: pointer;
+        flex-shrink: 0;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.46);
+        transition: transform 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+      }
+      .agy-hud-util-btn:hover {
+        transform: translateY(-1.5px) scale(1.07);
+        border-color: #fde047;
+        color: #ffffff;
+        box-shadow: 0 5px 14px rgba(0, 0, 0, 0.6), 0 0 12px rgba(250, 204, 21, 0.45);
+      }
+      .agy-hud-util-btn[data-active="1"] {
+        border-color: #fde047;
+        color: #fde047;
+        background: linear-gradient(135deg, rgba(46, 22, 14, 0.95) 0%, rgba(18, 12, 32, 0.95) 100%);
+        box-shadow: 0 0 12px rgba(250, 204, 21, 0.55);
+      }
+      .agy-hud-util-btn[data-muted="1"] {
+        opacity: 0.68;
+      }
+
       /* Detailed Context & Token Breakdown Popover */
       .agy-tok-popover {
         position: absolute;
         bottom: calc(100% + 7px);
         left: 0;
-        width: 308px;
+        width: 316px;
         display: none;
         flex-direction: column;
         gap: 7px;
@@ -428,7 +609,7 @@
       /* Instant Enter Message Echo Banner (First Swordsman Yoriichi Command Display) */
       #${ECHO_BAR_ID} {
         position: absolute;
-        bottom: calc(100% + 34px);
+        bottom: calc(100% + 66px);
         left: 8px;
         right: 120px;
         z-index: 58;
@@ -504,6 +685,450 @@
       }
     `;
   }
+
+  /* ==========================================================================
+   * BRIGHT RED NICHIRIN (赫刀) FORGE ENGINE & CRISIS-TO-SLASH REFLEX
+   * ========================================================================== */
+
+  function createNichirinKatanaSvg() {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('class', 'agy-nichirin-svg');
+    svg.setAttribute('width', '46');
+    svg.setAttribute('height', '13');
+    svg.setAttribute('viewBox', '0 0 46 13');
+    svg.setAttribute('aria-hidden', 'true');
+
+    const uid = 'agy_nichirin_' + Math.random().toString(36).slice(2, 8);
+    svg.innerHTML =
+      `<defs>` +
+      `<clipPath id="${uid}_blade_clip">` +
+      `<path d="M12.5 4.3 L39.5 4.0 Q43.8 4.0 45.2 6.5 Q42.8 8.8 38.2 8.8 L12.5 8.6 Z"/>` +
+      `</clipPath>` +
+      `<linearGradient id="${uid}_ember_grad" x1="12" y1="6" x2="45" y2="6" gradientUnits="userSpaceOnUse">` +
+      `<stop offset="0%" stop-color="#dc2626"/>` +
+      `<stop offset="60%" stop-color="#f97316"/>` +
+      `<stop offset="100%" stop-color="#fde047"/>` +
+      `</linearGradient>` +
+      `</defs>` +
+      // Tsuka hilt wrap
+      `<rect x="1.2" y="4.8" width="9.4" height="3.4" rx="1.2" fill="#1e1b4b" stroke="#facc15" stroke-width="0.8"/>` +
+      `<path d="M3.5 4.9l1.4 3.2M6.2 4.9l1.4 3.2M8.9 4.9l1.1 3.2" stroke="#ef4444" stroke-width="0.85"/>` +
+      // Yoriichi Golden Tsuba guard
+      `<rect x="10.6" y="2.2" width="2.2" height="8.6" rx="1" fill="#facc15" stroke="#ca8a04" stroke-width="0.6"/>` +
+      // Base Black-Steel Nichirin Blade
+      `<path d="M12.5 4.3 L39.5 4.0 Q43.8 4.0 45.2 6.5 Q42.8 8.8 38.2 8.8 L12.5 8.6 Z" fill="#1e293b" stroke="#94a3b8" stroke-width="0.85"/>` +
+      // Progressive Forge Heat Overlay inside Blade Clip
+      `<g clip-path="url(#${uid}_blade_clip)">` +
+      `<rect class="agy-nichirin-heat-rect" x="12.5" y="3.2" width="0" height="6.4" fill="url(#${uid}_ember_grad)"/>` +
+      `<path d="M13 6.7 Q18 5.4 23 6.8 T33 6.6 T43 6.2" stroke="rgba(255,255,255,0.65)" stroke-width="0.7" fill="none"/>` +
+      `</g>` +
+      // Outer Blade Edge Highlight
+      `<path class="agy-nichirin-edge-stroke" d="M12.5 4.3 L39.5 4.0 Q43.8 4.0 45.2 6.5 Q42.8 8.8 38.2 8.8 L12.5 8.6 Z" fill="none" stroke="rgba(226,232,240,0.65)" stroke-width="0.75"/>`;
+
+    const fillRect = svg.querySelector('.agy-nichirin-heat-rect');
+    const edgePath = svg.querySelector('.agy-nichirin-edge-stroke');
+    return { svg, fillRect, edgePath };
+  }
+
+  function computeAndApplyBladeHeat() {
+    const turns = Math.max(0, state.serverTurnCount);
+    const steps = Math.max(0, state.serverStepCount || state.serverTurnSteps);
+    const tokFactor = Math.min(45, Math.floor((state.serverTotalOutTokens || 0) / 850));
+    const organicHeat = Math.min(84, Math.round(turns * 11 + steps * 2.4 + tokFactor * 0.6));
+    const totalHeat = Math.max(0, Math.min(100, organicHeat + state.bladeBonusHeat));
+
+    state.bladeHeat = totalHeat;
+
+    let tier = 'black';
+    if (totalHeat >= 75) tier = 'red';
+    else if (totalHeat >= 35) tier = 'ember';
+    state.bladeTier = tier;
+
+    if (typeof document !== 'undefined' && document.documentElement) {
+      if (tier === 'red') {
+        document.documentElement.dataset.agyRedBlade = '1';
+      } else {
+        delete document.documentElement.dataset.agyRedBlade;
+      }
+    }
+
+    if (state.bladeBtnEl) {
+      state.bladeBtnEl.dataset.tier = tier;
+      const tierNameVi = tier === 'red'
+        ? 'Hách Đao Khai Mở (赫刀)'
+        : tier === 'ember'
+        ? 'Nhiệt Hồng Đao'
+        : 'Hắc Thiết Nhật Luân Đao';
+      state.bladeBtnEl.title = `Rèn Nhật Luân Kiếm: ${tierNameVi} • ${totalHeat}% nhiệt độ`;
+    }
+
+    if (state.bladeFillRectEl) {
+      const w = (33.0 * (totalHeat / 100)).toFixed(1);
+      state.bladeFillRectEl.setAttribute('width', w);
+    }
+
+    if (state.bladeGlowPathEl) {
+      if (tier === 'red') {
+        state.bladeGlowPathEl.setAttribute('stroke', '#fde047');
+      } else if (tier === 'ember') {
+        state.bladeGlowPathEl.setAttribute('stroke', '#fb923c');
+      } else {
+        state.bladeGlowPathEl.setAttribute('stroke', 'rgba(226,232,240,0.65)');
+      }
+    }
+
+    if (state.bladeLabelEl) {
+      state.bladeLabelEl.textContent = '';
+      if (tier === 'red') {
+        const kj = document.createElement('span');
+        kj.textContent = '赫刀 ';
+        const pct = document.createElement('span');
+        pct.className = 'agy-blade-tier-txt';
+        pct.textContent = `${totalHeat}%`;
+        state.bladeLabelEl.appendChild(kj);
+        state.bladeLabelEl.appendChild(pct);
+      } else {
+        state.bladeLabelEl.textContent = `${totalHeat}%`;
+      }
+    }
+
+    if (state.detBladeVal) {
+      const desc = tier === 'red'
+        ? `赫刀 Hách Đao (${totalHeat}%)`
+        : tier === 'ember'
+        ? `Nhiệt Hồng Đao (${totalHeat}%)`
+        : `Hắc Thiết Đao (${totalHeat}%)`;
+      state.detBladeVal.textContent = desc;
+    }
+  }
+
+  function applyCrisisVisual(isCrisis) {
+    state.crisisState = Boolean(isCrisis);
+    const comp = state.composer || resolveComposerRoot();
+    if (!comp || !comp.dataset) return;
+    if (state.crisisState) {
+      comp.dataset.agyCrisis = '1';
+    } else {
+      delete comp.dataset.agyCrisis;
+    }
+  }
+
+  function executeDemonSlayCelebration(slashSeq, slashReason) {
+    // 1. Immediately clear crisis blood demon border
+    applyCrisisVisual(false);
+
+    // 2. Grant +25% Bright Red Blade forge heat bonus
+    state.bladeBonusHeat = Math.min(100, state.bladeBonusHeat + 25);
+    computeAndApplyBladeHeat();
+
+    // 3. Auto-trigger Ultimate Finisher Slash (12s cooldown guarded)
+    if (typeof window !== 'undefined' && typeof window.__AGY_TRIGGER_FINISHER__ === 'function') {
+      try {
+        window.__AGY_TRIGGER_FINISHER__({
+          reason: slashReason || 'bug_slashed',
+          originEl: state.yoriichiBtnEl || null
+        });
+      } catch (_) {}
+    }
+
+    // 4. Stamp crimson 「滅」 (ÁC QUỶ DIỆT SÁT) seal + Kasugai Crow victory flyby
+    if (
+      typeof window !== 'undefined' &&
+      window.__AGY_SQUAD_RAID__ &&
+      typeof window.__AGY_SQUAD_RAID__.triggerVictoryStamp === 'function'
+    ) {
+      try {
+        window.__AGY_SQUAD_RAID__.triggerVictoryStamp({
+          slashSeq,
+          reason: slashReason
+        });
+      } catch (_) {}
+    }
+
+    // 5. Trigger crisp katana sheathe "Kachin!" via Bio-Audio if exposed directly
+    if (typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__) {
+      const bio = window.__AGY_BIO_AUDIO__;
+      try {
+        if (typeof bio.playSheathe === 'function') bio.playSheathe();
+        else if (typeof bio.playKachin === 'function') bio.playKachin();
+      } catch (_) {}
+    }
+  }
+
+  function refreshUtilityButtonStates() {
+    if (state.kaguraBtnEl && typeof window !== 'undefined') {
+      const bio = window.__AGY_BIO_AUDIO__;
+      let active = false;
+      if (bio) {
+        if (typeof bio.isEnabled === 'function') active = Boolean(bio.isEnabled());
+        else if (typeof bio.isActive === 'function') active = Boolean(bio.isActive());
+        else if (typeof bio.enabled === 'boolean') active = bio.enabled;
+      }
+      if (active) {
+        state.kaguraBtnEl.dataset.active = '1';
+        delete state.kaguraBtnEl.dataset.muted;
+      } else {
+        delete state.kaguraBtnEl.dataset.active;
+      }
+    }
+
+    if (state.cinemaBtnEl && typeof document !== 'undefined') {
+      const dir = typeof window !== 'undefined' ? window.__AGY_CINEMA_DIRECTOR__ : null;
+      const shieldOn =
+        (document.documentElement && document.documentElement.dataset.agyPrivacyShield === '1') ||
+        Boolean(dir && typeof dir.isPrivacyActive === 'function' && dir.isPrivacyActive());
+      if (shieldOn) state.cinemaBtnEl.dataset.active = '1';
+      else delete state.cinemaBtnEl.dataset.active;
+    }
+  }
+
+  /* ==========================================================================
+   * STREAMING SSE (/__events) + RESILIENT FALLBACK POLLING (/__telemetry)
+   * ========================================================================== */
+
+  function ingestTelemetrySnapshot(snap) {
+    if (!snap || typeof snap !== 'object') return;
+    if (snap.cid && state.cid && snap.cid !== state.cid) return;
+
+    const firstSync = !state.hasTelemetry;
+    state.hasTelemetry = true;
+
+    const ctxTok = Number(snap.inputTokens ?? snap.contextTokens) || 0;
+    const cacheTok = Number(snap.cacheReadTokens ?? snap.cacheTokens) || 0;
+    const turnTok = Number(snap.turnTokens ?? snap.turnOutputTokens) || 0;
+    const outTok = Number(snap.outputTokens ?? snap.totalOutputTokens) || 0;
+    const stepCnt = Number(snap.stepCount ?? snap.turnSteps) || 0;
+    const turnCnt = Number(snap.turnCount) || 0;
+
+    state.serverCtxTokens = ctxTok;
+    state.serverCacheTokens = cacheTok;
+    state.serverTurnTokens = turnTok;
+    state.serverTotalOutTokens = outTok;
+    state.serverTurnSteps = Number(snap.turnSteps ?? stepCnt) || 0;
+    state.serverStepCount = stepCnt;
+    state.serverTurnCount = turnCnt;
+    state.serverTurnCtxDelta = Number(snap.turnContextDelta) || 0;
+
+    if (typeof snap.isWorking === 'boolean') {
+      state.serverIsWorking = snap.isWorking;
+    }
+
+    if (firstSync) {
+      state.dispCtxTokens = state.serverCtxTokens;
+      state.dispTurnTokens = state.serverTurnTokens;
+      state.stepBaselineDomChars = measureConversationDomChars();
+    }
+
+    const stepMarker = typeof snap.latestStepIndex === 'number' ? snap.latestStepIndex : stepCnt;
+    if (stepMarker !== state.lastServerStepIdx) {
+      state.lastServerStepIdx = stepMarker;
+      state.lastStepSeenAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      state.stepBaselineDomChars = measureConversationDomChars();
+    }
+
+    // Crisis & Bug-Slash Detection
+    if (typeof snap.crisisState === 'boolean') {
+      applyCrisisVisual(snap.crisisState);
+    }
+
+    const incomingSlashSeq = typeof snap.slashSeq === 'number' ? snap.slashSeq : 0;
+    if (firstSync && !snap.justSlashedBug) {
+      state.lastSlashSeq = incomingSlashSeq;
+    } else if (
+      (snap.justSlashedBug === true && incomingSlashSeq !== state.lastSlashSeq) ||
+      (state.lastSlashSeq >= 0 && incomingSlashSeq > state.lastSlashSeq)
+    ) {
+      state.lastSlashSeq = incomingSlashSeq;
+      executeDemonSlayCelebration(incomingSlashSeq, snap.slashReason || '');
+    } else if (state.lastSlashSeq < 0) {
+      state.lastSlashSeq = incomingSlashSeq;
+    }
+
+    if (typeof snap.turnFinishedSeq === 'number') {
+      state.lastTurnFinishedSeq = snap.turnFinishedSeq;
+    }
+
+    computeAndApplyBladeHeat();
+
+    // Forward live snapshot to Hashira Squad Raid & Bio-Acoustic Kagura Audio
+    if (typeof window !== 'undefined') {
+      if (window.__AGY_SQUAD_RAID__ && typeof window.__AGY_SQUAD_RAID__.sync === 'function') {
+        try {
+          window.__AGY_SQUAD_RAID__.sync(snap);
+        } catch (_) {}
+      }
+      if (window.__AGY_BIO_AUDIO__ && typeof window.__AGY_BIO_AUDIO__.onTelemetry === 'function') {
+        try {
+          window.__AGY_BIO_AUDIO__.onTelemetry(snap);
+        } catch (_) {}
+      }
+    }
+
+    refreshUtilityButtonStates();
+
+    if (typeof document !== 'undefined' && document.hidden) {
+      state.dispCtxTokens = state.serverCtxTokens;
+      state.dispTurnTokens = state.serverTurnTokens;
+      renderDomValues();
+    } else {
+      ensureOdometerRunning();
+    }
+  }
+
+  function abortActiveStream() {
+    clearTimeout(state.streamReconnectTimer);
+    state.streamReconnectTimer = 0;
+    state.streamConnected = false;
+    state.streamCid = '';
+    if (state.streamAbort) {
+      try {
+        state.streamAbort.abort();
+      } catch (_) {}
+      state.streamAbort = null;
+    }
+  }
+
+  function scheduleStreamReconnect(cid) {
+    clearTimeout(state.streamReconnectTimer);
+    if (!cid || cid !== state.cid || !state.barEl) return;
+    const delay = Math.min(15000, 2200 * Math.pow(1.6, Math.min(4, state.streamFailCount)));
+    state.streamReconnectTimer = setTimeout(() => {
+      state.streamReconnectTimer = 0;
+      if (state.cid === cid && state.barEl) {
+        connectTelemetryStream(cid);
+      }
+    }, Math.round(delay));
+  }
+
+  async function connectTelemetryStream(cid) {
+    if (!cid) return;
+    if (state.streamAbort && state.streamCid === cid) return;
+
+    abortActiveStream();
+
+    const base = getSecureAssetBase();
+    if (!base || !/^https?:\/\/127\.0\.0\.1:\d+/.test(base)) return;
+
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    if (!controller) return;
+
+    state.streamAbort = controller;
+    state.streamCid = cid;
+
+    const url = base.replace(/\/?$/, '/') + `__events?cid=${encodeURIComponent(cid)}`;
+
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: getSecureAuthHeaders({ Accept: 'text/event-stream' }),
+        signal: controller.signal,
+        cache: 'no-store'
+      });
+
+      if (!res.ok || !res.body || typeof res.body.getReader !== 'function') {
+        state.streamFailCount++;
+        state.streamConnected = false;
+        state.streamAbort = null;
+        fetchDaemonTelemetry(cid);
+        scheduleStreamReconnect(cid);
+        return;
+      }
+
+      state.streamConnected = true;
+      state.streamFailCount = 0;
+      state.fallbackBackoffMs = 1400;
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done || controller.signal.aborted) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        if (buffer.indexOf('\r\n') !== -1) {
+          buffer = buffer.replace(/\r\n/g, '\n');
+        }
+
+        let sepIdx = buffer.indexOf('\n\n');
+        while (sepIdx !== -1) {
+          const rawBlock = buffer.slice(0, sepIdx);
+          buffer = buffer.slice(sepIdx + 2);
+          sepIdx = buffer.indexOf('\n\n');
+
+          const lines = rawBlock.split('\n');
+          const dataParts = [];
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.startsWith('data:')) {
+              dataParts.push(line.slice(5).trim());
+            }
+          }
+          if (dataParts.length > 0) {
+            const payloadStr = dataParts.join('\n');
+            if (payloadStr && payloadStr !== '[DONE]') {
+              try {
+                const snap = JSON.parse(payloadStr);
+                ingestTelemetrySnapshot(snap);
+              } catch (_) {}
+            }
+          }
+        }
+
+        // Guard against unbounded buffer if server sends malformed stream without \n\n
+        if (buffer.length > 262144) {
+          buffer = '';
+        }
+      }
+    } catch (_) {
+      // Aborted on cid switch / teardown, or transient socket close
+    } finally {
+      if (state.streamAbort === controller) {
+        state.streamAbort = null;
+        state.streamConnected = false;
+        if (!controller.signal.aborted && state.cid === cid && state.barEl) {
+          state.streamFailCount++;
+          scheduleStreamReconnect(cid);
+        }
+      }
+    }
+  }
+
+  async function fetchDaemonTelemetry(cid) {
+    if (!cid || state.fetchInFlight) return;
+    const base = getSecureAssetBase();
+    if (!base || !/^https?:\/\/127\.0\.0\.1:\d+/.test(base)) return;
+
+    state.fetchInFlight = true;
+    try {
+      const url = base.replace(/\/?$/, '/') + `__telemetry?cid=${encodeURIComponent(cid)}&_t=${Date.now()}`;
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: getSecureAuthHeaders(),
+        cache: 'no-store'
+      });
+      if (!res.ok) {
+        state.fallbackBackoffMs = Math.min(9000, Math.round(state.fallbackBackoffMs * 1.7));
+        return;
+      }
+      const data = await res.json();
+      if (!data || data.ok === false || (data.cid && data.cid !== state.cid)) return;
+
+      state.fallbackBackoffMs = 1400;
+      ingestTelemetrySnapshot(data);
+    } catch (_) {
+      state.fallbackBackoffMs = Math.min(9000, Math.round(state.fallbackBackoffMs * 1.7));
+    } finally {
+      state.fetchInFlight = false;
+      state.nextFallbackAt = Date.now() + state.fallbackBackoffMs;
+    }
+  }
+
+  /* ==========================================================================
+   * LIVE DOM SIGNALS, SESSION ICONS & ODOMETER RENDERING
+   * ========================================================================== */
 
   function extractLivePageSignals(composerEl) {
     let cid = '';
@@ -594,7 +1219,7 @@
       const sesLarge = ic.buildSessionAvatar(docTitle, state.cid, 18);
       if (state.ctxIconWrap) state.ctxIconWrap.innerHTML = sesSmall.svg;
       if (state.ctxBtnEl) {
-        state.ctxBtnEl.title = `Phiên làm việc: ${sesSmall.info.displayLabel} — Nhấn xem chi tiết Ngữ cảnh & Token`;
+        state.ctxBtnEl.title = `Phiên làm việc: ${sesSmall.info.displayLabel} — Nhấn xem chi tiết Ngữ cảnh & Nhật Luân Đao`;
       }
       if (state.popSessionIcon) state.popSessionIcon.innerHTML = sesLarge.svg;
       if (state.popSessionTitle) {
@@ -616,69 +1241,44 @@
     }
   }
 
-  async function fetchDaemonTelemetry(cid) {
-    if (!cid || state.fetchInFlight) return;
-    const base = (typeof window !== 'undefined' && window.__AGY_ASSET_BASE__) || '';
-    if (!base || !base.startsWith('http')) return;
+  function switchActiveConversation(nextCid) {
+    if (!nextCid || nextCid === state.cid) return;
+    abortActiveStream();
+    state.cid = nextCid;
+    state.hasTelemetry = false;
+    state.serverIsWorking = null;
+    state.serverCtxTokens = 0;
+    state.serverTurnTokens = 0;
+    state.serverTotalOutTokens = 0;
+    state.serverTurnCount = 0;
+    state.serverStepCount = 0;
+    state.dispCtxTokens = 0;
+    state.dispTurnTokens = 0;
+    state.lastServerStepIdx = -1;
+    state.lastSlashSeq = -1;
+    state.bladeBonusHeat = 0;
+    applyCrisisVisual(false);
+    computeAndApplyBladeHeat();
 
-    state.fetchInFlight = true;
-    try {
-      const url = base.replace(/\/?$/, '/') + `__telemetry?cid=${encodeURIComponent(cid)}&_t=${Date.now()}`;
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (!data || !data.ok || data.cid !== state.cid) return;
-
-      const firstSync = !state.hasTelemetry;
-      state.hasTelemetry = true;
-      state.serverCtxTokens = Number(data.contextTokens) || 0;
-      state.serverCacheTokens = Number(data.cacheTokens) || 0;
-      state.serverTurnTokens = Number(data.turnOutputTokens) || 0;
-      state.serverTotalOutTokens = Number(data.totalOutputTokens) || 0;
-      state.serverTurnSteps = Number(data.turnSteps) || 0;
-      state.serverTurnCtxDelta = Number(data.turnContextDelta) || 0;
-
-      if (firstSync) {
-        state.dispCtxTokens = state.serverCtxTokens;
-        state.dispTurnTokens = state.serverTurnTokens;
-        state.stepBaselineDomChars = measureConversationDomChars();
-      }
-
-      if (typeof data.latestStepIndex === 'number' && data.latestStepIndex !== state.lastServerStepIdx) {
-        state.lastServerStepIdx = data.latestStepIndex;
-        state.lastStepSeenAt = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-        state.stepBaselineDomChars = measureConversationDomChars();
-      }
-    } catch (_) {
-      // Offline / preview fallback
-    } finally {
-      state.fetchInFlight = false;
-    }
+    connectTelemetryStream(nextCid);
+    fetchDaemonTelemetry(nextCid);
   }
 
   function recomputeTargets(nowMs) {
     const sig = extractLivePageSignals(state.composer);
-    const prevCid = state.cid;
 
-    if (sig.cid && sig.cid !== prevCid) {
-      state.cid = sig.cid;
-      state.hasTelemetry = false;
-      state.serverCtxTokens = 0;
-      state.serverTurnTokens = 0;
-      state.dispCtxTokens = 0;
-      state.dispTurnTokens = 0;
-      state.lastServerStepIdx = -1;
-      fetchDaemonTelemetry(sig.cid);
+    if (sig.cid && sig.cid !== state.cid) {
+      switchActiveConversation(sig.cid);
     }
 
     refreshSessionAndElementIcons();
 
-    state.isWorking = sig.isWorking;
+    state.isWorking = Boolean(sig.isWorking || state.serverIsWorking);
     state.draftTokens = sig.draftTokens;
     if (sig.modelLabel) state.modelLabel = sig.modelLabel;
     if (sig.quotaPct !== null) state.quotaPct = sig.quotaPct;
 
-    // Auto-dismiss command echo banner once Antigravity actually renders the new user bubble into the chat stream
+    // Auto-dismiss command echo banner once Antigravity renders the new user bubble
     if (state.echoEl && state.echoEl.dataset.visible === '1' && typeof document !== 'undefined') {
       const curMsgCount = document.querySelectorAll('[data-testid="user-message"], .agy-user-bubble-frame').length;
       if (curMsgCount > state.baselineUserMsgCount && (nowMs - (state.echoShownAt || 0)) > 1800) {
@@ -694,9 +1294,9 @@
       state.turnBaselineDomChars = domChars;
       state.stepBaselineDomChars = domChars;
       state.dispTurnTokens = 0;
-      if (state.cid) fetchDaemonTelemetry(state.cid);
+      if (state.cid && !state.streamConnected) fetchDaemonTelemetry(state.cid);
     } else if (!state.isWorking && state.wasWorking) {
-      if (state.cid) fetchDaemonTelemetry(state.cid);
+      if (state.cid && !state.streamConnected) fetchDaemonTelemetry(state.cid);
     }
     state.wasWorking = state.isWorking;
 
@@ -784,7 +1384,8 @@
 
     if (state.popoverOpen) {
       if (state.detStatusBadge) {
-        state.detStatusBadge.textContent = state.isWorking ? 'Đang tính toán...' : 'Đã chốt lượt';
+        const modeTxt = state.streamConnected ? 'SSE <30ms' : 'Trực tuyến';
+        state.detStatusBadge.textContent = state.isWorking ? `Đang rèn (${modeTxt})` : `Sẵn sàng (${modeTxt})`;
         if (state.isWorking) state.detStatusBadge.dataset.working = '1';
         else delete state.detStatusBadge.dataset.working;
       }
@@ -804,6 +1405,7 @@
         const stepsTxt = state.serverTurnSteps > 0 ? ` • ${state.serverTurnSteps} bước` : '';
         state.detTurnVal.textContent = `+${formatExactInt(turnRounded)} tok${stepsTxt}`;
       }
+      computeAndApplyBladeHeat();
       if (state.detDraftVal) {
         state.detDraftVal.textContent = state.draftTokens > 0 ? `+${formatExactInt(state.draftTokens)} tok` : '0 tok';
       }
@@ -905,7 +1507,7 @@
       charId: 'yoriichi',
       originRect,
       actionSticker: resolveYoriichiActionUrl(state.themeCfg),
-      composerEl: null // Yoriichi leaps out from his own Sun Crest without hiding the Hashira Chibi!
+      composerEl: null
     });
   }
 
@@ -928,7 +1530,6 @@
     }
 
     clearTimeout(state.echoTimer);
-    // Stay visible longer (14s) when AI is busy queuing messages, or 5.5s when idle
     const holdMs = state.isWorking ? 14000 : 5500;
     state.echoTimer = setTimeout(() => {
       hideUserMessageEcho();
@@ -953,22 +1554,28 @@
     bar.style.setProperty('--tok-glow', cfg.glow || 'rgba(56, 189, 248, 0.28)');
     bar.style.setProperty('--tok-surface', cfg.modalBg || 'rgba(15, 11, 30, 0.95)');
 
-    const yAv = resolveYoriichiAvatarUrl(cfg);
+    const safeYoriAv = resolveYoriichiAvatarUrl(cfg);
     if (state.yoriichiBtnEl) {
-      state.yoriichiBtnEl.style.backgroundImage = `url("${yAv}")`;
+      state.yoriichiBtnEl.style.backgroundImage = safeYoriAv ? `url("${safeYoriAv}")` : 'none';
     }
     if (state.echoAvatarEl) {
-      state.echoAvatarEl.style.backgroundImage = `url("${yAv}")`;
+      state.echoAvatarEl.style.backgroundImage = safeYoriAv ? `url("${safeYoriAv}")` : 'none';
     }
 
-    // Preload Yoriichi full-body action sprite
-    if (typeof window !== 'undefined' && window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.preloadActionSprite === 'function') {
+    const safeYoriAction = resolveYoriichiActionUrl(cfg);
+    if (
+      safeYoriAction &&
+      typeof window !== 'undefined' &&
+      window.__AGY_KNY_SKILLS__ &&
+      typeof window.__AGY_KNY_SKILLS__.preloadActionSprite === 'function'
+    ) {
       try {
-        window.__AGY_KNY_SKILLS__.preloadActionSprite('yoriichi', resolveYoriichiActionUrl(cfg));
+        window.__AGY_KNY_SKILLS__.preloadActionSprite('yoriichi', safeYoriAction);
       } catch (_) {}
     }
 
     refreshSessionAndElementIcons();
+    refreshUtilityButtonStates();
   }
 
   function createIconRow(iconSvgHtml, label) {
@@ -1001,6 +1608,9 @@
     const existing = document.getElementById(HUD_BAR_ID);
     if (existing && existing.parentElement === composer && state.barEl === existing) {
       applyThemeColors(existing, themeCfg, themeName);
+      if (typeof window !== 'undefined' && window.__AGY_SQUAD_RAID__ && typeof window.__AGY_SQUAD_RAID__.mount === 'function') {
+        try { window.__AGY_SQUAD_RAID__.mount(composer); } catch (_) {}
+      }
       ensureOdometerRunning();
       return existing;
     }
@@ -1013,7 +1623,7 @@
     const bar = document.createElement('div');
     bar.id = HUD_BAR_ID;
     bar.setAttribute('role', 'region');
-    bar.setAttribute('aria-label', 'Khai Tổ Hỏa Thần, Ngữ cảnh Phiên & Bộ đếm Token thuộc tính');
+    bar.setAttribute('aria-label', 'Khai Tổ Hỏa Thần, Ngữ cảnh Phiên, Hách Đao & Âm cảnh');
 
     // 0. User's First Swordsman Yoriichi Personal Crest Button
     const yoriBtn = document.createElement('button');
@@ -1059,7 +1669,37 @@
     turnBtn.appendChild(turnIcon);
     turnBtn.appendChild(turnText);
 
-    // 3. Detailed Breakdown Popover with semantic icons per row
+    // 3. Bright Red Nichirin (赫刀) Katana Progress Gauge Pill
+    const bladeBtn = document.createElement('button');
+    bladeBtn.type = 'button';
+    bladeBtn.className = 'agy-tok-pill agy-nichirin-pill';
+    bladeBtn.dataset.tier = 'black';
+    bladeBtn.title = 'Rèn Nhật Luân Kiếm (0% -> 100% Khai Mở Hách Đao 赫刀)';
+
+    const katanaParts = createNichirinKatanaSvg();
+    const bladeLbl = document.createElement('span');
+    bladeLbl.className = 'agy-blade-label';
+    bladeLbl.textContent = '0%';
+    bladeBtn.appendChild(katanaParts.svg);
+    bladeBtn.appendChild(bladeLbl);
+
+    // 4. Kagura Wind-Chime Bell Quick Toggle Button
+    const kaguraBtn = document.createElement('button');
+    kaguraBtn.type = 'button';
+    kaguraBtn.className = 'agy-hud-util-btn agy-kagura-bell-btn';
+    kaguraBtn.title = 'Chuông gió Kagura — Bật/Tắt Âm cảnh & Chuông báo hoàn thành lượt khi Alt+Tab';
+    kaguraBtn.setAttribute('aria-label', kaguraBtn.title);
+    kaguraBtn.innerHTML = ic ? ic.getFuncSvg('kagura_bell', 13) : '🔔';
+
+    // 5. Urokodaki Fox Mask (Cinema Director & Privacy Shield) Button
+    const cinemaBtn = document.createElement('button');
+    cinemaBtn.type = 'button';
+    cinemaBtn.className = 'agy-hud-util-btn agy-cinema-mask-btn';
+    cinemaBtn.title = 'Mặt nạ Cáo Urokodaki — Mở Khiên Che Mật & Đạo Diễn Cinema';
+    cinemaBtn.setAttribute('aria-label', cinemaBtn.title);
+    cinemaBtn.innerHTML = ic ? ic.getFuncSvg('cinema_mask', 13) : '🦊';
+
+    // 6. Detailed Breakdown Popover with semantic icons per row
     const pop = document.createElement('div');
     pop.className = 'agy-tok-popover';
 
@@ -1092,11 +1732,12 @@
     const rCtx = createIconRow(ic ? ic.getFuncSvg('breathing_forms', 13) : '', 'Ngữ cảnh phiên:');
     const rCache = createIconRow(ic ? ic.getFuncSvg('kv_cache', 13) : '', 'Bộ nhớ đệm (KV-Cache):');
     const rTurn = createIconRow('', 'Token lượt hiện tại:');
+    const rBlade = createIconRow(ic ? ic.getFuncSvg('katana_cast', 13) : '', 'Nhiệt độ Nhật Luân Đao:');
     const rDraft = createIconRow(ic ? ic.getFuncSvg('draft_brush', 13) : '', 'Đang gõ trong ô chat:');
     const rSession = createIconRow(ic ? ic.getFuncSvg('session_sum', 13) : '', 'Tổng sinh ra cả phiên:');
     const rModel = createIconRow(ic ? ic.getFuncSvg('model_quota', 13) : '', 'Mô hình & Hạn mức:');
 
-    [rCtx, rCache, rTurn, rDraft, rSession, rModel].forEach((r) => rows.appendChild(r.row));
+    [rCtx, rCache, rTurn, rBlade, rDraft, rSession, rModel].forEach((r) => rows.appendChild(r.row));
 
     pop.appendChild(hdr);
     pop.appendChild(meterWrap);
@@ -1105,10 +1746,13 @@
     bar.appendChild(yoriBtn);
     bar.appendChild(ctxBtn);
     bar.appendChild(turnBtn);
+    bar.appendChild(bladeBtn);
+    bar.appendChild(kaguraBtn);
+    bar.appendChild(cinemaBtn);
     bar.appendChild(pop);
     composer.appendChild(bar);
 
-    // 4. Instant Enter Message Echo Banner (#agy-yoriichi-msg-echo)
+    // 7. Instant Enter Message Echo Banner (#agy-yoriichi-msg-echo)
     const echo = document.createElement('div');
     echo.id = ECHO_BAR_ID;
     const echoAv = document.createElement('span');
@@ -1145,6 +1789,15 @@
     state.turnBtnEl = turnBtn;
     state.turnIconEl = turnIcon;
     state.turnTextEl = turnText;
+
+    state.bladeBtnEl = bladeBtn;
+    state.bladeFillRectEl = katanaParts.fillRect;
+    state.bladeGlowPathEl = katanaParts.edgePath;
+    state.bladeLabelEl = bladeLbl;
+
+    state.kaguraBtnEl = kaguraBtn;
+    state.cinemaBtnEl = cinemaBtn;
+
     state.popoverEl = pop;
     state.echoEl = echo;
     state.echoTextEl = echoTxt;
@@ -1158,6 +1811,7 @@
     state.detCacheVal = rCache.valEl;
     state.detTurnIcon = rTurn.icoEl;
     state.detTurnVal = rTurn.valEl;
+    state.detBladeVal = rBlade.valEl;
     state.detDraftVal = rDraft.valEl;
     state.detSessionVal = rSession.valEl;
     state.detModelVal = rModel.valEl;
@@ -1165,27 +1819,62 @@
     state.lastSessionSig = '';
     state.lastElemKey = '';
     applyThemeColors(bar, themeCfg, themeName);
+    computeAndApplyBladeHeat();
+
+    // Mount Hashira Squad anchor alongside composer
+    if (typeof window !== 'undefined' && window.__AGY_SQUAD_RAID__ && typeof window.__AGY_SQUAD_RAID__.mount === 'function') {
+      try { window.__AGY_SQUAD_RAID__.mount(composer); } catch (_) {}
+    }
 
     yoriBtn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       castYoriichiSunBreathing(yoriBtn);
     });
 
-    const onToggle = (ev) => {
+    const onTogglePopover = (ev) => {
       ev.stopPropagation();
       setPopoverOpen(!state.popoverOpen);
-      if (state.cid) fetchDaemonTelemetry(state.cid);
+      if (state.cid && !state.streamConnected) fetchDaemonTelemetry(state.cid);
       ensureOdometerRunning();
     };
-    ctxBtn.addEventListener('click', onToggle);
-    turnBtn.addEventListener('click', onToggle);
+    ctxBtn.addEventListener('click', onTogglePopover);
+    turnBtn.addEventListener('click', onTogglePopover);
+    bladeBtn.addEventListener('click', onTogglePopover);
+
+    kaguraBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const bio = typeof window !== 'undefined' ? window.__AGY_BIO_AUDIO__ : null;
+      if (bio && typeof bio.toggle === 'function') {
+        try {
+          const next = bio.toggle();
+          if (typeof next === 'boolean') {
+            if (next) kaguraBtn.dataset.active = '1';
+            else delete kaguraBtn.dataset.active;
+          } else {
+            refreshUtilityButtonStates();
+          }
+        } catch (_) {}
+      }
+    });
+
+    cinemaBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const dir = typeof window !== 'undefined' ? window.__AGY_CINEMA_DIRECTOR__ : null;
+      if (dir) {
+        try {
+          if (typeof dir.openPanel === 'function') dir.openPanel();
+          else if (typeof dir.togglePanel === 'function') dir.togglePanel();
+          else if (typeof dir.open === 'function') dir.open();
+        } catch (_) {}
+        setTimeout(refreshUtilityButtonStates, 50);
+      }
+    });
 
     // Capture Enter key & Send button click BEFORE React clears the editor so user's message always shows!
     const onCaptureKeyDown = (ev) => {
       if (ev.key !== 'Enter' || ev.shiftKey || ev.altKey || ev.ctrlKey || ev.metaKey || ev.isComposing) return;
       const target = ev.target;
       if (!target || (target.closest && target.closest('#agy-shinobu-npc-wrap'))) return;
-      // Ignore if autocomplete / slash menu listbox is open
       const hasMenu = document.querySelector('[role="listbox"], [data-radix-popper-content-wrapper]');
       if (hasMenu && hasMenu.offsetParent !== null) return;
 
@@ -1199,7 +1888,13 @@
     const onCaptureSendClick = (ev) => {
       const btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
       if (!btn || !composer.contains(btn)) return;
-      if (btn.closest(`#${HUD_BAR_ID}`) || btn.closest('#agy-chibi-skill-bar') || btn.closest('#agy-shinobu-npc-wrap') || btn.classList.contains('agy-chibi-hitbox')) {
+      if (
+        btn.closest(`#${HUD_BAR_ID}`) ||
+        btn.closest('#agy-chibi-skill-bar') ||
+        btn.closest('#agy-shinobu-npc-wrap') ||
+        btn.closest('agy-hashira-squad') ||
+        btn.classList.contains('agy-chibi-hitbox')
+      ) {
         return;
       }
       const aria = String(btn.getAttribute('aria-label') || btn.title || '').toLowerCase();
@@ -1227,7 +1922,10 @@
     const onComposerInput = () => ensureOdometerRunning();
     const onVis = () => {
       if (!document.hidden) {
-        if (state.cid) fetchDaemonTelemetry(state.cid);
+        if (state.cid && !state.streamConnected) {
+          connectTelemetryStream(state.cid);
+          fetchDaemonTelemetry(state.cid);
+        }
         ensureOdometerRunning();
       }
     };
@@ -1246,24 +1944,32 @@
     state.cleanups.push(() => composer.removeEventListener('input', onComposerInput));
     state.cleanups.push(() => document.removeEventListener('visibilitychange', onVis));
 
-    let idleCounter = 0;
+    // Smart heartbeat: monitors cid changes & serves as resilient fallback if SSE stream drops
+    // Keeps gentle background check when !document.hasFocus() so Kagura Bell still rings on Alt+Tab!
     state.pollTimer = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) return;
+      refreshUtilityButtonStates();
       const sig = extractLivePageSignals(state.composer);
-      if (sig.isWorking || sig.cid !== state.cid) {
-        idleCounter = 0;
-        if (sig.cid) fetchDaemonTelemetry(sig.cid);
+      if (sig.cid && sig.cid !== state.cid) {
+        switchActiveConversation(sig.cid);
         ensureOdometerRunning();
-      } else {
-        idleCounter++;
-        if (state.wasWorking) {
-          if (sig.cid) fetchDaemonTelemetry(sig.cid);
-          ensureOdometerRunning();
-        } else if (idleCounter % 6 === 0 && sig.cid) {
-          fetchDaemonTelemetry(sig.cid).then(() => ensureOdometerRunning());
+        return;
+      }
+
+      const now = Date.now();
+      const isHiddenOrUnfocused =
+        typeof document !== 'undefined' && (document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus()));
+
+      if (!state.streamConnected && state.cid) {
+        const minGap = isHiddenOrUnfocused ? Math.max(2800, state.fallbackBackoffMs) : state.fallbackBackoffMs;
+        if (now >= state.nextFallbackAt || (sig.isWorking && !isHiddenOrUnfocused && now - (state.nextFallbackAt - state.fallbackBackoffMs) >= minGap)) {
+          fetchDaemonTelemetry(state.cid);
         }
       }
-    }, 700);
+
+      if (!document.hidden && (sig.isWorking || state.wasWorking)) {
+        ensureOdometerRunning();
+      }
+    }, 850);
 
     const nowInit = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const initChars = measureConversationDomChars();
@@ -1276,6 +1982,7 @@
     state.cid = initSig.cid;
     state.wasWorking = initSig.isWorking;
     if (state.cid) {
+      connectTelemetryStream(state.cid);
       fetchDaemonTelemetry(state.cid).then(() => ensureOdometerRunning());
     }
     ensureOdometerRunning();
@@ -1284,6 +1991,7 @@
   }
 
   function teardown() {
+    abortActiveStream();
     if (state.rafId) {
       cancelAnimationFrame(state.rafId);
       state.rafId = 0;
@@ -1298,12 +2006,24 @@
       const fn = state.cleanups.pop();
       try { fn(); } catch (_) {}
     }
+    if (state.composer && state.composer.dataset) {
+      delete state.composer.dataset.agyCrisis;
+    }
     if (typeof document !== 'undefined') {
       document.querySelectorAll(`#${HUD_BAR_ID}, #${ECHO_BAR_ID}`).forEach((el) => el.remove());
+      if (document.documentElement) {
+        delete document.documentElement.dataset.agyRedBlade;
+      }
+    }
+    if (typeof window !== 'undefined' && window.__AGY_SQUAD_RAID__ && typeof window.__AGY_SQUAD_RAID__.teardown === 'function') {
+      try { window.__AGY_SQUAD_RAID__.teardown(); } catch (_) {}
     }
     state.composer = null;
     state.barEl = null;
     state.echoEl = null;
+    state.kaguraBtnEl = null;
+    state.cinemaBtnEl = null;
+    state.bladeBtnEl = null;
     state.popoverOpen = false;
   }
 
@@ -1312,9 +2032,22 @@
     castYoriichiSunBreathing,
     showUserMessageEcho,
     hideUserMessageEcho,
+    ingestTelemetrySnapshot,
+    setBladeBonusHeat: (bonus) => {
+      state.bladeBonusHeat = Math.max(0, Math.min(100, Number(bonus) || 0));
+      computeAndApplyBladeHeat();
+    },
+    triggerCrisisSlashDemo: (reason) => {
+      executeDemonSlayCelebration(Date.now(), reason || 'Ác Quỷ Diệt Sát • Toàn bộ kiểm thử Exit 0!');
+    },
     teardown,
+    destroy: teardown,
     refresh: () => {
-      if (state.cid) fetchDaemonTelemetry(state.cid);
+      if (state.cid) {
+        if (!state.streamConnected) connectTelemetryStream(state.cid);
+        fetchDaemonTelemetry(state.cid);
+      }
+      refreshUtilityButtonStates();
       ensureOdometerRunning();
     }
   };

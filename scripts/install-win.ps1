@@ -23,7 +23,7 @@ if ($NodeMajor -lt 22) {
     Write-Error "Node.js >= 22 is required (found v$NodeMajor at $NodeExe)."
 }
 
-if (-not (Test-Path $PayloadJs)) {
+if (-not (Test-Path -LiteralPath $PayloadJs)) {
     $PyCmd = Get-Command python -ErrorAction SilentlyContinue
     if (-not $PyCmd) {
         $PyCmd = Get-Command python3 -ErrorAction SilentlyContinue
@@ -39,34 +39,47 @@ if (-not (Test-Path $PayloadJs)) {
         Write-Host "[install-win] Building dist/theme_payload.js via Node.js..."
         & $NodeExe $BuildNode
     }
-    if (-not (Test-Path $PayloadJs)) {
+    if (-not (Test-Path -LiteralPath $PayloadJs)) {
         Write-Error "Failed to build dist/theme_payload.js."
     }
 }
 
-if (Test-Path $PidFile) {
-    $OldPidText = (Get-Content $PidFile -ErrorAction SilentlyContinue | Select-Object -First 1)
+if (Test-Path -LiteralPath $PidFile) {
+    $OldPidText = (Get-Content -LiteralPath $PidFile -ErrorAction SilentlyContinue | Select-Object -First 1)
     $OldPid = 0
     if ([int]::TryParse(($OldPidText -as [string]), [ref]$OldPid) -and $OldPid -gt 0) {
         $ExistingProc = Get-Process -Id $OldPid -ErrorAction SilentlyContinue
         if ($ExistingProc -and $ExistingProc.ProcessName -eq 'node') {
-            Write-Host "[install-win] Stopping existing daemon (PID $OldPid)..."
-            Stop-Process -Id $OldPid -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Milliseconds 350
+            $IsDaemonCmd = $true
+            try {
+                $CimProc = Get-CimInstance Win32_Process -Filter "ProcessId = $OldPid" -ErrorAction Stop
+                if ($CimProc -and $CimProc.CommandLine -and ($CimProc.CommandLine -notmatch 'theme_daemon\.js')) {
+                    $IsDaemonCmd = $false
+                }
+            } catch {
+                $IsDaemonCmd = $true
+            }
+            if ($IsDaemonCmd) {
+                Write-Host "[install-win] Stopping existing daemon (PID $OldPid)..."
+                Stop-Process -Id $OldPid -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Milliseconds 350
+            }
         }
     }
-    Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $PidFile -Force -ErrorAction SilentlyContinue
 }
 
-# Generate silent-start.vbs dynamically without hardcoding user or Node paths.
+# Generate silent-start.vbs using UTF-16LE with BOM ([System.Text.Encoding]::Unicode)
+# so wscript.exe preserves Unicode / Vietnamese diacritics in user profile paths cleanly.
+$EscapedRepo = $RepoRoot.Replace('"', '""')
 $EscapedNode = $NodeExe.Replace('"', '""')
 $EscapedDaemon = $DaemonJs.Replace('"', '""')
 $VbsContent = @"
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.CurrentDirectory = "$($RepoRoot.Replace('"', '""'))"
+WshShell.CurrentDirectory = "$EscapedRepo"
 WshShell.Run """$EscapedNode"" ""$EscapedDaemon""", 0, False
 "@
-Set-Content -Path $VbsPath -Value $VbsContent -Encoding ASCII
+[System.IO.File]::WriteAllText($VbsPath, $VbsContent, [System.Text.Encoding]::Unicode)
 
 $WshShell = New-Object -ComObject WScript.Shell
 
@@ -76,13 +89,13 @@ $ShortcutSearchDirs = @(
     [Environment]::GetFolderPath('Programs'),
     [Environment]::GetFolderPath('Startup'),
     (Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar')
-) | Where-Object { $_ -and (Test-Path $_) }
+) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
 
 foreach ($SearchDir in $ShortcutSearchDirs) {
-    Get-ChildItem -Path $SearchDir -Recurse -Filter '*.lnk' -ErrorAction SilentlyContinue | ForEach-Object {
+    Get-ChildItem -LiteralPath $SearchDir -Recurse -Filter '*.lnk' -ErrorAction SilentlyContinue | ForEach-Object {
         try {
             $Sc = $WshShell.CreateShortcut($_.FullName)
-            if ($Sc.TargetPath -and ($Sc.TargetPath -imatch '\\Antigravity\.exe$')) {
+            if ($Sc.TargetPath -and ($Sc.TargetPath -imatch '\\Antigravity\.exe$') -and (Test-Path -LiteralPath $Sc.TargetPath)) {
                 if ($Sc.Arguments -notmatch '--remote-debugging-port') {
                     $Sc.Arguments = ("$($Sc.Arguments) --remote-debugging-port=0").Trim()
                     $Sc.Save()
@@ -100,7 +113,7 @@ if (-not $NoStartup) {
     $ShortcutPath = Join-Path $StartupDir 'AntigravityCustomTheme.lnk'
     $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
     $Shortcut.TargetPath = 'wscript.exe'
-    $Shortcut.Arguments = """$VbsPath"""
+    $Shortcut.Arguments = "`"$($VbsPath.Replace('"', '""'))`""
     $Shortcut.WorkingDirectory = $RepoRoot
     $Shortcut.WindowStyle = 7
     $Shortcut.Description = 'Antigravity Custom Theme Daemon'
@@ -128,14 +141,14 @@ if (-not $launchedDetached) {
 
 for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep -Milliseconds 250
-    if (Test-Path $PidFile) {
-        $NewPidText = (Get-Content $PidFile -ErrorAction SilentlyContinue | Select-Object -First 1)
+    if (Test-Path -LiteralPath $PidFile) {
+        $NewPidText = (Get-Content -LiteralPath $PidFile -ErrorAction SilentlyContinue | Select-Object -First 1)
         $NewPid = 0
         if ([int]::TryParse(($NewPidText -as [string]), [ref]$NewPid) -and $NewPid -gt 0) {
             if (Get-Process -Id $NewPid -ErrorAction SilentlyContinue) {
                 Write-Host "[install-win] Daemon running silently (PID $NewPid)."
                 $PortFile = Join-Path $env:APPDATA 'Antigravity\DevToolsActivePort'
-                if (-not (Test-Path $PortFile)) {
+                if (-not (Test-Path -LiteralPath $PortFile)) {
                     Write-Host "[install-win] Note: DevToolsActivePort not found yet. Quit Antigravity completely (System Tray -> Quit) and reopen it from Start Menu (if using a Taskbar pin, unpin and re-pin from Start Menu)."
                 }
                 exit 0

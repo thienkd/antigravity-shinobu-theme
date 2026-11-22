@@ -1,0 +1,14 @@
+# Legal Notices, Attribution & Intellectual Property Disclaimer
+
+## 1. Open-Source Software Attribution
+- **Core Glassmorphic & CDP Injection Foundation**: Derived from [antigravity-custom-theme-skill](https://github.com/giakiet22102006/antigravity-custom-theme-skill) by **Gia Kiet**, licensed under the MIT License.
+- **Next-Gen Live VFX Engine, Telemetry HUD, Hashira Swarm Raid, Bio-Acoustic WebAudio & AI Theme Forge**: Copyright (c) 2026 **thienkd** and contributors, licensed under the MIT License.
+- **Zero External Runtime Dependencies**: Built strictly on native Node.js (`>= 22.0.0`) standard libraries and browser Web APIs.
+
+## 2. Non-Affiliation & Trademark Disclaimer
+- **Antigravity** is a product and trademark of **Google LLC**. This project is an independent, community-built customization engine and is **not** affiliated with, endorsed by, sponsored by, or officially supported by Google LLC.
+- **Kimetsu no Yaiba (Demon Slayer)**, its characters, names, breathing style terminology, and related indicia are trademarks and copyrights of **Koyoharu Gotouge / SHUEISHA, Aniplex, and ufotable**.
+- Sample cosmic digital art (`wlop_cosmic_2k.webp`) is credited to **WLOP (Wang Ling)**.
+
+## 3. Scope of Artwork Usage (Personal & Non-Commercial Fan Customization)
+All character illustrations, wallpapers, and thematic fan-art assets under `themes/assets/` are included strictly for **personal, non-commercial desktop customization and educational demonstration**. Commercial redistribution or standalone sale of third-party character artwork is prohibited without explicit permission from the respective rights holders. Rights holders requesting asset removal or attribution updates may open an issue or contact the repository maintainer for immediate compliance.

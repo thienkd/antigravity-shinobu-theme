@@ -1,25 +1,36 @@
 #!/usr/bin/env python3
 """
-Compile themes/themes.json + engine/core.js (+ engine/kny_fx_modes.js) into dist/theme_payload.js.
-Default mode: Hybrid Asset URLs — inlines tiny assets (< 12 KB cornerSvg/userAvatar/small ornaments)
-while keeping heavy wallpapers, > 12 KB Chibi SVG stickers, and agentAvatars as clean "assets/<file>"
-relative paths for instant HTTP loading via theme_daemon.js or preview.html.
-Pass --inline-all to embed every asset (compressing >2560px rasters to WebP when Pillow is available)
-into a single self-contained payload.
+Compile themes/themes.json + engine/core.js (+ engine modules) into dist/theme_payload.js.
+- Strips UTF-8 BOM across JSON, JS, and SVG sources
+- Enforces build-time SVG security checks (rejects <script, <foreignobject, <iframe, on*=, javascript:)
+- Uses reproducible 8-character SHA-256 content hashes (?v=<hash8>) instead of local mtime timestamps
+- Wraps final bundle inside Master IIFE Closure receiving lexical __AGY_BOOT__
 """
 
 from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import io
 import json
 import mimetypes
+import re
 import sys
 import urllib.parse
 from pathlib import Path
 
-ASSET_KEYS = ("wallpaper", "sticker", "userSticker", "actionSticker", "userActionSticker", "cornerSvg", "userCornerSvg", "userAvatar", "agentAvatar")
+ASSET_KEYS = (
+    "wallpaper",
+    "sticker",
+    "userSticker",
+    "actionSticker",
+    "userActionSticker",
+    "cornerSvg",
+    "userCornerSvg",
+    "userAvatar",
+    "agentAvatar",
+)
 HYBRID_INLINE_CANDIDATES = {"cornerSvg", "userCornerSvg", "userAvatar", "sticker", "userSticker"}
 HYBRID_INLINE_MAX_BYTES = 12 * 1024
 AVATAR_KEYS = {"userAvatar", "agentAvatar"}
@@ -28,9 +39,39 @@ PLACEHOLDER = "/*__THEMES_PLACEHOLDER__*/{}"
 DEFAULT_MAX_DIM = 2560
 WEBP_QUALITY = 88
 
+EXTRA_MODULES = [
+    "agy_security.js",
+    "kny_semantic_icons.js",
+    "kny_bio_audio.js",
+    "kny_fx_modes.js",
+    "kny_breathing_skills.js",
+    "kny_chibi_aura.js",
+    "kny_squad_raid.js",
+    "kny_token_hud.js",
+    "agy_theme_forge.js",
+    "kny_cinema_director.js",
+]
+
+UNSAFE_SVG_RE = re.compile(
+    r"<script|<foreignobject|<iframe|\bon[a-z]+\s*=|javascript:",
+    re.IGNORECASE,
+)
+
+
+def read_utf8_no_bom(path: Path) -> str:
+    return path.read_text(encoding="utf-8").lstrip("\ufeff")
+
+
+def assert_safe_svg(svg_text: str, svg_path: Path) -> None:
+    if UNSAFE_SVG_RE.search(svg_text):
+        raise ValueError(
+            f"Security violation: unsafe executable markup detected in SVG asset: {svg_path}"
+        )
+
 
 def encode_svg(svg_path: Path) -> str:
-    svg_text = svg_path.read_text(encoding="utf-8")
+    svg_text = read_utf8_no_bom(svg_path)
+    assert_safe_svg(svg_text, svg_path)
     return "data:image/svg+xml," + urllib.parse.quote(svg_text)
 
 
@@ -65,7 +106,6 @@ def encode_raster(img_path: Path, max_dim: int) -> str:
             resample = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
             img = img.resize(new_size, resample)
 
-        # Keep existing small WebP bytes untouched if already within budget and not resized.
         if img_path.suffix.lower() == ".webp" and longest <= max_dim:
             raw = img_path.read_bytes()
             if len(raw) <= 1.2 * 1024 * 1024:
@@ -115,6 +155,9 @@ def resolve_asset_value(
     if not asset_path.is_file():
         raise FileNotFoundError(f"Theme asset not found: {trimmed} (resolved: {asset_path})")
 
+    if asset_path.suffix.lower() == ".svg":
+        assert_safe_svg(read_utf8_no_bom(asset_path), asset_path)
+
     if inline_all:
         return encode_asset_inline(asset_path, max_dim)
 
@@ -122,13 +165,12 @@ def resolve_asset_value(
     if rel_posix is None:
         return encode_asset_inline(asset_path, max_dim)
 
-    st = asset_path.stat()
-    file_size = st.st_size
-    if key in HYBRID_INLINE_CANDIDATES and file_size < HYBRID_INLINE_MAX_BYTES:
+    raw_bytes = asset_path.read_bytes()
+    if key in HYBRID_INLINE_CANDIDATES and len(raw_bytes) < HYBRID_INLINE_MAX_BYTES:
         return encode_asset_inline(asset_path, max_dim)
 
-    ver = hex(int(st.st_mtime * 1000))[2:]
-    return f"{rel_posix}?v={ver}"
+    hash8 = hashlib.sha256(raw_bytes).hexdigest()[:8]
+    return f"{rel_posix}?v={hash8}"
 
 
 def build_payload(
@@ -143,7 +185,7 @@ def build_payload(
     if not engine_path.is_file():
         raise FileNotFoundError(f"core.js not found: {engine_path}")
 
-    themes_raw = json.loads(themes_path.read_text(encoding="utf-8"))
+    themes_raw = json.loads(read_utf8_no_bom(themes_path))
     if not isinstance(themes_raw, dict) or not themes_raw:
         raise ValueError("themes.json must be a non-empty JSON object keyed by theme name.")
 
@@ -161,7 +203,7 @@ def build_payload(
                 )
         resolved_themes[name] = copied
 
-    engine_src = engine_path.read_text(encoding="utf-8")
+    engine_src = read_utf8_no_bom(engine_path)
     count = engine_src.count(PLACEHOLDER)
     if count != 1:
         raise ValueError(
@@ -171,14 +213,19 @@ def build_payload(
     themes_json = json.dumps(resolved_themes, ensure_ascii=False)
     compiled = engine_src.replace(PLACEHOLDER, themes_json, 1)
 
-    extra_modules = ["kny_semantic_icons.js", "kny_fx_modes.js", "kny_breathing_skills.js", "kny_chibi_aura.js", "kny_token_hud.js"]
     prepends: list[str] = []
-    for mod_name in extra_modules:
+    for mod_name in EXTRA_MODULES:
         mod_path = engine_path.parent / mod_name
         if mod_path.is_file():
-            prepends.append(mod_path.read_text(encoding="utf-8"))
+            prepends.append(read_utf8_no_bom(mod_path))
     if prepends:
         compiled = "\n".join(prepends) + "\n" + compiled
+
+    compiled = (
+        "(function(__AGY_BOOT__) {\n"
+        + compiled
+        + '\n})(typeof __AGY_INJECT_BOOT__ !== "undefined" ? __AGY_INJECT_BOOT__ : null);\n'
+    )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(compiled, encoding="utf-8")
