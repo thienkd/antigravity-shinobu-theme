@@ -1182,7 +1182,9 @@
   }
 
   function setSoundMuted(muted) {
-    const flag = Boolean(muted);
+    const flag = typeof muted === 'string'
+      ? !/^(false|0|off|no|)$/i.test(muted.trim())
+      : Boolean(muted);
     safeWriteStorage(STORAGE_SFX_MUTED, flag ? '1' : '0');
     if (ROOT_SCOPE && ROOT_SCOPE.__AGY_BIO_AUDIO__) {
       const bio = ROOT_SCOPE.__AGY_BIO_AUDIO__;
@@ -3354,8 +3356,10 @@
         base.impactShake = Math.max(base.impactShake, 1 - Math.abs(rp - 0.38) / 0.05);
       }
     }
-    if (trajOpts && trajOpts.hitStopActive) {
-      base.hitStopActive = true;
+    const hasExplicitHs = Boolean(trajOpts && (typeof trajOpts.hitStopActive === 'boolean' || typeof trajOpts.impactFrameActive === 'boolean'));
+    if (hasExplicitHs) {
+      base.hitStopActive = Boolean(trajOpts.hitStopActive || trajOpts.impactFrameActive);
+      if (!trajOpts.impactFrameActive) base.impactFrameKind = null;
     }
 
     const vfx3d = get3DVfxKernel();
@@ -3400,7 +3404,7 @@
         slashing: clamp(finiteNum(kActor.slashing, base.slashing), 0, 1.5),
         charging: clamp(finiteNum(kActor.charging, base.charging), 0, 1.5),
         notoGleam: clamp(finiteNum(kActor.notoGleam, 0), 0, 1),
-        hitStopActive: Boolean((trajOpts && trajOpts.hitStopActive) || kActor.hitStopActive),
+        hitStopActive: hasExplicitHs ? Boolean(trajOpts.hitStopActive || trajOpts.impactFrameActive) : Boolean(kActor.hitStopActive),
         impactFrameKind: kActor.impactFrameKind || null,
         rimGlowAlpha: clamp(finiteNum(kActor.rimGlowAlpha, base.rimGlowAlpha), 0, 1),
         impactShake: base.impactShake,
@@ -3790,11 +3794,17 @@
     return false;
   }
 
+  function nowPerfMs() {
+    return (typeof performance !== 'undefined' && performance && typeof performance.now === 'function')
+      ? performance.now()
+      : Date.now();
+  }
+
   function requestFrame(cb) {
     if (typeof ROOT_SCOPE.requestAnimationFrame === 'function') {
       return ROOT_SCOPE.requestAnimationFrame(cb);
     }
-    return setTimeout(() => cb(Date.now()), 16);
+    return setTimeout(() => cb(nowPerfMs()), 16);
   }
 
   function cancelFrame(id) {
@@ -4305,7 +4315,7 @@
 
     // Respect prefers-reduced-motion: render serene static Z-Sandwich illumination frame, zero shake/flash, clean teardown
     if (isReduced) {
-      const staticOpts = { dpr, origin, profile3D: skillProfile3D, reducedMotion: true, hitStopActive: false };
+      const staticOpts = { dpr, origin, profile3D: skillProfile3D, reducedMotion: true, hitStopActive: false, impactFrameActive: false };
       const staticActor = resolveStageActor3D(vw, vh, 0.48, 0.48, skill, origin, spriteHeroKey, staticOpts);
       const vfx3dStatic = get3DVfxKernel();
       const has3DStatic = Boolean(vfx3dStatic && typeof vfx3dStatic.renderBackPass === 'function');
@@ -4330,12 +4340,10 @@
     }
 
     const duration = clamp(Number(opts.durationMs) || skill.durationMs || 2750, 2350, 3150);
-    const nowFn = (typeof performance !== 'undefined' && typeof performance.now === 'function')
-      ? () => performance.now()
-      : () => Date.now();
+    const nowFn = nowPerfMs;
     const startTs = nowFn();
 
-    // Hit-Stop (42ms) & ufotable Impact Frame (35ms) state machine — triggers once at peak slash (0.33..0.36)
+    // Hit-Stop (42ms) & ufotable Impact Frame (35ms) state machine — one-way threshold at peak slash (0.33..0.60)
     const IMPACT_FLASH_MS = 35;
     const HIT_STOP_MS = 42;
     const TOTAL_FREEZE_MS = IMPACT_FLASH_MS + HIT_STOP_MS;
@@ -4370,10 +4378,10 @@
       let shakeY = 0;
 
       if (!curReduced) {
-        if (!impactTriggered && p >= 0.33 && p <= 0.365) {
+        if (!impactTriggered && p >= 0.33 && p < 0.60) {
           impactTriggered = true;
           impactStartMs = cur;
-          frozenRawP = clamp(p, 0.33, 0.36);
+          frozenRawP = p <= 0.36 ? clamp(p, 0.33, 0.36) : Math.min(0.58, p);
         }
 
         if (impactTriggered) {
@@ -4428,6 +4436,7 @@
         profile3D: skillProfile3D,
         hitStopActive: isHitStop,
         impactFrameActive: isImpactFrame,
+        impactFlashProgress,
         rawP: p,
         effectiveP: effectiveRawP,
         reducedMotion: curReduced

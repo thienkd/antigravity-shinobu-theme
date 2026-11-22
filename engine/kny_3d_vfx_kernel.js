@@ -47,10 +47,15 @@
   }
   const hexCss = (hex) => { const n = hexInt(hex); return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`; };
 
+  const hasOwn = (o, k) => Boolean(o && Object.prototype.hasOwnProperty.call(o, k));
+  const normW = (w) => { const n = Number(w); return n > 0 && isFin(n) ? max(1, n) : 1440; };
+  const normH = (h) => { const n = Number(h); return n > 0 && isFin(n) ? max(1, n) : 900; };
+
   function mat4Perspective(fovRad, aspect, near, far, out) {
-    const m = out || new Float32Array(16), f = 1 / tan(clamp(fovRad, 0.25, 2.2) * 0.5), nf = 1 / (near - far);
+    const m = out || new Float32Array(16), f = 1 / tan(clamp(Number(fovRad) || 0.87, 0.25, 2.2) * 0.5);
+    const n = isFin(near) ? near : 20, fa = (isFin(far) && abs(far - n) > 1e-5) ? far : n + 1000, nf = 1 / (n - fa);
     m.fill(0);
-    m[0] = f / (aspect > 0.05 ? aspect : 1.6); m[5] = f; m[10] = (far + near) * nf; m[11] = -1; m[14] = 2 * far * near * nf;
+    m[0] = f / (aspect > 0 && isFin(aspect) ? aspect : 1.6); m[5] = f; m[10] = (fa + n) * nf; m[11] = -1; m[14] = 2 * fa * n * nf;
     return m;
   }
 
@@ -71,18 +76,20 @@
 
   function mat4Multiply(a, b, out) {
     const m = out || new Float32Array(16);
+    const a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3], a4 = a[4], a5 = a[5], a6 = a[6], a7 = a[7];
+    const a8 = a[8], a9 = a[9], a10 = a[10], a11 = a[11], a12 = a[12], a13 = a[13], a14 = a[14], a15 = a[15];
     for (let c = 0; c < 4; c++) {
       const i = c * 4, b0 = b[i], b1 = b[i + 1], b2 = b[i + 2], b3 = b[i + 3];
-      m[i] = b0 * a[0] + b1 * a[4] + b2 * a[8] + b3 * a[12];
-      m[i + 1] = b0 * a[1] + b1 * a[5] + b2 * a[9] + b3 * a[13];
-      m[i + 2] = b0 * a[2] + b1 * a[6] + b2 * a[10] + b3 * a[14];
-      m[i + 3] = b0 * a[3] + b1 * a[7] + b2 * a[11] + b3 * a[15];
+      m[i] = b0 * a0 + b1 * a4 + b2 * a8 + b3 * a12;
+      m[i + 1] = b0 * a1 + b1 * a5 + b2 * a9 + b3 * a13;
+      m[i + 2] = b0 * a2 + b1 * a6 + b2 * a10 + b3 * a14;
+      m[i + 3] = b0 * a3 + b1 * a7 + b2 * a11 + b3 * a15;
     }
     return m;
   }
 
   function projectPoint3D(x, y, z, vpMat, w, h) {
-    const m = vpMat || _vp, vw = w > 0 ? w : 1440, vh = h > 0 ? h : 900;
+    const m = vpMat || _vp, vw = normW(w), vh = normH(h);
     const cx = m[0] * x + m[4] * y + m[8] * z + m[12], cy = m[1] * x + m[5] * y + m[9] * z + m[13], cw = m[3] * x + m[7] * y + m[11] * z + m[15];
     if (!(cw > 12)) return { sx: vw * 0.5, sy: vh * 0.5, zCam: cw || 0, scale: 0, visible: false };
     const iw = 1 / cw, nx = cx * iw, ny = cy * iw, fc = hypot(m[1], m[5], m[9]) || (1 / REF_TAN);
@@ -95,7 +102,7 @@
 
   function computeCameraState(rawP, arch, opts) {
     const o = opts || {}, p = clamp(Number(rawP) || 0, 0, 1);
-    const w = max(320, Number(o.width) || 1440), h = max(240, Number(o.height) || 900);
+    const w = normW(o.width), h = normH(o.height);
     let fovDeg = 50, dz = REF_Z, yaw = 0, pitch = 0, rollDeg = 0;
     if (!o.reducedMotion) {
       const pk = arch === A2 ? 66 : (arch === A5 ? 65 : (arch === A0 ? 62 : 59));
@@ -153,10 +160,10 @@
         const px = TG[k - 3], py = TG[k - 2], pz = TG[k - 1];
         const vx = py * tz - pz * ty, vy = pz * tx - px * tz, vz = px * ty - py * tx, sA = hypot(vx, vy, vz), cA = clamp(px * tx + py * ty + pz * tz, -1, 1);
         if (sA > 1e-5) {
-          const kx = vx / sA, ky = vy / sA, kz = vz / sA, kd = (kx * nx + ky * ny + kz * nz) * (1 - cA);
-          nx = nx * cA + (ky * nz - kz * ny) * sA + kx * kd;
-          ny = ny * cA + (kz * nx - kx * nz) * sA + ky * kd;
-          nz = nz * cA + (kx * ny - ky * nx) * sA + kz * kd;
+          const kx = vx / sA, ky = vy / sA, kz = vz / sA, ox = nx, oy = ny, oz = nz, kd = (kx * ox + ky * oy + kz * oz) * (1 - cA);
+          nx = ox * cA + (ky * oz - kz * oy) * sA + kx * kd;
+          ny = oy * cA + (kz * ox - kx * oz) * sA + ky * kd;
+          nz = oz * cA + (kx * oy - ky * ox) * sA + kz * kd;
         }
         const dt = nx * tx + ny * ty + nz * tz;
         nx -= tx * dt; ny -= ty * dt; nz -= tz * dt;
@@ -215,16 +222,21 @@
   }
 
   function resolveSkill3DProfile(skill, opts) {
-    const sk = skill || {}, o = opts || {}, rawId = String(sk.id || '').trim().toLowerCase();
-    const charId = String(sk.charId || rawId.split('_')[0] || 'giyu').toLowerCase();
-    const formIndex = typeof sk.index === 'number' ? clamp(sk.index, 0, 3) : (/\d+$/.test(rawId) ? clamp(parseInt(rawId.match(/(\d+)$/)[1], 10) - 1, 0, 3) : 0);
-    const pr = PERSONAS[String(o.persona || o.fxMode || sk.persona || (PERSONAS[rawId] ? rawId : '')).trim().toLowerCase()] || null;
+    const sk = (skill && typeof skill === 'object') ? skill : (typeof skill === 'string' ? { id: skill } : {});
+    const o = (opts && typeof opts === 'object') ? opts : {};
+    const rawId = (typeof sk.id === 'string' || typeof sk.id === 'number') ? String(sk.id).trim().toLowerCase() : '';
+    const rawPart = rawId ? rawId.split('_')[0] : '';
+    const charId = String(sk.charId || (rawPart && !hasOwn( Object.prototype, rawPart) ? rawPart : '') || 'giyu').toLowerCase();
+    const formIndex = isFin(sk.index) ? clamp(floor(sk.index), 0, 3) : (/\d+$/.test(rawId) ? clamp(parseInt(rawId.match(/(\d+)$/)[1], 10) - 1, 0, 3) : 0);
+    const pKey = String(o.persona || o.personaId || o.fxMode || sk.persona || (hasOwn(PERSONAS, rawId) ? rawId : '')).trim().toLowerCase();
+    const pr = hasOwn(PERSONAS, pKey) ? PERSONAS[pKey] : null;
     const fb = ((charId === 'yoriichi' || charId === 'tanjiro') && formIndex === 3) ? A5
       : (charId === 'ubuyashiki' ? A3 : (/gyomei|uzui|mitsuri/.test(charId) ? A4 : (charId === 'zenitsu' ? (formIndex === 3 ? A0 : A2) : (charId === 'obanai' ? (formIndex === 1 ? A2 : A0) : [A7, A1, A0, A3][formIndex]))));
-    const archetype = (pr && pr[0]) || SKILL_MAP[rawId] || fb || A7;
+    const mapped = hasOwn(SKILL_MAP, rawId) ? SKILL_MAP[rawId] : null;
+    const archetype = (pr && pr[0]) || mapped || fb || A7;
     const elemMode = pr ? pr[1] : resolveElem(sk.sfxElement, charId);
     const rimHex = (pr && pr[2]) || sk.primaryColor || '#38bdf8', coreHex = (pr && pr[3]) || sk.accentColor || '#ffffff';
-    const sp = SPECS[archetype] || SPECS[A7];
+    const sp = hasOwn(SPECS, archetype) ? SPECS[archetype] : SPECS[A7];
     return {
       id: rawId || `${charId}_${formIndex + 1}`, charId, formIndex, archetype, elemMode,
       zStart: sp[0], zEnd: sp[1], turns: sp[2], radius: sp[3], pitch: sp[4], ribbonWidth: sp[5], particleCount: sp[6],
@@ -372,7 +384,7 @@
   }
 
   function computeActor3DTrajectory(w, h, rawP, skill, homeOrigin, spriteMeta, opts) {
-    const vw = max(320, Number(w) || 1440), vh = max(240, Number(h) || 900);
+    const vw = normW(w), vh = normH(h);
     const o = opts || {}, red = Boolean(o.reducedMotion), p = clamp(Number(rawP) || 0, 0, 1);
     const wp = red ? p : (p < 0.35 ? (p / 0.35) * 0.365 : (p <= 0.41 ? 0.365 + ((p - 0.35) / 0.06) * 0.015 : 0.38 + ((p - 0.41) / 0.59) * 0.62));
     const prof = resolveSkill3DProfile(skill, o), cam = computeCameraState(p, prof.archetype, { width: vw, height: vh, reducedMotion: red }), m = cam.vpMat;
@@ -381,6 +393,14 @@
     const home = (homeOrigin && isFin(homeOrigin.x) && isFin(homeOrigin.y)) ? { x: homeOrigin.x, y: homeOrigin.y } : { x: vw * 0.8, y: vh * 0.84 };
     const hZ = -40, cw = REF_Z - hZ, hWx = (((home.x / vw) * 2 - 1) * cw - m[8] * hZ - m[12]) / (m[0] || 1.3), hWy = ((1 - (home.y / vh) * 2) * cw - m[9] * hZ - m[13]) / (m[5] || 2.14);
     const c0 = sampleCombat3D(prof, 0, vw, vh), c1 = sampleCombat3D(prof, 1, vw, vh);
+    const hasCallerHs = typeof o.hitStopActive === 'boolean' || typeof o.impactFrameActive === 'boolean';
+    const impAct = !red && (hasCallerHs ? Boolean(o.impactFrameActive) : (p >= 0.33 && p <= 0.36));
+    const hitStopActive = !red && (hasCallerHs ? Boolean(o.hitStopActive || o.impactFrameActive) : (p >= 0.33 && p <= 0.365));
+    const impactFrameKind = impAct
+      ? (hasCallerHs
+        ? ((isFin(o.impactFlashProgress) ? o.impactFlashProgress : 0) < 0.5 ? 'invert_white' : 'crimson_flash')
+        : (p < 0.345 ? 'invert_white' : 'crimson_flash'))
+      : null;
 
     let worldX = 0, worldY = 0, worldZ = 0, rot = 0, facing = c0.facing || -1;
     let phase = 'slash', slashing = 0, charging = 0, stretch = 1, squash = 1, notoGleam = 0, hBlend = 0;
@@ -398,8 +418,7 @@
     } else if (wp < 0.84) {
       const cu = (wp - 0.24) / 0.6, pt = sampleCombat3D(prof, cu, vw, vh);
       worldX = pt.wx; worldY = pt.wy; worldZ = pt.wz; rot = (pt.spin && !spinOk) ? sin(cu * PI) * 0.25 : (pt.rot || 0); facing = pt.facing || -1;
-      if (p >= 0.35 && p <= 0.42 && !red) { phase = 'hitstop'; slashing = 1; stretch = 1.12; squash = 0.92; }
-      else if (wp < 0.48) { phase = 'slash'; slashing = 1; stretch = 1.08; squash = 0.95; }
+      if (wp < 0.48) { phase = 'slash'; slashing = 1; stretch = 1.08; squash = 0.95; }
       else {
         phase = 'followthrough'; slashing = max(0, 1 - ((wp - 0.48) / 0.36) * 1.4);
         if (p >= 0.68 && p <= 0.84) notoGleam = sin(((p - 0.68) / 0.16) * PI);
@@ -409,6 +428,7 @@
       worldX = lerp(c1.wx, hWx, er); worldY = lerp(c1.wy, hWy, er) + sin(ru * PI) * 82; worldZ = lerp(c1.wz, hZ, er);
       facing = hWx >= c1.wx ? 1 : -1; rot = (spinOk ? 0.55 : 0.22) * sin(ru * PI) * facing; hBlend = pow(ru, 2.2);
     }
+    if (hitStopActive) { phase = 'hitstop'; slashing = 1; stretch = 1.12; squash = 0.92; }
 
     const prj = projectPoint3D(worldX, worldY, worldZ, m, vw, vh);
     let sx = hBlend > 0 ? lerp(prj.sx, home.x, hBlend) : prj.sx, sy = hBlend > 0 ? lerp(prj.sy, home.y, hBlend) : prj.sy;
@@ -416,8 +436,6 @@
     const nxt = sampleCombat3D(prof, clamp((wp - 0.24) / 0.6 + 0.03, 0, 1), vw, vh);
     const velAngle = atan2(-(nxt.wy - worldY), (nxt.wx - worldX) || 1);
     const tiltX = red ? 0 : clamp((worldY / vh) * -0.45, -0.32, 0.32), tiltY = red ? 0 : clamp((worldX / vw) * 0.52 * facing, -0.38, 0.38);
-    const hitStopActive = !red && p >= 0.355 && p <= 0.405;
-    const impactFrameKind = !red ? (p >= 0.362 && p < 0.376 ? 'invert_white' : (p >= 0.376 && p <= 0.39 ? 'crimson_flash' : null)) : null;
     const pScale = clamp(prj.scale || 1, 0.45, 2.35);
     const endMul = phase === 'charge' ? lerp(92 / baseSize, 1, charging) : (phase === 'return' ? lerp(1, 90 / baseSize, hBlend) : 1);
     const size = baseSize * lerp(1, pScale, 0.68) * endMul;
@@ -465,19 +483,39 @@ void main(){
   const _colBuf = new Float32Array(9);
   let glCv = null, gl = null, glVer = 0, prog = null, vsObj = null, fsObj = null, vbo = null, vao = null, uLoc = null;
   let extPar = null, shOk = false, shPend = false, force2D = false, fbReason = '';
-  let leaseT = 0, slowStreak = 0, accMs = 0, visBound = false;
+  let leaseT = 0, slowStreak = 0, accMs = 0, visBound = false, dead = false, selfLosing = false, lostCount = 0;
+  let cKey = '', cProf = null, cCam = null, geoUp = false;
   const nowMs = (typeof performance !== 'undefined' && isFn(performance.now)) ? () => performance.now() : () => Date.now();
+
+  function touchLease() {
+    if (dead) return;
+    if (leaseT) clearTimeout(leaseT);
+    leaseT = setTimeout(() => { leaseT = 0; releaseGpuNow(); }, LEASE_MS);
+  }
 
   function onLost(e) {
     if (e && isFn(e.preventDefault)) e.preventDefault();
-    gl = null; prog = null; vsObj = null; fsObj = null; vbo = null; vao = null; uLoc = null; shOk = false; shPend = false;
-    if (!fbReason) fbReason = 'webgl_context_lost';
+    if (glCv) {
+      try { glCv.removeEventListener('webglcontextlost', onLost, false); } catch (_) {}
+      glCv = null;
+    }
+    if (leaseT) { clearTimeout(leaseT); leaseT = 0; }
+    gl = null; glVer = 0; prog = null; vsObj = null; fsObj = null; vbo = null; vao = null; uLoc = null; extPar = null;
+    shOk = false; shPend = false; geoUp = false; cKey = '';
+    if (!selfLosing) {
+      if (++lostCount >= 2) { force2D = true; fbReason = 'webgl_context_lost_repeated'; }
+      else if (!fbReason) fbReason = 'webgl_context_lost';
+    }
   }
   function onVis() { try { if (typeof document !== 'undefined' && document && document.hidden) releaseGpuNow(); } catch (_) {} }
 
   function releaseGpuNow() {
     if (leaseT) { clearTimeout(leaseT); leaseT = 0; }
+    if (glCv) {
+      try { glCv.removeEventListener('webglcontextlost', onLost, false); } catch (_) {}
+    }
     if (gl) {
+      selfLosing = true;
       try {
         if (vao && glVer === 2 && isFn(gl.deleteVertexArray)) gl.deleteVertexArray(vao);
         if (vbo) gl.deleteBuffer(vbo);
@@ -487,43 +525,53 @@ void main(){
         const lx = gl.getExtension('WEBGL_lose_context');
         if (lx && isFn(lx.loseContext)) lx.loseContext();
       } catch (_) {}
+      selfLosing = false;
     }
     if (glCv) {
-      try { glCv.removeEventListener('webglcontextlost', onLost, false); } catch (_) {}
       glCv.width = 1; glCv.height = 1; glCv = null;
     }
-    gl = null; glVer = 0; prog = null; vsObj = null; fsObj = null; vbo = null; vao = null; uLoc = null; extPar = null; shOk = false; shPend = false;
+    gl = null; glVer = 0; prog = null; vsObj = null; fsObj = null; vbo = null; vao = null; uLoc = null; extPar = null;
+    shOk = false; shPend = false; geoUp = false; cKey = '';
   }
 
   function linkSetup(g) {
     if (!prog || !g.getProgramParameter(prog, g.LINK_STATUS)) { force2D = true; fbReason = 'shader_link_failed'; releaseGpuNow(); return false; }
     vbo = g.createBuffer(); g.bindBuffer(g.ARRAY_BUFFER, vbo); g.bufferData(g.ARRAY_BUFFER, RV.byteLength, g.DYNAMIC_DRAW);
+    geoUp = false;
     if (glVer === 2 && isFn(g.createVertexArray)) { vao = g.createVertexArray(); g.bindVertexArray(vao); }
     for (let k = 0; k < 3; k++) { g.enableVertexAttribArray(k); g.vertexAttribPointer(k, 3, g.FLOAT, false, STRIDE * 4, k * 12); }
     if (vao && glVer === 2) g.bindVertexArray(null);
     uLoc = {};
     ['vp', 'eyePos', 'time', 'elemMode', 'passClip', 'actorZ', 'primaryCol', 'secondaryCol', 'accentCol'].forEach((n) => { uLoc[n] = g.getUniformLocation(prog, 'u_' + n); });
     g.enable(g.DEPTH_TEST); g.depthFunc(g.LEQUAL); g.enable(g.BLEND); g.blendFunc(g.ONE, g.ONE_MINUS_SRC_ALPHA); g.disable(g.CULL_FACE);
-    shOk = true; shPend = false;
+    shOk = true; shPend = false; fbReason = '';
     return true;
   }
 
   function ensureGl(vw, vh, opts) {
-    if (force2D) return false;
+    if (dead || force2D || (opts && opts.reducedMotion)) return false;
     if (typeof document === 'undefined' || !document || !isFn(document.createElement)) { fbReason = fbReason || 'headless_no_dom'; return false; }
     if (typeof WebGLRenderingContext === 'undefined') { fbReason = fbReason || 'webgl_api_missing'; return false; }
     if (!gl) {
+      if (glCv) {
+        try { glCv.removeEventListener('webglcontextlost', onLost, false); } catch (_) {}
+        glCv = null;
+      }
       try {
         glCv = document.createElement('canvas');
         glCv.addEventListener('webglcontextlost', onLost, false);
         const at = { alpha: true, premultipliedAlpha: true, antialias: false, depth: true, stencil: false, powerPreference: 'low-power', failIfMajorPerformanceCaveat: true, preserveDrawingBuffer: false };
         let c = glCv.getContext('webgl2', at);
         if (c) glVer = 2; else { c = glCv.getContext('webgl', at); if (c) { glVer = 1; c.getExtension('OES_standard_derivatives'); } }
-        if (!c) { force2D = true; fbReason = 'webgl_context_rejected'; glCv = null; return false; }
+        if (!c) {
+          try { glCv.removeEventListener('webglcontextlost', onLost, false); } catch (_) {}
+          force2D = true; fbReason = 'webgl_context_rejected'; glCv = null; return false;
+        }
         let ren = String(c.getParameter(c.RENDERER) || '');
         const dbg = c.getExtension('WEBGL_debug_renderer_info');
         if (dbg) ren += ' ' + String(c.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '');
         if (!(opts && opts.allowSoftwareWebGL) && SW_RE.test(ren)) {
+          try { glCv.removeEventListener('webglcontextlost', onLost, false); } catch (_) {}
           const lx = c.getExtension('WEBGL_lose_context');
           if (lx && isFn(lx.loseContext)) lx.loseContext();
           glCv.width = 1; glCv.height = 1; glCv = null; force2D = true; fbReason = 'software_renderer_blocked';
@@ -537,19 +585,19 @@ void main(){
         if (glVer === 1) { c.bindAttribLocation(prog, 0, 'a_pos'); c.bindAttribLocation(prog, 1, 'a_normal'); c.bindAttribLocation(prog, 2, 'a_uva'); }
         c.attachShader(prog, vsObj); c.attachShader(prog, fsObj); c.linkProgram(prog);
         if (!visBound && isFn(document.addEventListener)) { document.addEventListener('visibilitychange', onVis, false); visBound = true; }
+        touchLease();
         if (extPar) { shPend = true; shOk = false; } else if (!linkSetup(c)) return false;
       } catch (_) { force2D = true; fbReason = 'webgl_init_exception'; releaseGpuNow(); return false; }
     }
     if (shPend && gl && prog && extPar) {
-      if (!gl.getProgramParameter(prog, extPar.COMPLETION_STATUS_KHR)) return false;
+      if (!gl.getProgramParameter(prog, extPar.COMPLETION_STATUS_KHR)) { touchLease(); return false; }
       if (!linkSetup(gl)) return false;
     }
     if (!gl || !shOk || !glCv) return false;
     const dpr = min(max(1, Number(ROOT && ROOT.devicePixelRatio) || 1), vw > 2400 ? 1 : 1.25);
     const tw = max(1, floor(vw * dpr)), th = max(1, floor(vh * dpr));
     if (glCv.width !== tw || glCv.height !== th) { glCv.width = tw; glCv.height = th; }
-    if (leaseT) clearTimeout(leaseT);
-    leaseT = setTimeout(() => { leaseT = 0; releaseGpuNow(); }, LEASE_MS);
+    touchLease();
     return true;
   }
 
@@ -693,19 +741,19 @@ void main(){
     }
   }
 
-  function mountStageLayers(overlayEl) {
+  function mountStageLayers(overlayEl, opts) {
+    if (dead) return { ok: false, mode: 'canvas2d-3d', glReady: false, stageCanvas: null };
     let stageCanvas = null;
     if (overlayEl) {
       if (overlayEl.dataset) overlayEl.dataset.kny3dSandwich = 'single-gl-compositor';
       if (isFn(overlayEl.querySelector)) stageCanvas = overlayEl.querySelector('.agy-kny-vfx-canvas');
     }
-    const glReady = ensureGl(1280, 720, null);
+    const glReady = (opts && opts.reducedMotion) ? false : ensureGl(1280, 720, opts || null);
     return { ok: true, mode: getDiagnostics().mode, glReady, stageCanvas };
   }
 
-  let cKey = '', cProf = null, cCam = null, geoUp = false;
   function prepFrame(w, h, rawP, skill, opts) {
-    const o = opts || {}, pk = String(o.persona || o.fxMode || (skill && skill.persona) || '');
+    const o = opts || {}, pk = String(o.persona || o.personaId || o.fxMode || (skill && skill.persona) || '');
     const k = `${(skill && skill.id) || 'giyu_1'}|${pk}|${w}x${h}|${rawP.toFixed(5)}|${Boolean(o.reducedMotion)}`;
     if (cKey === k && cProf && cCam) return { prof: cProf, cam: cCam };
     cProf = resolveSkill3DProfile(skill, o);
@@ -716,8 +764,8 @@ void main(){
   }
 
   function renderBackPass(ctx2d, w, h, rawP, skill, actor3D, opts) {
-    if (!ctx2d) return;
-    const vw = max(1, Number(w) || 1440), vh = max(1, Number(h) || 900), p = clamp(Number(rawP) || 0, 0, 1);
+    if (dead || !ctx2d) return;
+    const vw = normW(w), vh = normH(h), p = clamp(Number(rawP) || 0, 0, 1);
     const az = actor3D && isFin(actor3D.worldZ) ? actor3D.worldZ : 0, { prof, cam } = prepFrame(vw, vh, p, skill, opts);
     drawParticles(ctx2d, vw, vh, p, prof, cam, az, false);
     if (ensureGl(vw, vh, opts) && drawGlPass(ctx2d, vw, vh, p, prof, cam, az, -1, !geoUp)) { geoUp = true; return; }
@@ -725,8 +773,8 @@ void main(){
   }
 
   function renderFrontPass(ctx2d, w, h, rawP, skill, actor3D, opts) {
-    if (!ctx2d) return;
-    const vw = max(1, Number(w) || 1440), vh = max(1, Number(h) || 900), p = clamp(Number(rawP) || 0, 0, 1);
+    if (dead || !ctx2d) return;
+    const vw = normW(w), vh = normH(h), p = clamp(Number(rawP) || 0, 0, 1);
     const az = actor3D && isFin(actor3D.worldZ) ? actor3D.worldZ : 0, { prof, cam } = prepFrame(vw, vh, p, skill, opts);
     if (ensureGl(vw, vh, opts) && drawGlPass(ctx2d, vw, vh, p, prof, cam, az, 1, !geoUp)) geoUp = true;
     else draw2DPass(ctx2d, vw, vh, prof, cam, az, 1);
@@ -735,8 +783,8 @@ void main(){
   }
 
   function renderImpactFrame(ctx2d, w, h, actor3D, skill, spriteEntry) {
-    if (!ctx2d || !actor3D || !actor3D.impactFrameKind) return false;
-    const vw = max(1, Number(w) || 1440), vh = max(1, Number(h) || 900);
+    if (dead || !ctx2d || !actor3D || !actor3D.impactFrameKind) return false;
+    const vw = normW(w), vh = normH(h);
     const cx = isFin(actor3D.sx) ? actor3D.sx : vw * 0.5, cy = isFin(actor3D.sy) ? actor3D.sy : vh * 0.5, mR = hypot(vw, vh);
     ctx2d.save();
     if (actor3D.impactFrameKind === 'invert_white') {
@@ -777,12 +825,13 @@ void main(){
   }
 
   function destroy() {
+    dead = true;
     releaseGpuNow();
     if (visBound && typeof document !== 'undefined' && document && isFn(document.removeEventListener)) {
       try { document.removeEventListener('visibilitychange', onVis, false); } catch (_) {}
       visBound = false;
     }
-    cKey = ''; cProf = null; cCam = null; slowStreak = 0; accMs = 0;
+    cKey = ''; cProf = null; cCam = null; geoUp = false; RVC = 0; slowStreak = 0; accMs = 0;
   }
 
   ROOT.__AGY_KNY_3D_VFX__ = Object.freeze({

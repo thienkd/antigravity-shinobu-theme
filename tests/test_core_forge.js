@@ -1992,6 +1992,116 @@ describe('F06 — NPC 2 Chiều, Theme Studio Modal, Teardown & Vòng Đời (`e
         assert.equal(env.core.getState().masterPersona, 'giyu');
       }
     });
+
+    it('[F06-T1-07] Kiến trúc 5 Tab riêng biệt chuẩn WAI-ARIA 1.2, điều hướng phím mũi tên & giữ tab khi re-render', () => {
+      const env = createTestEnv({ loadCore: true });
+      env.window.__ANTIGRAVITY_OPEN_THEME_MODAL__();
+
+      const backdrop = env.document.getElementById('agy-custom-theme-modal-backdrop');
+      assert.equal(backdrop.innerHTML.includes('transition: all'), false, 'Studio CSS không được dùng transition: all');
+
+      const body = env.document.getElementById('agy-theme-modal-body');
+      const tablist = body.querySelector('#agy-studio-tablist');
+      assert.ok(tablist && tablist.getAttribute('role') === 'tablist', 'Phải có thanh điều hướng role="tablist"');
+
+      const expectedTabs = ['themes', 'persona', 'chat', 'backdrop', 'forge'];
+      const tabs = body.querySelectorAll('.agy-studio-tab');
+      const panels = body.querySelectorAll('.agy-studio-tabpanel');
+      assert.equal(tabs.length, 5, 'Phải có đúng 5 tab riêng biệt');
+      assert.equal(panels.length, 5, 'Phải có đúng 5 tabpanel riêng biệt');
+
+      const countVisiblePanels = () =>
+        body.querySelectorAll('.agy-studio-tabpanel').filter((p) => p.style.display !== 'none').length;
+
+      assert.equal(countVisiblePanels(), 1, 'Mặc định chỉ hiển thị đúng 1 tabpanel, không được sổ dọc tất cả');
+      assert.equal(body.querySelector('#agy-tabpanel-themes').style.display, 'flex');
+
+      for (const tabId of expectedTabs) {
+        const tabBtn = body.querySelector(`#agy-tab-${tabId}`);
+        assert.ok(tabBtn, `Thiếu nút tab ${tabId}`);
+        tabBtn.click();
+        assert.equal(countVisiblePanels(), 1, `Khi chọn tab ${tabId} chỉ được hiển thị đúng 1 panel`);
+        assert.equal(body.querySelector(`#agy-tabpanel-${tabId}`).style.display, 'flex');
+        assert.equal(tabBtn.getAttribute('aria-selected'), 'true');
+        assert.equal(tabBtn.getAttribute('tabindex'), '0');
+      }
+
+      // Kiểm tra điều hướng bàn phím ArrowRight / End / Home
+      const forgeTab = body.querySelector('#agy-tab-forge');
+      forgeTab.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault() {} });
+      assert.equal(body.querySelector('#agy-tabpanel-themes').style.display, 'flex', 'ArrowRight ở tab cuối phải vòng về tab đầu');
+
+      const themesTab = body.querySelector('#agy-tab-themes');
+      themesTab.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault() {} });
+      assert.equal(body.querySelector('#agy-tabpanel-persona').style.display, 'flex', 'ArrowRight từ themes phải sang persona');
+
+      // Đổi Persona trong tab persona -> renderThemePanels chạy lại vẫn phải giữ nguyên tab persona đang mở
+      const select = body.querySelector('#agy-persona-select');
+      select.value = 'rengoku';
+      select.dispatchEvent({ type: 'change', target: select });
+      assert.equal(
+        env.document.getElementById('agy-theme-modal-body').querySelector('#agy-tabpanel-persona').style.display,
+        'flex',
+        'Sau khi re-render, Studio phải giữ nguyên tab persona đang mở'
+      );
+    });
+
+    it('[F06-T1-08] Công tắc Bật/Tắt hai chiều (role="switch") cho Icon Người Dùng & Icon Trợ Lý AI + khôi phục ảnh riêng', () => {
+      const env = createTestEnv({ loadCore: true });
+      env.window.__ANTIGRAVITY_OPEN_THEME_MODAL__('persona');
+
+      const body = env.document.getElementById('agy-theme-modal-body');
+      const userSwitch = body.querySelector('#agy-user-av-clear');
+      const agentSwitch = body.querySelector('#agy-agent-av-clear');
+      assert.equal(userSwitch.getAttribute('role'), 'switch');
+      assert.equal(agentSwitch.getAttribute('role'), 'switch');
+      assert.equal(userSwitch.getAttribute('aria-checked'), 'true', 'Mặc định icon người dùng phải đang bật');
+
+      const hasUserAvCss = () =>
+        env.document.getElementById('antigravity-custom-theme-active').textContent.includes('[data-testid="user-message"]::after');
+      assert.equal(hasUserAvCss(), true, 'Khi đang bật phải sinh CSS hiển thị icon người dùng');
+
+      // Lần bấm 1: Tắt icon người dùng
+      userSwitch.click();
+      assert.equal(env.core.getState().userAvatar, 'none');
+      assert.equal(userSwitch.getAttribute('aria-checked'), 'false');
+      assert.equal(hasUserAvCss(), false, 'Khi tắt phải gỡ CSS icon người dùng');
+
+      // Lần bấm 2: Bật lại icon người dùng
+      userSwitch.click();
+      assert.equal(env.core.getState().userAvatar, '');
+      assert.equal(userSwitch.getAttribute('aria-checked'), 'true');
+      assert.equal(hasUserAvCss(), true, 'Bấm lần 2 phải bật lại ngay icon người dùng');
+
+      // Đặt ảnh đại diện riêng, sau đó Tắt rồi Bật lại -> phải khôi phục đúng ảnh riêng
+      const customAv = 'data:image/webp;base64,UklGRh4AAABXRUJQVlA4TBEAAAAvAAAAAAfQ//73v/+BiOh/AAA=';
+      env.localStorage.setItem('agy_user_avatar_saved_v1', customAv);
+      env.core.applyTheme({ userAvatar: customAv });
+      env.window.__ANTIGRAVITY_OPEN_THEME_MODAL__('persona');
+
+      const userSwitch2 = env.document.getElementById('agy-user-av-clear');
+      userSwitch2.click(); // Tắt
+      assert.equal(env.core.getState().userAvatar, 'none');
+      userSwitch2.click(); // Bật lại
+      assert.equal(env.core.getState().userAvatar, customAv, 'Bật lại sau khi tắt phải khôi phục đúng ảnh riêng đã lưu');
+
+      // Bấm nút Dùng mặc định -> về lại icon Bản Ngã mà vẫn đang bật
+      const resetDefBtn = env.document.getElementById('agy-user-av-reset-default');
+      assert.ok(resetDefBtn && resetDefBtn.style.display !== 'none');
+      resetDefBtn.click();
+      assert.equal(env.core.getState().userAvatar, '');
+      assert.equal(userSwitch2.getAttribute('aria-checked'), 'true');
+
+      // Kiểm tra tương tự Bật/Tắt hai chiều cho Icon Trợ Lý AI
+      const agentSwitch2 = env.document.getElementById('agy-agent-av-clear');
+      assert.equal(agentSwitch2.getAttribute('aria-checked'), 'true');
+      agentSwitch2.click();
+      assert.equal(env.core.getState().agentAvatar, 'none');
+      assert.equal(agentSwitch2.getAttribute('aria-checked'), 'false');
+      agentSwitch2.click();
+      assert.equal(env.core.getState().agentAvatar, '');
+      assert.equal(agentSwitch2.getAttribute('aria-checked'), 'true');
+    });
   });
 
   describe('Tier 2 — Biên, Bảo Mật & Sửa Lỗi Hợp Đồng', () => {

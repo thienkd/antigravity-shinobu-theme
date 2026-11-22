@@ -30,6 +30,7 @@
   let modalPendingForged = null;
   let modalPendingForgeName = '';
   let modalPendingForgeFx = '';
+  let modalActiveTab = 'themes';
 
   function isValidImageUploadFile(file) {
     return Boolean(
@@ -128,6 +129,8 @@
   const STORAGE_CUSTOM_WP = 'agy_custom_wp_v3';
   const STORAGE_USER_AVATAR = 'agy_user_avatar_v3';
   const STORAGE_AGENT_AVATAR = 'agy_agent_avatar_v3';
+  const STORAGE_USER_AVATAR_SAVED = 'agy_user_avatar_saved_v1';
+  const STORAGE_AGENT_AVATAR_SAVED = 'agy_agent_avatar_saved_v1';
   const STORAGE_GLASS_BLUR = 'agy_glass_blur_v3';
   const STORAGE_AVATAR_SIZE = 'agy_avatar_size_v3';
   const STORAGE_AVATAR_RADIUS = 'agy_avatar_radius_v3';
@@ -1625,8 +1628,39 @@
     }
   };
 
-  function openCustomThemeModal() {
+  const STUDIO_TABS = [
+    {
+      id: 'themes',
+      label: 'Bộ sưu tập',
+      icon: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="14" rx="1.5"/><rect width="7" height="7" x="3" y="14" rx="1.5"/></svg>'
+    },
+    {
+      id: 'persona',
+      label: 'Nhân vật & Đại diện',
+      icon: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>'
+    },
+    {
+      id: 'chat',
+      label: 'Tin nhắn & Soạn thảo',
+      icon: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'
+    },
+    {
+      id: 'backdrop',
+      label: 'Hình nền & Kính mờ',
+      icon: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>'
+    },
+    {
+      id: 'forge',
+      label: 'Lò rèn & Dữ liệu',
+      icon: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>'
+    }
+  ];
+
+  function openCustomThemeModal(initialTab) {
     if (coreDestroyed) return;
+    if (typeof initialTab === 'string' && STUDIO_TABS.some((t) => t.id === initialTab)) {
+      modalActiveTab = initialTab;
+    }
     try { window.__AGY_TOKEN_HUD__?.closePopover?.(); } catch (_) {}
     try { window.__AGY_BIO_AUDIO__?.closePopover?.(); } catch (_) {}
     try { window.__AGY_CINEMA_DIRECTOR__?.closePanel?.(); } catch (_) {}
@@ -1642,22 +1676,233 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 32px;
-        background: rgba(0, 0, 0, 0.65);
+        padding: 24px;
+        background: rgba(4, 6, 12, 0.72);
         backdrop-filter: blur(10px);
         -webkit-app-region: no-drag;
+        overscroll-behavior: contain;
+        color-scheme: dark;
       `;
 
       backdrop.innerHTML = `
-        <div id="agy-custom-theme-modal-dialog" style="background: rgba(16, 12, 11, 0.97); border: 1.2px solid rgba(212, 148, 106, 0.35); border-radius: 18px; width: 100%; max-width: 900px; height: 86vh; max-height: 860px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.9), 0 0 32px rgba(224, 142, 85, 0.25); font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;">
-          <div id="agy-custom-theme-modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 18px 26px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: rgba(22, 16, 14, 0.85);">
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <span style="font-size: 17px; font-weight: 600; color: #f4f4f5; letter-spacing: -0.2px;">Xưởng Giao Diện Tùy Biến</span>
-              <span id="agy-custom-theme-badge" style="font-size: 11.5px; padding: 2.5px 9px; border-radius: 9999px; background: rgba(224, 142, 85, 0.2); color: #e08e55; font-weight: 500; border: 1px solid rgba(224, 142, 85, 0.3);">${THEME_KEYS.length} Chủ đề</span>
+        <style id="agy-studio-ui-css">
+          #agy-custom-theme-modal-dialog {
+            background: #0d1017;
+            border: 1px solid rgba(255, 255, 255, 0.11);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 940px;
+            height: min(85vh, 800px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            overscroll-behavior: contain;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 32px 80px rgba(0, 0, 0, 0.85);
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
+            color: #f4f4f5;
+          }
+          #agy-custom-theme-modal-dialog *,
+          #agy-custom-theme-modal-dialog *::before,
+          #agy-custom-theme-modal-dialog *::after {
+            box-sizing: border-box;
+          }
+          #agy-custom-theme-modal-dialog button,
+          #agy-custom-theme-modal-dialog select,
+          #agy-custom-theme-modal-dialog input,
+          #agy-custom-theme-modal-dialog label {
+            touch-action: manipulation;
+          }
+          #agy-custom-theme-modal-dialog select,
+          #agy-custom-theme-modal-dialog select option {
+            background-color: #111520;
+            color: #f8fafc;
+          }
+          #agy-custom-theme-modal-dialog :is(button, select, input, textarea, [tabindex="0"], label.agy-studio-btn-label):focus-visible {
+            outline: 2px solid var(--agy-st-accent, #38bdf8);
+            outline-offset: 2px;
+          }
+          .agy-studio-tabular {
+            font-variant-numeric: tabular-nums;
+          }
+          #agy-theme-modal-close-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            color: #cbd5e1;
+            cursor: pointer;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+          }
+          #agy-theme-modal-close-btn:hover {
+            background: rgba(255, 255, 255, 0.11);
+            border-color: rgba(255, 255, 255, 0.22);
+            color: #ffffff;
+          }
+          #agy-studio-tablist {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 0 24px;
+            background: #11141d;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            overflow-x: auto;
+            scrollbar-width: none;
+            flex-shrink: 0;
+          }
+          #agy-studio-tablist::-webkit-scrollbar {
+            display: none;
+          }
+          .agy-studio-tab {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            height: 44px;
+            padding: 0 14px;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: #94a3b8;
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+          }
+          .agy-studio-tab:hover {
+            color: #e2e8f0;
+            background: rgba(255, 255, 255, 0.03);
+          }
+          .agy-studio-tab[aria-selected="true"] {
+            color: #f8fafc;
+            font-weight: 600;
+            border-bottom-color: var(--agy-st-accent, #e08e55);
+          }
+          .agy-studio-surface {
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            background: rgba(20, 24, 34, 0.72);
+            border-radius: 12px;
+            padding: 18px 20px;
+          }
+          .agy-studio-btn,
+          .agy-studio-btn-label {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            height: 32px;
+            padding: 0 12px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.13);
+            color: #f1f5f9;
+            font-size: 12.5px;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+          }
+          .agy-studio-btn:hover,
+          .agy-studio-btn-label:hover {
+            background: rgba(255, 255, 255, 0.11);
+            border-color: rgba(255, 255, 255, 0.24);
+          }
+          .agy-studio-btn-danger {
+            background: rgba(239, 68, 68, 0.12);
+            border-color: rgba(239, 68, 68, 0.34);
+            color: #fca5a5;
+          }
+          .agy-studio-btn-danger:hover {
+            background: rgba(239, 68, 68, 0.20);
+            border-color: rgba(239, 68, 68, 0.52);
+            color: #fecaca;
+          }
+          .agy-av-switch {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            height: 32px;
+            padding: 0 10px 0 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(255, 255, 255, 0.05);
+            color: #cbd5e1;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+          }
+          .agy-av-switch:hover {
+            border-color: rgba(255, 255, 255, 0.28);
+          }
+          .agy-av-switch[aria-checked="true"] {
+            background: rgba(16, 185, 129, 0.14);
+            border-color: rgba(52, 211, 153, 0.45);
+            color: #ecfdf5;
+          }
+          .agy-av-switch-track {
+            position: relative;
+            width: 32px;
+            height: 18px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.18);
+            transition: background-color 0.16s ease;
+            flex-shrink: 0;
+          }
+          .agy-av-switch[aria-checked="true"] .agy-av-switch-track {
+            background: #10b981;
+          }
+          .agy-av-switch-thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #ffffff;
+            transform: translateX(0);
+            transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+          }
+          .agy-av-switch[aria-checked="true"] .agy-av-switch-thumb {
+            transform: translateX(14px);
+          }
+          .agy-preset-card:hover,
+          .agy-bubble-card:hover,
+          .agy-input-card:hover {
+            border-color: rgba(255, 255, 255, 0.28) !important;
+          }
+          @media (max-width: 700px) {
+            .agy-modal-grid-2 {
+              grid-template-columns: minmax(0, 1fr) !important;
+            }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            #agy-custom-theme-modal-dialog *,
+            #agy-custom-theme-modal-dialog *::before,
+            #agy-custom-theme-modal-dialog *::after {
+              transition: none !important;
+              animation: none !important;
+            }
+          }
+        </style>
+        <div id="agy-custom-theme-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="agy-custom-theme-modal-title">
+          <div id="agy-custom-theme-modal-header" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 15px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.07); background: #0d1017; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+              <span id="agy-custom-theme-modal-title" style="font-size: 16px; font-weight: 600; color: #f8fafc; letter-spacing: -0.015em; white-space: nowrap;">Xưởng Giao Diện Tùy Biến</span>
+              <span id="agy-custom-theme-badge" class="agy-studio-tabular" style="font-size: 11.5px; padding: 2px 9px; border-radius: 9999px; background: rgba(224, 142, 85, 0.16); color: #f59e0b; font-weight: 600; border: 1px solid rgba(245, 158, 11, 0.30); white-space: nowrap;">${THEME_KEYS.length} Chủ đề</span>
             </div>
-            <button id="agy-theme-modal-close-btn" type="button" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); color: #d4d4d8; cursor: pointer; width: 30px; height: 30px; border-radius: 8px; font-size: 15px; display: flex; align-items: center; justify-content: center; transition: all 0.15s ease;">✕</button>
+            <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+              <span id="agy-studio-active-summary" style="font-size: 12px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px;"></span>
+              <button id="agy-theme-modal-close-btn" type="button" aria-label="Đóng xưởng giao diện tùy biến" title="Đóng (Esc)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </div>
           </div>
-          <div id="agy-theme-modal-body" style="flex: 1; overflow-y: auto; height: 100%;"></div>
+          <div id="agy-theme-modal-body" style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;"></div>
         </div>
       `;
 
@@ -1704,19 +1949,39 @@
     const activePersona = getActiveMasterPersona(st);
     const personaValid = hasValidMasterPersona(st.masterPersona);
 
+    if (!STUDIO_TABS.some((t) => t.id === modalActiveTab)) {
+      modalActiveTab = 'themes';
+    }
+
     const safeMainPrimary = SEC.sanitizeCssValue(mainTheme.primary, '#c084fc');
     const safeMainAccent = SEC.sanitizeCssValue(mainTheme.accent || mainTheme.secondary, safeMainPrimary);
-    const safeMainBorder = SEC.sanitizeCssValue(mainTheme.borderColor, 'rgba(255, 255, 255, 0.16)');
-    const safeCardBg = SEC.sanitizeCssValue(mainTheme.cardBg, 'rgba(22, 16, 14, 0.72)');
+    const safeMainBorder = SEC.sanitizeCssValue(mainTheme.borderColor, 'rgba(255, 255, 255, 0.14)');
+    const safeCardBg = SEC.sanitizeCssValue(mainTheme.cardBg, 'rgba(20, 24, 34, 0.76)');
 
-    const effUserAv = safeCssUrl(
-      st.userAvatar === 'none'
-        ? ''
-        : (st.userAvatar || (personaValid ? (activePersona.userAvatar || mainTheme.userAvatar) : (mainTheme.userAvatar || activePersona.userAvatar)) || '')
-    );
-    const effAgentAv = safeCssUrl(
-      st.agentAvatar === 'none' ? '' : (st.agentAvatar || mainTheme.agentAvatar || '')
-    );
+    function computeEffectiveUserAv(stateSnap) {
+      if (stateSnap.userAvatar === 'none') return '';
+      const pObj = getActiveMasterPersona(stateSnap);
+      const pOk = hasValidMasterPersona(stateSnap.masterPersona);
+      const thObj = THEMES[stateSnap.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+      return safeCssUrl(
+        stateSnap.userAvatar ||
+        (pOk ? (pObj.userAvatar || thObj.userAvatar) : (thObj.userAvatar || pObj.userAvatar)) ||
+        ''
+      );
+    }
+
+    function computeEffectiveAgentAv(stateSnap) {
+      if (stateSnap.agentAvatar === 'none') return '';
+      const thObj = THEMES[stateSnap.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+      return safeCssUrl(stateSnap.agentAvatar || thObj.agentAvatar || '');
+    }
+
+    const isUserAvEnabled = st.userAvatar !== 'none';
+    const isAgentAvEnabled = st.agentAvatar !== 'none';
+    const hasCustomUserAv = Boolean(st.userAvatar && st.userAvatar !== 'none');
+    const hasCustomAgentAv = Boolean(st.agentAvatar && st.agentAvatar !== 'none');
+    const effUserAv = computeEffectiveUserAv(st);
+    const effAgentAv = computeEffectiveAgentAv(st);
 
     const personaList = forge && Array.isArray(forge.PERSONA_LIST) ? forge.PERSONA_LIST : [activePersona];
     const multiversePresets = forge && Array.isArray(forge.MULTIVERSE_PRESETS) ? forge.MULTIVERSE_PRESETS : [];
@@ -1730,274 +1995,65 @@
     const escMainBorder = esc(safeMainBorder);
     const escCardBg = esc(safeCardBg);
 
+    container.style.setProperty('--agy-st-accent', safeMainPrimary);
+    const summaryEl = document.getElementById('agy-studio-active-summary');
+    if (summaryEl) {
+      summaryEl.textContent = `Đang dùng: ${st.themeName}`;
+      summaryEl.title = `Chủ đề nền: ${st.themeName} • Bản ngã: ${activePersona.shortLabel || activePersona.label || 'Yoriichi'}`;
+    }
+
     container.innerHTML = `
-      <div id="agy-theme-scroll-container" style="padding: 24px 32px 48px 32px; max-width: 860px; margin: 0 auto; overflow-y: auto; height: 100%; color: #f4f4f5;">
-        <div style="border: 1px solid ${escMainBorder}; background: ${escCardBg}; border-radius: 12px; padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+      <div id="agy-studio-tablist" role="tablist" aria-label="Phân mục tùy biến giao diện">
+        ${STUDIO_TABS.map((tab) => {
+          const isAct = tab.id === modalActiveTab;
+          const countPill = tab.id === 'themes'
+            ? `<span class="agy-studio-tabular" style="font-size: 11px; padding: 1px 6px; border-radius: 999px; background: rgba(255,255,255,0.09); color: #cbd5e1;">${THEME_KEYS.length}</span>`
+            : '';
+          return `
+            <button
+              type="button"
+              role="tab"
+              id="agy-tab-${esc(tab.id)}"
+              class="agy-studio-tab"
+              data-tab="${esc(tab.id)}"
+              aria-selected="${isAct ? 'true' : 'false'}"
+              aria-controls="agy-tabpanel-${esc(tab.id)}"
+              tabindex="${isAct ? '0' : '-1'}"
+            >
+              ${tab.icon}
+              <span>${esc(tab.label)}</span>
+              ${countPill}
+            </button>
+          `;
+        }).join('')}
+      </div>
+
+      <div id="agy-theme-scroll-container" style="flex: 1; min-height: 0; padding: 22px 26px 36px 26px; overflow-y: auto; overscroll-behavior: contain; color: #f4f4f5;">
+        <!-- TAB 1: BỘ SƯU TẬP CHỦ ĐỀ -->
+        <section
+          role="tabpanel"
+          id="agy-tabpanel-themes"
+          class="agy-studio-tabpanel"
+          data-tabpanel="themes"
+          aria-labelledby="agy-tab-themes"
+          style="display: ${modalActiveTab === 'themes' ? 'flex' : 'none'}; flex-direction: column; gap: 16px; max-width: 880px; margin: 0 auto;"
+        >
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px;">
             <div>
-              <div style="font-size: 14.5px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Hình Nền, Kính Mờ Pre-Baked &amp; Tập Trung Sâu</div>
-              <div style="font-size: 12.5px; color: #a1a1aa;">Kính mờ pre-baked 120fps, GPU 0% khi rảnh &amp; Thế Giới Trong Suốt.</div>
+              <div style="font-size: 15px; font-weight: 600; color: #f8fafc; margin-bottom: 3px;">Bộ Sưu Tập Chủ Đề (${THEME_KEYS.length})</div>
+              <div style="font-size: 12.5px; color: #94a3b8;">Chọn nhanh chủ đề Thanh Gươm Diệt Quỷ &amp; Đa Vũ Trụ OKLCH chuẩn tương phản đọc code WCAG AA.</div>
             </div>
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-              <label style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #d4d4d8; cursor: pointer;">
-                <input id="agy-wp-toggle" type="checkbox" ${st.wpEnabled ? 'checked' : ''} style="accent-color: ${escMainPrimary}; cursor: pointer;" />
-                Hình nền
-              </label>
-              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #a1a1aa;">
-                Độ tối
-                <input id="agy-dim-slider" type="range" min="15" max="92" value="${st.dimming}" style="width: 90px; cursor: pointer; accent-color: #ffffff; height: 5px;" />
-                <span id="agy-dim-val" style="min-width: 32px; text-align: right;">${st.dimming}%</span>
-              </label>
-              <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #a1a1aa;">
-                Độ mờ
-                <input id="agy-blur-slider" type="range" min="0" max="16" value="${st.glassBlur}" style="width: 72px; cursor: pointer; accent-color: ${escMainPrimary}; height: 5px;" />
-                <span id="agy-blur-val" style="min-width: 30px; text-align: right;">${st.glassBlur}px</span>
-              </label>
-              <label style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${escMainBorder}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                Ảnh tùy chọn
-                <input id="agy-wp-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
-              </label>
-              <button id="agy-export-btn" type="button" style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                Xuất JSON
-              </button>
-              <button id="agy-import-toggle" type="button" style="padding: 5px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                Nhập JSON / .agytheme
-              </button>
-              <button id="agy-reset-btn" type="button" style="padding: 5px 10px; border-radius: 8px; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.35); color: #fca5a5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                Đặt lại
-              </button>
+            <div id="agy-preset-filter-bar" role="group" aria-label="Lọc nhóm chủ đề" style="display: flex; flex-wrap: wrap; gap: 6px;">
+              <button type="button" class="agy-filter-chip agy-studio-tabular" data-filter="all" style="padding: 5px 11px; border-radius: 999px; border: 1px solid ${escMainPrimary}; background: rgba(255,255,255,0.13); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;">Tất cả (${THEME_KEYS.length})</button>
+              <button type="button" class="agy-filter-chip" data-filter="royal" style="padding: 5px 11px; border-radius: 999px; border: 1px solid rgba(250,204,21,0.42); background: rgba(250,204,21,0.10); color: #fef08a; font-size: 12px; font-weight: 600; cursor: pointer;">👑 Chúa Công</button>
+              <button type="button" class="agy-filter-chip agy-studio-tabular" data-filter="hashira" style="padding: 5px 11px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 12px; cursor: pointer;">⚔️ Cửu Trụ (9)</button>
+              <button type="button" class="agy-filter-chip" data-filter="kamaboko" style="padding: 5px 11px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 12px; cursor: pointer;">🔥 Nhân Vật Chính</button>
+              <button type="button" class="agy-filter-chip" data-filter="forged" style="padding: 5px 11px; border-radius: 999px; border: 1px solid rgba(192,132,252,0.40); background: rgba(168,85,247,0.11); color: #e9d5ff; font-size: 12px; cursor: pointer;">🌌 Đa Vũ Trụ / Rèn AI</button>
+              <button type="button" class="agy-filter-chip" data-filter="classic" style="padding: 5px 11px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 12px; cursor: pointer;">✨ Khác</button>
             </div>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.07);">
-            <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: #fef08a; font-weight: 500; cursor: pointer;">
-              <input id="agy-tw-toggle" type="checkbox" ${st.transparentWorld ? 'checked' : ''} style="accent-color: #facc15; cursor: pointer;" />
-              <span>👁️ Thế Giới Trong Suốt (Tự dịu khi gõ code)</span>
-            </label>
-            <span style="font-size: 11.5px; color: #a1a1aa;">Tự làm chậm hạt nền 20% &amp; giảm chói 35% khi gõ sâu (&ge; 4 phím/giây) hoặc đọc diff.</span>
-          </div>
-          <div id="agy-import-box" style="display: none; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
-            <textarea id="agy-import-text" rows="3" placeholder="Dán JSON cấu hình hoặc nội dung gói .agytheme (schema: agytheme/2.0) vào đây..." style="width: 100%; box-sizing: border-box; background: rgba(0,0,0,0.35); color: #f4f4f5; border: 1px solid ${escMainBorder}; border-radius: 8px; padding: 8px 10px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-              <label style="padding: 5px 10px; border-radius: 7px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); color: #e4e4e7; font-size: 12px; cursor: pointer;">
-                📂 Chọn file .agytheme / .json
-                <input id="agy-import-file" type="file" accept=".agytheme,.json,application/json" style="display: none;" />
-              </label>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span id="agy-import-msg" style="font-size: 12px; color: #fca5a5;"></span>
-                <button id="agy-import-apply" type="button" style="padding: 5px 12px; border-radius: 7px; background: ${escMainPrimary}; color: #090d16; font-weight: 600; font-size: 12px; border: none; cursor: pointer;">Nạp cấu hình</button>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        <!-- Master Persona Selector (Independent from Active Theme) -->
-        <div style="border: 1px solid ${escMainBorder}; background: ${escCardBg}; border-radius: 12px; padding: 14px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-            <div>
-              <div style="font-size: 14px; font-weight: 600; color: #fef08a; margin-bottom: 2px;">👑 Bản Ngã Chủ Nhân (Độc lập khỏi chủ đề nền)</div>
-              <div style="font-size: 12px; color: #a1a1aa;">Mặc định Khai Tổ Hỏa Thần Yoriichi, hoặc hóa thân thành 14 Đại Trụ / Kiếm sĩ &amp; 3 Đế Vương Đa Vũ Trụ!</div>
-            </div>
-            <select id="agy-persona-select" style="padding: 6px 12px; border-radius: 8px; background: rgba(10, 10, 20, 0.88); color: #f8fafc; border: 1px solid ${escMainPrimary}; font-size: 12.5px; font-weight: 600; cursor: pointer; min-width: 250px;">
-              ${personaList.map((p) => {
-                const sel = p.id === st.masterPersona ? 'selected' : '';
-                return `<option value="${SEC.escapeHtml(p.id)}" ${sel}>${SEC.escapeHtml(p.label)}</option>`;
-              }).join('')}
-            </select>
-          </div>
-          <div style="display: flex; flex-wrap: wrap; gap: 7px; padding-top: 4px;">
-            ${personaList.slice(0, 8).map((p) => {
-              const isAct = p.id === st.masterPersona;
-              const pAv = SEC.sanitizeCssUrl(p.userAvatar || '');
-              const pRing = esc(SEC.sanitizeCssValue(p.ringColor, '#fde047'));
-              return `
-                <button type="button" class="agy-persona-pill" data-persona="${SEC.escapeHtml(p.id)}" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 5px; border-radius: 999px; border: 1px solid ${isAct ? pRing : 'rgba(255,255,255,0.14)'}; background: ${isAct ? 'rgba(250, 204, 21, 0.16)' : 'rgba(255,255,255,0.05)'}; color: #f8fafc; font-size: 11.5px; font-weight: ${isAct ? '600' : '400'}; cursor: pointer;">
-                  <span style="width: 20px; height: 20px; border-radius: 50%; border: 1px solid ${pRing}; background: rgba(0,0,0,0.4) ${pAv ? `url(&quot;${esc(pAv)}&quot;) center/cover no-repeat` : ''}; flex-shrink: 0;"></span>
-                  <span>${SEC.escapeHtml(p.shortLabel || p.label)}</span>
-                </button>
-              `;
-            }).join('')}
-          </div>
-        </div>
-
-        <!-- Multiverse AI Theme Forge (OKLCH 64x64 + .agytheme) -->
-        ${forge ? `
-        <div style="border: 1px solid rgba(192, 132, 252, 0.42); background: linear-gradient(145deg, rgba(20, 12, 38, 0.88), rgba(11, 15, 30, 0.92)); border-radius: 12px; padding: 15px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 11px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-            <div>
-              <div style="font-size: 14.5px; font-weight: 700; color: #e9d5ff; margin-bottom: 2px;">⚒️ Lò Rèn Đa Vũ Trụ — Rèn Chủ Đề OKLCH &amp; .agytheme</div>
-              <div style="font-size: 12px; color: #cbd5e1;">Thả ảnh 4K bất kỳ để trích xuất 14 biến màu kính mờ chuẩn tương phản đọc code WCAG AA, hoặc mở rộng Đa Vũ Trụ ngay!</div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-              <button id="agy-forge-export-pkg" type="button" style="padding: 5px 11px; border-radius: 8px; background: rgba(56, 189, 248, 0.16); border: 1px solid rgba(56, 189, 248, 0.45); color: #e0f2fe; font-size: 12px; font-weight: 600; cursor: pointer;">
-                📦 Xuất gói .agytheme
-              </button>
-            </div>
-          </div>
-          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-            ${multiversePresets.map((mp) => `
-              <button type="button" class="agy-multiverse-preset-btn" data-mv-id="${SEC.escapeHtml(mp.id)}" style="padding: 6px 12px; border-radius: 9px; background: rgba(168, 85, 247, 0.16); border: 1px solid rgba(192, 132, 252, 0.42); color: #f5d0fe; font-size: 12px; font-weight: 600; cursor: pointer;">
-                ${SEC.escapeHtml(mp.shortLabel)}
-              </button>
-            `).join('')}
-            <label id="agy-forge-dropzone" style="flex: 1; min-width: 210px; padding: 6px 12px; border-radius: 9px; border: 1px dashed rgba(94, 234, 212, 0.55); background: rgba(15, 23, 42, 0.55); color: #99f6e4; font-size: 12px; font-weight: 500; text-align: center; cursor: pointer;">
-              🖼️ Thả hoặc Chọn ảnh 4K để rèn bảng màu OKLCH...
-              <input id="agy-forge-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
-            </label>
-          </div>
-          <div id="agy-forge-workbench" style="display: none; flex-direction: column; gap: 9px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.10);">
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-              <input id="agy-forge-name" type="text" maxlength="60" placeholder="Đặt tên Vũ Trụ mới..." style="flex: 1; min-width: 180px; padding: 6px 10px; border-radius: 8px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 12.5px;" />
-              <select id="agy-forge-fx" style="padding: 6px 10px; border-radius: 8px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 12px;">
-                ${fxModeOptions.map((opt) => `<option value="${SEC.escapeHtml(opt.value)}">${SEC.escapeHtml(opt.label)}</option>`).join('')}
-              </select>
-              <button id="agy-forge-commit" type="button" style="padding: 6px 14px; border-radius: 8px; background: linear-gradient(135deg, #a855f7, #38bdf8); border: none; color: #090d16; font-size: 12.5px; font-weight: 700; cursor: pointer;">
-                ⚡ Rèn &amp; Kích Hoạt
-              </button>
-            </div>
-            <div id="agy-forge-swatches" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 11.5px; color: #cbd5e1;"></div>
-          </div>
-          <div id="agy-forge-status" style="font-size: 11.5px; color: #5eead4; display: none;"></div>
-        </div>
-        ` : ''}
-
-        <div style="border: 1px solid ${escMainBorder}; background: ${escCardBg}; border-radius: 12px; padding: 14px 20px; margin-bottom: 24px; display: flex; flex-direction: column; gap: 10px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-            <div>
-              <div style="font-size: 14px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;">Ảnh Đại Diện Hội Thoại (Người dùng &amp; Trợ lý AI)</div>
-              <div style="font-size: 12px; color: #a1a1aa;">Huy hiệu hiển thị cạnh tin nhắn (tự động nén WebP, &le; 15MB).</div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <div id="agy-user-av-preview" style="width: 30px; height: 30px; border-radius: ${st.avatarRadius}%; border: 1.5px solid ${escMainPrimary}; background: rgba(255,255,255,0.06) ${effUserAv ? `url(&quot;${esc(effUserAv)}&quot;) center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effUserAv ? '' : 'B'}</div>
-                <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${escMainBorder}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                  Người dùng
-                  <input id="agy-user-av-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
-                </label>
-                <button id="agy-user-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Tắt</button>
-              </div>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <div id="agy-agent-av-preview" style="width: 30px; height: 30px; border-radius: ${st.avatarRadius}%; border: 1.5px solid ${escMainAccent}; background: rgba(255,255,255,0.06) ${effAgentAv ? `url(&quot;${esc(effAgentAv)}&quot;) center/cover no-repeat` : ''}; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #a1a1aa;">${effAgentAv ? '' : 'AI'}</div>
-                <label style="padding: 4px 10px; border-radius: 7px; background: rgba(255, 255, 255, 0.08); border: 1px solid ${escMainBorder}; color: #f4f4f5; font-size: 12px; cursor: pointer; white-space: nowrap;">
-                  Trợ lý AI
-                  <input id="agy-agent-av-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
-                </label>
-                <button id="agy-agent-av-clear" type="button" style="padding: 4px 8px; border-radius: 7px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.14); color: #a1a1aa; font-size: 11.5px; cursor: pointer;">Tắt</button>
-              </div>
-            </div>
-          </div>
-          <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.07);">
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1aa;">
-              Kích thước
-              <input id="agy-av-size" type="range" min="22" max="52" value="${st.avatarSize}" style="width: 100px; cursor: pointer; accent-color: ${escMainPrimary}; height: 5px;" />
-              <span id="agy-av-size-val" style="min-width: 34px;">${st.avatarSize}px</span>
-            </label>
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #a1a1aa;">
-              Bo góc
-              <input id="agy-av-rad" type="range" min="0" max="50" value="${st.avatarRadius}" style="width: 100px; cursor: pointer; accent-color: ${escMainPrimary}; height: 5px;" />
-              <span id="agy-av-rad-val" style="min-width: 34px;">${st.avatarRadius}%</span>
-            </label>
-          </div>
-        </div>
-
-        <div style="margin-bottom: 28px;">
-          <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">Khung Tin Nhắn Người Dùng</div>
-          <div style="font-size: 12.5px; color: #a1a1aa; margin-bottom: 14px;">Phối hợp viền khung tin nhắn &amp; họa tiết trang trí độc lập với hình nền.</div>
-          <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-            ${THEME_KEYS.map(name => {
-              const th = THEMES[name] || {};
-              const safeNameHtml = SEC.escapeHtml(name);
-              const isSelected = name === st.bubbleName;
-              const rawTop = Number.isFinite(Number(th.stickerTop)) ? Number(th.stickerTop) : 0;
-              const rawW = Number.isFinite(Number(th.stickerW)) ? Number(th.stickerW) : 0;
-              const rawH = Number.isFinite(Number(th.stickerH)) ? Number(th.stickerH) : 0;
-              const stickerTop = th.isOrnament ? Math.round(rawTop * 0.85) : Math.round(rawTop * 0.74);
-              const stickerW = Math.round(rawW * 0.78);
-              const stickerH = th.isOrnament ? Math.round(rawH * 0.8) : Math.round(rawH * 0.78);
-              const safeThFrame = esc(SEC.sanitizeCssValue(th.frameBg, '#c084fc'));
-              const safeThGlow = esc(SEC.sanitizeCssValue(th.glow, 'rgba(192,132,252,0.28)'));
-              const safeThBg = esc(SEC.sanitizeCssValue(th.userBubble || th.bg, 'rgba(24,18,42,0.9)'));
-              const safeThBorder = esc(SEC.sanitizeCssValue(th.innerBorder, '1px solid ' + SEC.sanitizeCssValue(th.borderColor, 'rgba(255,255,255,0.16)')));
-              const safeThText = esc(SEC.sanitizeCssValue(th.textColor || th.textMain, '#f8fafc'));
-              const safeStickerUrl = SEC.sanitizeCssUrl(th.sticker || '');
-              return `
-                <div class="agy-bubble-card" data-name="${safeNameHtml}" style="position: relative; border-radius: 12px; border: ${isSelected ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)'}; background: ${isSelected ? 'rgba(42, 34, 30, 0.68)' : 'rgba(14, 12, 12, 0.78)'}; padding: 24px 18px 14px 18px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; min-height: 112px; transition: border-color 0.15s ease, background-color 0.15s ease;">
-                  <div style="display: flex; justify-content: center; align-items: center; width: 100%; margin-top: 6px; margin-bottom: 10px;">
-                    <div style="position: relative; width: 192px; height: 46px; padding: 1.2px; border-radius: ${th.isScroll ? '6px' : '12px'}; background: ${safeThFrame}; box-shadow: 0 4px 14px rgba(0,0,0,0.45), 0 0 10px ${safeThGlow};">
-                      <div style="position: relative; width: 100%; height: 100%; background: ${safeThBg}; border: ${safeThBorder}; border-radius: ${th.isScroll ? '4px' : '11px'}; display: flex; align-items: center; padding: 0 16px;">
-                        ${safeStickerUrl ? `<div style="position: absolute; top: ${stickerTop}px; right: 8px; width: ${stickerW}px; height: ${stickerH}px; background-image: url(&quot;${esc(safeStickerUrl)}&quot;); background-size: contain; background-position: ${th.isOrnament ? 'center' : 'bottom center'}; background-repeat: no-repeat; pointer-events: none;"></div>` : ''}
-                        <span style="font-size: 13.5px; font-weight: 500; color: ${safeThText};">Xin chào ✨</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 13.5px; font-weight: 500; color: #e4e4e7;">${safeNameHtml}</span>
-                    <div class="agy-card-check-slot">${isSelected ? CHECK_SVG : ''}</div>
-                  </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        </div>
-
-        <div style="margin-bottom: 28px;">
-          <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">Kiểu Khung Soạn Thảo</div>
-          <div style="font-size: 12.5px; color: #a1a1aa; margin-bottom: 14px;">Tùy biến khung nhập liệu mà không ảnh hưởng phím tắt hay tệp đính kèm.</div>
-          <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-            ${Object.entries(INPUT_STYLES).map(([key, item]) => {
-              const isSelected = key === st.inputStyle;
-              const activeBubbleTh = THEMES[st.bubbleName] || mainTheme;
-              const previewStickerStyle = activeBubbleTh.isOrnament
-                ? 'top: -12px; right: 10px; width: 72px; height: 22px; background-position: center;'
-                : 'top: -22px; right: 10px; width: 32px; height: 28px; background-position: bottom center;';
-              const previewInnerBg = esc(SEC.sanitizeCssValue(
-                key === 'glass'
-                  ? (activeBubbleTh.inputGlassBg || 'rgba(20, 15, 13, 0.45)')
-                  : (activeBubbleTh.inputCardBg || activeBubbleTh.composerBg || 'rgba(26, 18, 15, 0.92)'),
-                'rgba(26, 18, 15, 0.92)'
-              ));
-              const previewFrameBg = key === 'double_gold'
-                ? 'linear-gradient(135deg, #f59e0b, #fbbf24)'
-                : esc(SEC.sanitizeCssValue(activeBubbleTh.frameBg, '#c084fc'));
-              const previewStickerUrl = SEC.sanitizeCssUrl(activeBubbleTh.sticker || '');
-              const previewPrimary = esc(SEC.sanitizeCssValue(activeBubbleTh.primary, '#c084fc'));
-              return `
-                <div class="agy-input-card" data-style="${SEC.escapeHtml(key)}" style="border-radius: 12px; border: ${isSelected ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)'}; background: ${isSelected ? 'rgba(42, 34, 30, 0.68)' : 'rgba(14, 12, 12, 0.78)'}; padding: 16px 18px; cursor: pointer; display: flex; flex-direction: column; gap: 12px; transition: border-color 0.15s ease, background-color 0.15s ease;">
-                  <div class="agy-input-preview-outer" style="position: relative; margin-top: 8px; padding: 1.5px; border-radius: 10px; background: ${previewFrameBg};">
-                    <div class="agy-input-preview-sticker" style="position: absolute; ${previewStickerStyle} ${previewStickerUrl ? `background-image: url(&quot;${esc(previewStickerUrl)}&quot;);` : ''} background-size: contain; background-repeat: no-repeat; display: ${key !== 'minimal' && previewStickerUrl ? 'block' : 'none'}; pointer-events: none;"></div>
-                    <div class="agy-input-preview-inner" style="background: ${previewInnerBg}; border-radius: 9px; padding: 8px 12px; font-size: 12px; color: #a1a1aa; display: flex; justify-content: space-between; align-items: center;">
-                      <span>Hỏi bất cứ điều gì, gõ @ để nhắc tới...</span>
-                      <span class="agy-input-preview-turbo" style="color: ${previewPrimary}; font-size: 11px;">Gửi →</span>
-                    </div>
-                  </div>
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                      <div style="font-size: 13.5px; font-weight: 500; color: #e4e4e7;">${SEC.escapeHtml(item.label)}</div>
-                      <div style="font-size: 11.5px; color: #a1a1aa;">${SEC.escapeHtml(item.desc)}</div>
-                    </div>
-                    <div class="agy-card-check-slot">${isSelected ? CHECK_SVG : ''}</div>
-                  </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        </div>
-
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
-            <div>
-              <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 3px;">Bộ Sưu Tập Chủ Đề (${THEME_KEYS.length})</div>
-              <div style="font-size: 12.5px; color: #a1a1aa;">Bộ sưu tập Thanh Gươm Diệt Quỷ &amp; Đa Vũ Trụ OKLCH — Kính mờ 60fps &amp; NPC.</div>
-            </div>
-            <div id="agy-preset-filter-bar" style="display: flex; flex-wrap: wrap; gap: 6px;">
-              <button type="button" class="agy-filter-chip" data-filter="all" style="padding: 4px 10px; border-radius: 999px; border: 1px solid ${escMainPrimary}; background: rgba(255,255,255,0.12); color: #fff; font-size: 11.5px; font-weight: 600; cursor: pointer;">Tất cả (${THEME_KEYS.length})</button>
-              <button type="button" class="agy-filter-chip" data-filter="royal" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(250,204,21,0.45); background: rgba(250,204,21,0.12); color: #fef08a; font-size: 11.5px; font-weight: 600; cursor: pointer;">👑 Chúa Công</button>
-              <button type="button" class="agy-filter-chip" data-filter="hashira" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 11.5px; cursor: pointer;">⚔️ Cửu Trụ (9)</button>
-              <button type="button" class="agy-filter-chip" data-filter="kamaboko" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 11.5px; cursor: pointer;">🔥 Nhân Vật Chính</button>
-              <button type="button" class="agy-filter-chip" data-filter="forged" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(192,132,252,0.42); background: rgba(168,85,247,0.12); color: #e9d5ff; font-size: 11.5px; cursor: pointer;">🌌 Đa Vũ Trụ / Rèn AI</button>
-              <button type="button" class="agy-filter-chip" data-filter="classic" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 11.5px; cursor: pointer;">✨ Khác</button>
-            </div>
-          </div>
-          <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+          <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
             ${THEME_KEYS.map(name => {
               const th = THEMES[name] || {};
               const safeNameHtml = SEC.escapeHtml(name);
@@ -2009,8 +2065,8 @@
                 : (isRoyal ? 'royal' : (/Trụ|Shinobu/i.test(name) ? 'hashira' : (/(Tanjiro|Nezuko|Zenitsu|Inosuke)/i.test(name) ? 'kamaboko' : 'classic')));
               const safeWpUrl = SEC.sanitizeCssUrl(th.wallpaper || '');
               const thumbBg = safeWpUrl
-                ? `linear-gradient(180deg, rgba(0,0,0,0.10), rgba(10,8,18,0.86)), url(&quot;${esc(safeWpUrl)}&quot;)`
-                : esc(SEC.sanitizeCssValue(th.pureBg || th.bg, '#111118'));
+                ? `linear-gradient(180deg, rgba(0,0,0,0.08), rgba(10,12,20,0.88)), url(&quot;${esc(safeWpUrl)}&quot;)`
+                : esc(SEC.sanitizeCssValue(th.pureBg || th.bg, '#11131c'));
               const safeBgPos = esc(SEC.sanitizeCssValue(th.bgPosition, 'center'));
               const safeStickerUrl = SEC.sanitizeCssUrl(th.sticker || '');
               const thumbOrnamentStyle = th.isChibiNpc
@@ -2019,27 +2075,424 @@
                   ? 'right: 10px; bottom: 8px; width: 76px; height: 24px; background-position: center;'
                   : 'right: 12px; bottom: 4px; width: 42px; height: 38px; background-position: bottom center;');
               const borderStyle = isSelected
-                ? (isRoyal ? '1.8px solid #facc15' : '1.5px solid #f4f4f5')
-                : (isRoyal ? '1.2px solid rgba(250, 204, 21, 0.55)' : '1px solid rgba(255, 255, 255, 0.12)');
-              const cardShadow = isRoyal ? 'box-shadow: 0 6px 22px rgba(250, 204, 21, 0.18), inset 0 1px 0 rgba(254, 240, 138, 0.22);' : '';
+                ? (isRoyal ? '1.8px solid #facc15' : '1.5px solid #f8fafc')
+                : (isRoyal ? '1.2px solid rgba(250, 204, 21, 0.50)' : '1px solid rgba(255, 255, 255, 0.11)');
+              const cardShadow = isRoyal ? 'box-shadow: 0 6px 20px rgba(250, 204, 21, 0.15), inset 0 1px 0 rgba(254, 240, 138, 0.20);' : '';
               return `
-                <div class="agy-preset-card" data-name="${safeNameHtml}" data-group="${SEC.escapeHtml(groupTag)}" style="border-radius: 12px; border: ${borderStyle}; background: ${isRoyal ? 'linear-gradient(145deg, rgba(32, 18, 52, 0.92), rgba(18, 12, 32, 0.94))' : 'rgba(14, 12, 18, 0.84)'}; ${cardShadow} overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: border-color 0.15s ease, transform 0.15s ease;">
-                  <div style="height: 78px; width: 100%; background-image: ${thumbBg}; background-size: cover; background-position: ${safeBgPos}; position: relative; display: flex; align-items: flex-end; padding: 8px 14px;">
+                <div class="agy-preset-card" tabindex="0" role="button" aria-pressed="${isSelected ? 'true' : 'false'}" data-name="${safeNameHtml}" data-group="${SEC.escapeHtml(groupTag)}" style="border-radius: 12px; border: ${borderStyle}; background: ${isRoyal ? 'linear-gradient(145deg, rgba(30, 18, 50, 0.92), rgba(16, 12, 30, 0.94))' : 'rgba(17, 20, 29, 0.88)'}; ${cardShadow} overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: border-color 0.15s ease, background-color 0.15s ease;">
+                  <div style="height: 80px; width: 100%; background-image: ${thumbBg}; background-size: cover; background-position: ${safeBgPos}; position: relative; display: flex; align-items: flex-end; padding: 8px 14px;">
                     ${isRoyal ? `<span style="position:absolute; top:7px; left:10px; padding:2px 8px; border-radius:999px; background:linear-gradient(90deg, rgba(250,204,21,0.92), rgba(232,121,249,0.88)); color:#180d2c; font-size:10px; font-weight:800; letter-spacing:0.2px;">★ ĐẶC BIỆT</span>` : (isForged ? `<span style="position:absolute; top:7px; left:10px; padding:2px 8px; border-radius:999px; background:rgba(168,85,247,0.85); color:#fff; font-size:10px; font-weight:700;">⚒️ OKLCH</span>` : '')}
                     ${safeStickerUrl ? `<div style="position: absolute; ${thumbOrnamentStyle} background-image: url(&quot;${esc(safeStickerUrl)}&quot;); background-size: contain; background-repeat: no-repeat; pointer-events: none;"></div>` : ''}
                     <span style="font-size: 13.5px; font-weight: 600; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,0.92); padding-right: 78px;">${safeNameHtml}</span>
                   </div>
-                  <div style="padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                    <span style="font-size: 12px; color: ${isRoyal ? '#fef08a' : '#a1a1aa'}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${SEC.escapeHtml(th.concept || '')}</span>
-                    <div class="agy-card-check-slot">${isSelected ? CHECK_SVG : ''}</div>
+                  <div style="padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 8px; min-width: 0;">
+                    <span style="font-size: 12px; color: ${isRoyal ? '#fef08a' : '#94a3b8'}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${SEC.escapeHtml(th.concept || '')}</span>
+                    <div class="agy-card-check-slot" style="flex-shrink: 0;">${isSelected ? CHECK_SVG : ''}</div>
                   </div>
                 </div>
               `;
             }).join('')}
           </div>
-        </div>
+        </section>
+
+        <!-- TAB 2: NHÂN VẬT & ẢNH ĐẠI DIỆN (CÓ CÔNG TẮC BẬT/TẮT HAI CHIỀU) -->
+        <section
+          role="tabpanel"
+          id="agy-tabpanel-persona"
+          class="agy-studio-tabpanel"
+          data-tabpanel="persona"
+          aria-labelledby="agy-tab-persona"
+          style="display: ${modalActiveTab === 'persona' ? 'flex' : 'none'}; flex-direction: column; gap: 18px; max-width: 880px; margin: 0 auto;"
+        >
+          <div class="agy-studio-surface" style="border-color: ${escMainBorder}; background: ${escCardBg}; display: flex; flex-direction: column; gap: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+              <div style="flex: 1; min-width: 240px;">
+                <div style="font-size: 14.5px; font-weight: 600; color: #fef08a; margin-bottom: 3px;">👑 Bản Ngã Chủ Nhân (Độc lập khỏi chủ đề nền)</div>
+                <div style="font-size: 12.5px; color: #94a3b8;">Chọn danh xưng, Hơi Thở 3D và huy hiệu đại diện riêng mà không làm đổi hình nền hiện tại.</div>
+              </div>
+              <label style="display: flex; flex-direction: column; gap: 5px; font-size: 11.5px; color: #94a3b8;">
+                <span>Chọn nhân vật hóa thân</span>
+                <select id="agy-persona-select" aria-label="Chọn Bản Ngã Chủ Nhân" style="height: 36px; padding: 0 12px; border-radius: 8px; background: #111520; color: #f8fafc; border: 1px solid ${escMainPrimary}; font-size: 13px; font-weight: 600; cursor: pointer; min-width: 260px;">
+                  ${personaList.map((p) => {
+                    const sel = p.id === st.masterPersona ? 'selected' : '';
+                    return `<option value="${SEC.escapeHtml(p.id)}" ${sel}>${SEC.escapeHtml(p.label)}</option>`;
+                  }).join('')}
+                </select>
+              </label>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.07);">
+              ${personaList.slice(0, 10).map((p) => {
+                const isAct = p.id === st.masterPersona;
+                const pAv = SEC.sanitizeCssUrl(p.userAvatar || '');
+                const pRing = esc(SEC.sanitizeCssValue(p.ringColor, '#fde047'));
+                return `
+                  <button type="button" class="agy-persona-pill" data-persona="${SEC.escapeHtml(p.id)}" aria-pressed="${isAct ? 'true' : 'false'}" style="display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px 5px 6px; border-radius: 999px; border: 1px solid ${isAct ? pRing : 'rgba(255,255,255,0.13)'}; background: ${isAct ? 'rgba(250, 204, 21, 0.15)' : 'rgba(255,255,255,0.04)'}; color: #f8fafc; font-size: 12px; font-weight: ${isAct ? '600' : '500'}; cursor: pointer; transition: background-color 0.15s ease, border-color 0.15s ease;">
+                    <span style="width: 22px; height: 22px; border-radius: 50%; border: 1px solid ${pRing}; background: rgba(0,0,0,0.45) ${pAv ? `url(&quot;${esc(pAv)}&quot;) center/cover no-repeat` : ''}; flex-shrink: 0;"></span>
+                    <span>${SEC.escapeHtml(p.shortLabel || p.label)}</span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <div class="agy-studio-surface" style="border-color: ${escMainBorder}; background: ${escCardBg}; display: flex; flex-direction: column; gap: 16px;">
+            <div>
+              <div style="font-size: 14.5px; font-weight: 600; color: #f8fafc; margin-bottom: 3px;">Icon &amp; Ảnh Đại Diện Hội Thoại</div>
+              <div style="font-size: 12.5px; color: #94a3b8;">Bật hoặc tắt trực tiếp icon đại diện cạnh tin nhắn của bạn và Trợ lý AI, hoặc tải ảnh riêng (&le;&nbsp;15&nbsp;MB, tự nén WebP).</div>
+            </div>
+
+            <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+              <!-- Card 1: Icon Người Dùng -->
+              <div style="border-radius: 11px; border: 1px solid rgba(255,255,255,0.10); background: rgba(11, 14, 22, 0.65); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                  <div style="display: flex; align-items: center; gap: 11px; min-width: 0;">
+                    <div id="agy-user-av-preview" style="width: 42px; height: 42px; flex-shrink: 0; border-radius: ${st.avatarRadius}%; border: 1.8px solid ${escMainPrimary}; background: rgba(255,255,255,0.06) ${effUserAv ? `url(&quot;${esc(effUserAv)}&quot;) center/cover no-repeat` : ''}; opacity: ${isUserAvEnabled ? '1' : '0.42'}; display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 600; color: #94a3b8; transition: opacity 0.15s ease;">${isUserAvEnabled ? (effUserAv ? '' : 'B') : 'Ẩn'}</div>
+                    <div style="min-width: 0;">
+                      <div style="font-size: 13.5px; font-weight: 600; color: #f8fafc;">Icon Người Dùng</div>
+                      <div id="agy-user-av-substatus" style="font-size: 11.5px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${!isUserAvEnabled ? 'Đang ẩn khỏi khung hội thoại' : (hasCustomUserAv ? 'Đang dùng ảnh tải riêng' : 'Theo Bản Ngã / Chủ đề')}</div>
+                    </div>
+                  </div>
+                  <button
+                    id="agy-user-av-clear"
+                    type="button"
+                    role="switch"
+                    aria-checked="${isUserAvEnabled ? 'true' : 'false'}"
+                    aria-label="Bật hoặc tắt icon người dùng"
+                    title="${isUserAvEnabled ? 'Đang bật icon người dùng — bấm để tắt' : 'Đang tắt icon người dùng — bấm để bật lại'}"
+                    class="agy-av-switch"
+                  >
+                    <span class="agy-av-switch-track" aria-hidden="true"><span class="agy-av-switch-thumb"></span></span>
+                    <span class="agy-av-switch-label">${isUserAvEnabled ? 'Đang bật' : 'Đang tắt'}</span>
+                  </button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <label class="agy-studio-btn-label">
+                    <span>Tải ảnh người dùng</span>
+                    <input id="agy-user-av-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
+                  </label>
+                  <button id="agy-user-av-reset-default" type="button" class="agy-studio-btn" style="display: ${hasCustomUserAv ? 'inline-flex' : 'none'}; font-size: 12px; color: #cbd5e1;">Dùng mặc định</button>
+                </div>
+              </div>
+
+              <!-- Card 2: Icon Trợ Lý AI -->
+              <div style="border-radius: 11px; border: 1px solid rgba(255,255,255,0.10); background: rgba(11, 14, 22, 0.65); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                  <div style="display: flex; align-items: center; gap: 11px; min-width: 0;">
+                    <div id="agy-agent-av-preview" style="width: 42px; height: 42px; flex-shrink: 0; border-radius: ${st.avatarRadius}%; border: 1.8px solid ${escMainAccent}; background: rgba(255,255,255,0.06) ${effAgentAv ? `url(&quot;${esc(effAgentAv)}&quot;) center/cover no-repeat` : ''}; opacity: ${isAgentAvEnabled ? '1' : '0.42'}; display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 600; color: #94a3b8; transition: opacity 0.15s ease;">${isAgentAvEnabled ? (effAgentAv ? '' : 'AI') : 'Ẩn'}</div>
+                    <div style="min-width: 0;">
+                      <div style="font-size: 13.5px; font-weight: 600; color: #f8fafc;">Icon Trợ Lý AI</div>
+                      <div id="agy-agent-av-substatus" style="font-size: 11.5px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${!isAgentAvEnabled ? 'Đang ẩn khỏi khung hội thoại' : (hasCustomAgentAv ? 'Đang dùng ảnh tải riêng' : 'Theo Chủ đề đang bật')}</div>
+                    </div>
+                  </div>
+                  <button
+                    id="agy-agent-av-clear"
+                    type="button"
+                    role="switch"
+                    aria-checked="${isAgentAvEnabled ? 'true' : 'false'}"
+                    aria-label="Bật hoặc tắt icon trợ lý AI"
+                    title="${isAgentAvEnabled ? 'Đang bật icon trợ lý AI — bấm để tắt' : 'Đang tắt icon trợ lý AI — bấm để bật lại'}"
+                    class="agy-av-switch"
+                  >
+                    <span class="agy-av-switch-track" aria-hidden="true"><span class="agy-av-switch-thumb"></span></span>
+                    <span class="agy-av-switch-label">${isAgentAvEnabled ? 'Đang bật' : 'Đang tắt'}</span>
+                  </button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <label class="agy-studio-btn-label">
+                    <span>Tải ảnh trợ lý AI</span>
+                    <input id="agy-agent-av-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
+                  </label>
+                  <button id="agy-agent-av-reset-default" type="button" class="agy-studio-btn" style="display: ${hasCustomAgentAv ? 'inline-flex' : 'none'}; font-size: 12px; color: #cbd5e1;">Dùng mặc định</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.07);">
+              <label style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: #cbd5e1;">
+                <span>Kích thước icon</span>
+                <input id="agy-av-size" type="range" min="22" max="52" value="${st.avatarSize}" style="width: 120px; cursor: pointer; accent-color: ${escMainPrimary}; height: 5px;" />
+                <span id="agy-av-size-val" class="agy-studio-tabular" style="min-width: 38px; color: #f8fafc; font-weight: 600;">${st.avatarSize}px</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: #cbd5e1;">
+                <span>Độ bo góc</span>
+                <input id="agy-av-rad" type="range" min="0" max="50" value="${st.avatarRadius}" style="width: 120px; cursor: pointer; accent-color: ${escMainPrimary}; height: 5px;" />
+                <span id="agy-av-rad-val" class="agy-studio-tabular" style="min-width: 38px; color: #f8fafc; font-weight: 600;">${st.avatarRadius}%</span>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 3: TIN NHẮN & KHUNG SOẠN THẢO -->
+        <section
+          role="tabpanel"
+          id="agy-tabpanel-chat"
+          class="agy-studio-tabpanel"
+          data-tabpanel="chat"
+          aria-labelledby="agy-tab-chat"
+          style="display: ${modalActiveTab === 'chat' ? 'flex' : 'none'}; flex-direction: column; gap: 22px; max-width: 880px; margin: 0 auto;"
+        >
+          <div>
+            <div style="font-size: 15px; font-weight: 600; color: #f8fafc; margin-bottom: 3px;">Kiểu Khung Soạn Thảo</div>
+            <div style="font-size: 12.5px; color: #94a3b8; margin-bottom: 12px;">Tùy biến giao diện khung nhập câu lệnh mà không ảnh hưởng phím tắt hay tệp đính kèm.</div>
+            <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+              ${Object.entries(INPUT_STYLES).map(([key, item]) => {
+                const isSelected = key === st.inputStyle;
+                const activeBubbleTh = THEMES[st.bubbleName] || mainTheme;
+                const previewStickerStyle = activeBubbleTh.isOrnament
+                  ? 'top: -12px; right: 10px; width: 72px; height: 22px; background-position: center;'
+                  : 'top: -22px; right: 10px; width: 32px; height: 28px; background-position: bottom center;';
+                const previewInnerBg = esc(SEC.sanitizeCssValue(
+                  key === 'glass'
+                    ? (activeBubbleTh.inputGlassBg || 'rgba(20, 15, 13, 0.45)')
+                    : (activeBubbleTh.inputCardBg || activeBubbleTh.composerBg || 'rgba(26, 18, 15, 0.92)'),
+                  'rgba(26, 18, 15, 0.92)'
+                ));
+                const previewFrameBg = key === 'double_gold'
+                  ? 'linear-gradient(135deg, #f59e0b, #fbbf24)'
+                  : esc(SEC.sanitizeCssValue(activeBubbleTh.frameBg, '#c084fc'));
+                const previewStickerUrl = SEC.sanitizeCssUrl(activeBubbleTh.sticker || '');
+                const previewPrimary = esc(SEC.sanitizeCssValue(activeBubbleTh.primary, '#c084fc'));
+                return `
+                  <div class="agy-input-card" tabindex="0" role="button" aria-pressed="${isSelected ? 'true' : 'false'}" data-style="${SEC.escapeHtml(key)}" style="border-radius: 12px; border: ${isSelected ? '1.5px solid #f8fafc' : '1px solid rgba(255, 255, 255, 0.11)'}; background: ${isSelected ? 'rgba(36, 30, 46, 0.72)' : 'rgba(17, 20, 29, 0.84)'}; padding: 16px 18px; cursor: pointer; display: flex; flex-direction: column; gap: 12px; transition: border-color 0.15s ease, background-color 0.15s ease;">
+                    <div class="agy-input-preview-outer" style="position: relative; margin-top: 8px; padding: 1.5px; border-radius: 10px; background: ${previewFrameBg};">
+                      <div class="agy-input-preview-sticker" style="position: absolute; ${previewStickerStyle} ${previewStickerUrl ? `background-image: url(&quot;${esc(previewStickerUrl)}&quot;);` : ''} background-size: contain; background-repeat: no-repeat; display: ${key !== 'minimal' && previewStickerUrl ? 'block' : 'none'}; pointer-events: none;"></div>
+                      <div class="agy-input-preview-inner" style="background: ${previewInnerBg}; border-radius: 9px; padding: 8px 12px; font-size: 12px; color: #94a3b8; display: flex; justify-content: space-between; align-items: center;">
+                        <span>Nhập yêu cầu của bạn, gõ @ để đính kèm…</span>
+                        <span class="agy-input-preview-turbo" style="color: ${previewPrimary}; font-size: 11px; font-weight: 600;">Gửi</span>
+                      </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                      <div>
+                        <div style="font-size: 13.5px; font-weight: 600; color: #f1f5f9;">${SEC.escapeHtml(item.label)}</div>
+                        <div style="font-size: 11.5px; color: #94a3b8;">${SEC.escapeHtml(item.desc)}</div>
+                      </div>
+                      <div class="agy-card-check-slot" style="flex-shrink: 0;">${isSelected ? CHECK_SVG : ''}</div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size: 15px; font-weight: 600; color: #f8fafc; margin-bottom: 3px;">Khung Tin Nhắn Người Dùng</div>
+            <div style="font-size: 12.5px; color: #94a3b8; margin-bottom: 12px;">Phối riêng màu viền khung chat và họa tiết góc độc lập với hình nền chính.</div>
+            <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+              ${THEME_KEYS.map(name => {
+                const th = THEMES[name] || {};
+                const safeNameHtml = SEC.escapeHtml(name);
+                const isSelected = name === st.bubbleName;
+                const rawTop = Number.isFinite(Number(th.stickerTop)) ? Number(th.stickerTop) : 0;
+                const rawW = Number.isFinite(Number(th.stickerW)) ? Number(th.stickerW) : 0;
+                const rawH = Number.isFinite(Number(th.stickerH)) ? Number(th.stickerH) : 0;
+                const stickerTop = th.isOrnament ? Math.round(rawTop * 0.85) : Math.round(rawTop * 0.74);
+                const stickerW = Math.round(rawW * 0.78);
+                const stickerH = th.isOrnament ? Math.round(rawH * 0.8) : Math.round(rawH * 0.78);
+                const safeThFrame = esc(SEC.sanitizeCssValue(th.frameBg, '#c084fc'));
+                const safeThGlow = esc(SEC.sanitizeCssValue(th.glow, 'rgba(192,132,252,0.28)'));
+                const safeThBg = esc(SEC.sanitizeCssValue(th.userBubble || th.bg, 'rgba(24,18,42,0.9)'));
+                const safeThBorder = esc(SEC.sanitizeCssValue(th.innerBorder, '1px solid ' + SEC.sanitizeCssValue(th.borderColor, 'rgba(255,255,255,0.16)')));
+                const safeThText = esc(SEC.sanitizeCssValue(th.textColor || th.textMain, '#f8fafc'));
+                const safeStickerUrl = SEC.sanitizeCssUrl(th.sticker || '');
+                return `
+                  <div class="agy-bubble-card" tabindex="0" role="button" aria-pressed="${isSelected ? 'true' : 'false'}" data-name="${safeNameHtml}" style="position: relative; border-radius: 12px; border: ${isSelected ? '1.5px solid #f8fafc' : '1px solid rgba(255, 255, 255, 0.11)'}; background: ${isSelected ? 'rgba(36, 30, 46, 0.72)' : 'rgba(17, 20, 29, 0.84)'}; padding: 24px 18px 14px 18px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; min-height: 112px; transition: border-color 0.15s ease, background-color 0.15s ease;">
+                    <div style="display: flex; justify-content: center; align-items: center; width: 100%; margin-top: 6px; margin-bottom: 10px;">
+                      <div style="position: relative; width: 192px; height: 46px; padding: 1.2px; border-radius: ${th.isScroll ? '6px' : '12px'}; background: ${safeThFrame}; box-shadow: 0 4px 14px rgba(0,0,0,0.45), 0 0 10px ${safeThGlow};">
+                        <div style="position: relative; width: 100%; height: 100%; background: ${safeThBg}; border: ${safeThBorder}; border-radius: ${th.isScroll ? '4px' : '11px'}; display: flex; align-items: center; padding: 0 16px;">
+                          ${safeStickerUrl ? `<div style="position: absolute; top: ${stickerTop}px; right: 8px; width: ${stickerW}px; height: ${stickerH}px; background-image: url(&quot;${esc(safeStickerUrl)}&quot;); background-size: contain; background-position: ${th.isOrnament ? 'center' : 'bottom center'}; background-repeat: no-repeat; pointer-events: none;"></div>` : ''}
+                          <span style="font-size: 13.5px; font-weight: 500; color: ${safeThText};">Xin chào ✨</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; min-width: 0;">
+                      <span style="font-size: 13.5px; font-weight: 500; color: #e4e4e7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${safeNameHtml}</span>
+                      <div class="agy-card-check-slot" style="flex-shrink: 0;">${isSelected ? CHECK_SVG : ''}</div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 4: HÌNH NỀN & KÍNH MỜ -->
+        <section
+          role="tabpanel"
+          id="agy-tabpanel-backdrop"
+          class="agy-studio-tabpanel"
+          data-tabpanel="backdrop"
+          aria-labelledby="agy-tab-backdrop"
+          style="display: ${modalActiveTab === 'backdrop' ? 'flex' : 'none'}; flex-direction: column; gap: 16px; max-width: 880px; margin: 0 auto;"
+        >
+          <div class="agy-studio-surface" style="border-color: ${escMainBorder}; background: ${escCardBg}; display: flex; flex-direction: column; gap: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <div>
+                <div style="font-size: 14.5px; font-weight: 600; color: #f8fafc; margin-bottom: 3px;">Hình Nền &amp; Kính Mờ Pre-Baked 120fps</div>
+                <div style="font-size: 12.5px; color: #94a3b8;">Điều chỉnh độ phủ tối đọc code, độ mờ thanh bên L-Glass (0% GPU khi nghỉ) hoặc thay ảnh nền riêng.</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <label style="display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); font-size: 12.5px; font-weight: 500; color: #f1f5f9; cursor: pointer;">
+                  <input id="agy-wp-toggle" type="checkbox" ${st.wpEnabled ? 'checked' : ''} style="accent-color: ${escMainPrimary}; cursor: pointer;" />
+                  <span>Hiển thị hình nền</span>
+                </label>
+                <label class="agy-studio-btn-label">
+                  <span>Tải ảnh nền riêng</span>
+                  <input id="agy-wp-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
+                </label>
+              </div>
+            </div>
+
+            <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.07);">
+              <label style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px; background: rgba(11,14,22,0.60); border: 1px solid rgba(255,255,255,0.08);">
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: #cbd5e1;">
+                  <span>Độ tối lớp nền đọc code</span>
+                  <span id="agy-dim-val" class="agy-studio-tabular" style="font-weight: 600; color: #f8fafc;">${st.dimming}%</span>
+                </div>
+                <input id="agy-dim-slider" type="range" min="15" max="92" value="${st.dimming}" style="width: 100%; cursor: pointer; accent-color: #ffffff; height: 5px;" />
+              </label>
+
+              <label style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px; background: rgba(11,14,22,0.60); border: 1px solid rgba(255,255,255,0.08);">
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: #cbd5e1;">
+                  <span>Độ mờ kính L-Glass</span>
+                  <span id="agy-blur-val" class="agy-studio-tabular" style="font-weight: 600; color: #f8fafc;">${st.glassBlur}px</span>
+                </div>
+                <input id="agy-blur-slider" type="range" min="0" max="16" value="${st.glassBlur}" style="width: 100%; cursor: pointer; accent-color: ${escMainPrimary}; height: 5px;" />
+              </label>
+            </div>
+          </div>
+
+          <div class="agy-studio-surface" style="border-color: ${escMainBorder}; background: ${escCardBg}; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="flex: 1; min-width: 240px;">
+              <div style="font-size: 14px; font-weight: 600; color: #fef08a; margin-bottom: 3px;">👁️ Thế Giới Trong Suốt (Tập trung sâu khi gõ code)</div>
+              <div style="font-size: 12.5px; color: #94a3b8;">Tự động làm dịu chuyển động hạt nền 20% &amp; giảm chói 35% khi gõ liên tục (&ge;&nbsp;4&nbsp;phím/giây) hoặc cuộn xem diff.</div>
+            </div>
+            <label style="display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border-radius: 999px; background: rgba(250, 204, 21, 0.10); border: 1px solid rgba(250, 204, 21, 0.35); font-size: 12.5px; color: #fef08a; font-weight: 600; cursor: pointer;">
+              <input id="agy-tw-toggle" type="checkbox" ${st.transparentWorld ? 'checked' : ''} style="accent-color: #facc15; cursor: pointer;" />
+              <span>Bật tự động làm dịu</span>
+            </label>
+          </div>
+        </section>
+
+        <!-- TAB 5: LÒ RÈN OKLCH & QUẢN LÝ DỮ LIỆU -->
+        <section
+          role="tabpanel"
+          id="agy-tabpanel-forge"
+          class="agy-studio-tabpanel"
+          data-tabpanel="forge"
+          aria-labelledby="agy-tab-forge"
+          style="display: ${modalActiveTab === 'forge' ? 'flex' : 'none'}; flex-direction: column; gap: 16px; max-width: 880px; margin: 0 auto;"
+        >
+          ${forge ? `
+          <div style="border: 1px solid rgba(192, 132, 252, 0.38); background: linear-gradient(145deg, rgba(20, 14, 38, 0.90), rgba(12, 16, 28, 0.94)); border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 13px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
+              <div style="flex: 1; min-width: 240px;">
+                <div style="font-size: 14.5px; font-weight: 700; color: #e9d5ff; margin-bottom: 3px;">⚒️ Lò Rèn Đa Vũ Trụ — Rèn Chủ Đề OKLCH &amp; Gói .agytheme</div>
+                <div style="font-size: 12.5px; color: #cbd5e1;">Thả ảnh 4K bất kỳ để trích xuất 14 biến màu kính mờ chuẩn tương phản WCAG AA, hoặc kích hoạt nhanh mẫu Đa Vũ Trụ.</div>
+              </div>
+              <button id="agy-forge-export-pkg" type="button" class="agy-studio-btn" style="background: rgba(56, 189, 248, 0.14); border-color: rgba(56, 189, 248, 0.42); color: #e0f2fe; font-weight: 600;">
+                📦 Xuất gói .agytheme
+              </button>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+              ${multiversePresets.map((mp) => `
+                <button type="button" class="agy-multiverse-preset-btn" data-mv-id="${SEC.escapeHtml(mp.id)}" style="height: 34px; padding: 0 12px; border-radius: 8px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(192, 132, 252, 0.40); color: #f5d0fe; font-size: 12px; font-weight: 600; cursor: pointer;">
+                  ${SEC.escapeHtml(mp.shortLabel)}
+                </button>
+              `).join('')}
+              <label id="agy-forge-dropzone" style="flex: 1; min-width: 220px; min-height: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 6px 14px; border-radius: 8px; border: 1px dashed rgba(94, 234, 212, 0.52); background: rgba(15, 23, 42, 0.58); color: #99f6e4; font-size: 12px; font-weight: 500; text-align: center; cursor: pointer;">
+                🖼️ Thả hoặc chọn ảnh 4K để rèn bảng màu OKLCH…
+                <input id="agy-forge-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
+              </label>
+            </div>
+            <div id="agy-forge-workbench" style="display: none; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.10);">
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <input id="agy-forge-name" type="text" maxlength="60" autocomplete="off" placeholder="Đặt tên Vũ Trụ mới…" style="flex: 1; min-width: 180px; height: 34px; padding: 0 11px; border-radius: 8px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 12.5px;" />
+                <select id="agy-forge-fx" aria-label="Hiệu ứng hạt đi kèm" style="height: 34px; padding: 0 10px; border-radius: 8px; background: #111520; border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 12px;">
+                  ${fxModeOptions.map((opt) => `<option value="${SEC.escapeHtml(opt.value)}">${SEC.escapeHtml(opt.label)}</option>`).join('')}
+                </select>
+                <button id="agy-forge-commit" type="button" style="height: 34px; padding: 0 14px; border-radius: 8px; background: linear-gradient(135deg, #a855f7, #38bdf8); border: none; color: #090d16; font-size: 12.5px; font-weight: 700; cursor: pointer;">
+                  ⚡ Rèn &amp; Kích Hoạt
+                </button>
+              </div>
+              <div id="agy-forge-swatches" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 11.5px; color: #cbd5e1;"></div>
+            </div>
+            <div id="agy-forge-status" role="status" aria-live="polite" style="font-size: 12px; color: #5eead4; display: none;"></div>
+          </div>
+          ` : ''}
+
+          <div class="agy-studio-surface" style="border-color: ${escMainBorder}; background: ${escCardBg}; display: flex; flex-direction: column; gap: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <div>
+                <div style="font-size: 14.5px; font-weight: 600; color: #f8fafc; margin-bottom: 3px;">Sao Lưu, Nhập Cấu Hình &amp; Khôi Phục</div>
+                <div style="font-size: 12.5px; color: #94a3b8;">Sao chép cấu hình JSON ra bộ nhớ tạm, nạp tệp <code style="color:#e2e8f0;">.agytheme</code> hoặc đặt lại toàn bộ về mặc định gốc.</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <button id="agy-export-btn" type="button" class="agy-studio-btn">Xuất JSON</button>
+                <button id="agy-import-toggle" type="button" aria-expanded="false" aria-controls="agy-import-box" class="agy-studio-btn">Nhập JSON / .agytheme</button>
+                <button id="agy-reset-btn" type="button" class="agy-studio-btn agy-studio-btn-danger">Đặt lại mặc định</button>
+              </div>
+            </div>
+
+            <div id="agy-import-box" style="display: none; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);">
+              <textarea id="agy-import-text" rows="3" spellcheck="false" autocomplete="off" placeholder="Dán JSON cấu hình hoặc nội dung gói .agytheme (schema: agytheme/2.0) vào đây…" style="width: 100%; background: rgba(0,0,0,0.38); color: #f4f4f5; border: 1px solid ${escMainBorder}; border-radius: 8px; padding: 9px 11px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; resize: vertical;"></textarea>
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <label class="agy-studio-btn-label">
+                  <span>📂 Chọn tệp .agytheme / .json</span>
+                  <input id="agy-import-file" type="file" accept=".agytheme,.json,application/json" style="display: none;" />
+                </label>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span id="agy-import-msg" role="status" aria-live="polite" style="font-size: 12px; color: #fca5a5;"></span>
+                  <button id="agy-import-apply" type="button" style="height: 32px; padding: 0 14px; border-radius: 8px; background: ${escMainPrimary}; color: #090d16; font-weight: 600; font-size: 12.5px; border: none; cursor: pointer;">Nạp cấu hình</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     `;
+
+    // WAI-ARIA 1.2 Tablist switching & keyboard navigation (ArrowLeft, ArrowRight, Home, End)
+    const tabButtons = Array.from(container.querySelectorAll('.agy-studio-tab'));
+    const tabPanels = Array.from(container.querySelectorAll('.agy-studio-tabpanel'));
+    const innerScroller = container.querySelector('#agy-theme-scroll-container');
+
+    function activateStudioTab(nextId, moveFocus) {
+      if (!STUDIO_TABS.some((t) => t.id === nextId)) return;
+      modalActiveTab = nextId;
+      tabButtons.forEach((btn) => {
+        const match = btn.getAttribute('data-tab') === nextId;
+        btn.setAttribute('aria-selected', match ? 'true' : 'false');
+        btn.setAttribute('tabindex', match ? '0' : '-1');
+        if (match && moveFocus && typeof btn.focus === 'function') {
+          btn.focus();
+        }
+      });
+      tabPanels.forEach((panel) => {
+        const match = panel.getAttribute('data-tabpanel') === nextId;
+        panel.style.display = match ? 'flex' : 'none';
+      });
+      if (innerScroller) {
+        innerScroller.scrollTop = 0;
+      }
+    }
+
+    tabButtons.forEach((btn, idx) => {
+      btn.addEventListener('click', () => {
+        activateStudioTab(btn.getAttribute('data-tab'), false);
+      });
+      btn.addEventListener('keydown', (e) => {
+        if (!e || !tabButtons.length) return;
+        let nextIdx = -1;
+        if (e.key === 'ArrowRight') nextIdx = (idx + 1) % tabButtons.length;
+        else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + tabButtons.length) % tabButtons.length;
+        else if (e.key === 'Home') nextIdx = 0;
+        else if (e.key === 'End') nextIdx = tabButtons.length - 1;
+        if (nextIdx >= 0) {
+          if (typeof e.preventDefault === 'function') e.preventDefault();
+          activateStudioTab(tabButtons[nextIdx].getAttribute('data-tab'), true);
+        }
+      });
+    });
 
     function updateInputPreviews(bName) {
       const activeTh = THEMES[bName] || THEMES[DEFAULT_THEME_KEY] || {};
@@ -2177,7 +2630,7 @@
           return `<span title="${SEC.escapeHtml(sw.label)}: ${escC}" style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:6px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.14);"><i style="width:11px;height:11px;border-radius:3px;background:${escC};display:inline-block;"></i>${SEC.escapeHtml(sw.label)}</span>`;
         }).join('');
         const ratio = themeObj.wcagReport ? themeObj.wcagReport.textContrast : '12.0';
-        forgeSwatches.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:5px;">${swHtml}</div><span style="color:#fef08a;font-weight:600;">Chuẩn WCAG AA/AAA: ${SEC.escapeHtml(String(ratio))}:1 ✓</span>`;
+        forgeSwatches.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:5px;">${swHtml}</div><span class="agy-studio-tabular" style="color:#fef08a;font-weight:600;">Chuẩn WCAG AA/AAA: ${SEC.escapeHtml(String(ratio))}:1 ✓</span>`;
       };
 
       // Restore workbench draft if user switched Master Persona mid-forge
@@ -2202,7 +2655,7 @@
       const handleForgeFile = (file) => {
         if (!file) return;
         const activePersonaId = getState().masterPersona || 'yoriichi';
-        showForgeStatus('⏳ Đang quét histogram 64×64 & giải phương trình màu OKLCH...', false);
+        showForgeStatus('⏳ Đang quét histogram 64×64 & giải phương trình màu OKLCH…', false);
         forge.forgeFromWallpaperFile(file, { personaId: activePersonaId }).then((res) => {
           if (coreDestroyed) return;
           modalPendingForged = res;
@@ -2238,7 +2691,7 @@
           forgeDrop.addEventListener(evt, (e) => {
             e.preventDefault();
             e.stopPropagation();
-            forgeDrop.style.borderColor = 'rgba(94, 234, 212, 0.55)';
+            forgeDrop.style.borderColor = 'rgba(94, 234, 212, 0.52)';
             if (evt === 'drop' && e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
               handleForgeFile(e.dataTransfer.files[0]);
             }
@@ -2275,7 +2728,7 @@
               if (nextStatusEl) {
                 nextStatusEl.style.display = 'block';
                 nextStatusEl.style.color = '#fde047';
-                nextStatusEl.textContent = '⚠️ Bộ nhớ trình duyệt đã đầy — Theme mới đã được kích hoạt và đồng bộ trực tiếp vào cấu hình chính.';
+                nextStatusEl.textContent = '⚠️ Bộ nhớ trình duyệt đã đầy — Chủ đề mới đã được kích hoạt và đồng bộ trực tiếp vào cấu hình chính.';
               }
             }
           } else {
@@ -2319,12 +2772,23 @@
     const userAvUpload = container.querySelector('#agy-user-av-upload');
     const userAvPreview = container.querySelector('#agy-user-av-preview');
     const userAvClear = container.querySelector('#agy-user-av-clear');
+    const userAvSubstatus = container.querySelector('#agy-user-av-substatus');
+    const userAvResetDef = container.querySelector('#agy-user-av-reset-default');
     const agentAvUpload = container.querySelector('#agy-agent-av-upload');
     const agentAvPreview = container.querySelector('#agy-agent-av-preview');
     const agentAvClear = container.querySelector('#agy-agent-av-clear');
+    const agentAvSubstatus = container.querySelector('#agy-agent-av-substatus');
+    const agentAvResetDef = container.querySelector('#agy-agent-av-reset-default');
 
-    function syncAvPreview(el, url, fallbackText) {
+    function syncAvPreview(el, url, fallbackText, enabled = true) {
       if (!el) return;
+      if (!enabled) {
+        el.style.backgroundImage = 'none';
+        el.style.opacity = '0.42';
+        el.textContent = 'Ẩn';
+        return;
+      }
+      el.style.opacity = '1';
       const safeUrl = safeCssUrl(url || '');
       if (safeUrl) {
         el.style.backgroundImage = `url("${safeUrl}")`;
@@ -2337,6 +2801,25 @@
       }
     }
 
+    function syncAvSwitchUi(switchBtn, subEl, resetDefBtn, enabled, hasCustom, defaultDesc, entityLabel) {
+      if (switchBtn) {
+        switchBtn.setAttribute('aria-checked', enabled ? 'true' : 'false');
+        switchBtn.title = enabled
+          ? `Đang bật ${entityLabel} — bấm để tắt`
+          : `Đang tắt ${entityLabel} — bấm để bật lại`;
+        const lbl = switchBtn.querySelector('.agy-av-switch-label');
+        if (lbl) lbl.textContent = enabled ? 'Đang bật' : 'Đang tắt';
+      }
+      if (subEl) {
+        subEl.textContent = !enabled
+          ? 'Đang ẩn khỏi khung hội thoại'
+          : (hasCustom ? 'Đang dùng ảnh tải riêng' : defaultDesc);
+      }
+      if (resetDefBtn) {
+        resetDefBtn.style.display = (enabled && hasCustom) ? 'inline-flex' : 'none';
+      }
+    }
+
     if (userAvUpload) {
       userAvUpload.addEventListener('change', (e) => {
         const file = e.target.files && e.target.files[0];
@@ -2344,17 +2827,47 @@
         if (!file) return;
         compressAvatarFile(file, (dataUrl) => {
           if (coreDestroyed) return;
+          try { localStorage.setItem(STORAGE_USER_AVATAR_SAVED, dataUrl); } catch (_) {}
           applyTheme({ userAvatar: dataUrl });
-          syncAvPreview(userAvPreview, dataUrl, 'B');
+          syncAvPreview(userAvPreview, dataUrl, 'B', true);
+          syncAvSwitchUi(userAvClear, userAvSubstatus, userAvResetDef, true, true, 'Theo Bản Ngã / Chủ đề', 'icon người dùng');
         });
       });
     }
     if (userAvClear) {
       userAvClear.addEventListener('click', () => {
-        applyTheme({ userAvatar: 'none' });
-        syncAvPreview(userAvPreview, '', 'B');
+        const cur = getState();
+        const currentlyEnabled = cur.userAvatar !== 'none';
+        if (currentlyEnabled) {
+          if (cur.userAvatar && cur.userAvatar !== 'none') {
+            try { localStorage.setItem(STORAGE_USER_AVATAR_SAVED, cur.userAvatar); } catch (_) {}
+          }
+          applyTheme({ userAvatar: 'none' });
+          syncAvPreview(userAvPreview, '', 'B', false);
+          syncAvSwitchUi(userAvClear, userAvSubstatus, userAvResetDef, false, false, 'Theo Bản Ngã / Chủ đề', 'icon người dùng');
+        } else {
+          let savedCustom = '';
+          try {
+            const rawSaved = localStorage.getItem(STORAGE_USER_AVATAR_SAVED) || '';
+            savedCustom = rawSaved ? resolveAssetUrl(rawSaved) : '';
+          } catch (_) {}
+          applyTheme({ userAvatar: savedCustom });
+          const nextSt = getState();
+          syncAvPreview(userAvPreview, computeEffectiveUserAv(nextSt), 'B', true);
+          syncAvSwitchUi(userAvClear, userAvSubstatus, userAvResetDef, true, Boolean(savedCustom), 'Theo Bản Ngã / Chủ đề', 'icon người dùng');
+        }
       });
     }
+    if (userAvResetDef) {
+      userAvResetDef.addEventListener('click', () => {
+        try { localStorage.removeItem(STORAGE_USER_AVATAR_SAVED); } catch (_) {}
+        applyTheme({ userAvatar: '' });
+        const nextSt = getState();
+        syncAvPreview(userAvPreview, computeEffectiveUserAv(nextSt), 'B', true);
+        syncAvSwitchUi(userAvClear, userAvSubstatus, userAvResetDef, true, false, 'Theo Bản Ngã / Chủ đề', 'icon người dùng');
+      });
+    }
+
     if (agentAvUpload) {
       agentAvUpload.addEventListener('change', (e) => {
         const file = e.target.files && e.target.files[0];
@@ -2362,15 +2875,44 @@
         if (!file) return;
         compressAvatarFile(file, (dataUrl) => {
           if (coreDestroyed) return;
+          try { localStorage.setItem(STORAGE_AGENT_AVATAR_SAVED, dataUrl); } catch (_) {}
           applyTheme({ agentAvatar: dataUrl });
-          syncAvPreview(agentAvPreview, dataUrl, 'AI');
+          syncAvPreview(agentAvPreview, dataUrl, 'AI', true);
+          syncAvSwitchUi(agentAvClear, agentAvSubstatus, agentAvResetDef, true, true, 'Theo Chủ đề đang bật', 'icon trợ lý AI');
         });
       });
     }
     if (agentAvClear) {
       agentAvClear.addEventListener('click', () => {
-        applyTheme({ agentAvatar: 'none' });
-        syncAvPreview(agentAvPreview, '', 'AI');
+        const cur = getState();
+        const currentlyEnabled = cur.agentAvatar !== 'none';
+        if (currentlyEnabled) {
+          if (cur.agentAvatar && cur.agentAvatar !== 'none') {
+            try { localStorage.setItem(STORAGE_AGENT_AVATAR_SAVED, cur.agentAvatar); } catch (_) {}
+          }
+          applyTheme({ agentAvatar: 'none' });
+          syncAvPreview(agentAvPreview, '', 'AI', false);
+          syncAvSwitchUi(agentAvClear, agentAvSubstatus, agentAvResetDef, false, false, 'Theo Chủ đề đang bật', 'icon trợ lý AI');
+        } else {
+          let savedCustom = '';
+          try {
+            const rawSaved = localStorage.getItem(STORAGE_AGENT_AVATAR_SAVED) || '';
+            savedCustom = rawSaved ? resolveAssetUrl(rawSaved) : '';
+          } catch (_) {}
+          applyTheme({ agentAvatar: savedCustom });
+          const nextSt = getState();
+          syncAvPreview(agentAvPreview, computeEffectiveAgentAv(nextSt), 'AI', true);
+          syncAvSwitchUi(agentAvClear, agentAvSubstatus, agentAvResetDef, true, Boolean(savedCustom), 'Theo Chủ đề đang bật', 'icon trợ lý AI');
+        }
+      });
+    }
+    if (agentAvResetDef) {
+      agentAvResetDef.addEventListener('click', () => {
+        try { localStorage.removeItem(STORAGE_AGENT_AVATAR_SAVED); } catch (_) {}
+        applyTheme({ agentAvatar: '' });
+        const nextSt = getState();
+        syncAvPreview(agentAvPreview, computeEffectiveAgentAv(nextSt), 'AI', true);
+        syncAvSwitchUi(agentAvClear, agentAvSubstatus, agentAvResetDef, true, false, 'Theo Chủ đề đang bật', 'icon trợ lý AI');
       });
     }
 
@@ -2520,7 +3062,9 @@
     }
     if (importToggle && importBox) {
       importToggle.addEventListener('click', () => {
-        importBox.style.display = importBox.style.display === 'none' ? 'flex' : 'none';
+        const willOpen = importBox.style.display === 'none';
+        importBox.style.display = willOpen ? 'flex' : 'none';
+        importToggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
         if (importMsg) importMsg.textContent = '';
       });
     }
@@ -2569,6 +3113,8 @@
       localStorage.removeItem(STORAGE_CUSTOM_WP);
       localStorage.removeItem(STORAGE_USER_AVATAR);
       localStorage.removeItem(STORAGE_AGENT_AVATAR);
+      localStorage.removeItem(STORAGE_USER_AVATAR_SAVED);
+      localStorage.removeItem(STORAGE_AGENT_AVATAR_SAVED);
       localStorage.removeItem(STORAGE_GLASS_BLUR);
       localStorage.removeItem(STORAGE_AVATAR_SIZE);
       localStorage.removeItem(STORAGE_AVATAR_RADIUS);
@@ -2606,8 +3152,8 @@
         const f = chip.getAttribute('data-filter') || 'all';
         container.querySelectorAll('.agy-filter-chip').forEach(ch => {
           const active = ch === chip;
-          ch.style.background = active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.05)';
-          ch.style.borderColor = active ? safeMainPrimary : 'rgba(255,255,255,0.16)';
+          ch.style.background = active ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)';
+          ch.style.borderColor = active ? safeMainPrimary : 'rgba(255,255,255,0.14)';
           ch.style.fontWeight = active ? '600' : '400';
         });
         container.querySelectorAll('.agy-preset-card').forEach(card => {
@@ -2617,40 +3163,55 @@
       });
     });
 
+    const bindCardKeyActivation = (card) => {
+      card.addEventListener('keydown', (e) => {
+        if (e && (e.key === 'Enter' || e.key === ' ')) {
+          if (typeof e.preventDefault === 'function') e.preventDefault();
+          card.click();
+        }
+      });
+    };
+
     container.querySelectorAll('.agy-preset-card').forEach(card => {
+      bindCardKeyActivation(card);
       card.addEventListener('click', () => {
         const name = card.dataset.name;
         if (!THEMES[name]) return;
         const pickedTh = THEMES[name] || {};
         const nextDim = pickedTh.defaultDimming !== undefined ? pickedTh.defaultDimming : 36;
         applyTheme({ themeName: name, bubbleName: name, dimming: nextDim, customWp: '', wpEnabled: true });
+        const pickedPrimary = SEC.sanitizeCssValue(pickedTh.primary, '#c084fc');
+        container.style.setProperty('--agy-st-accent', pickedPrimary);
+        if (summaryEl) {
+          summaryEl.textContent = `Đang dùng: ${name}`;
+        }
         if (wpToggle) wpToggle.checked = true;
         if (slider) slider.value = nextDim;
         if (valLabel) valLabel.textContent = nextDim + '%';
-        if (!localStorage.getItem(STORAGE_USER_AVATAR)) {
-          const curSt = getState();
-          const curP = getActiveMasterPersona(curSt);
-          const pValid = hasValidMasterPersona(curSt.masterPersona);
-          syncAvPreview(userAvPreview, pValid ? (curP.userAvatar || pickedTh.userAvatar || '') : (pickedTh.userAvatar || curP.userAvatar || ''), 'B');
+        const curSt = getState();
+        if (curSt.userAvatar !== 'none' && !curSt.userAvatar) {
+          syncAvPreview(userAvPreview, computeEffectiveUserAv(curSt), 'B', true);
         }
-        if (!localStorage.getItem(STORAGE_AGENT_AVATAR)) {
-          syncAvPreview(agentAvPreview, pickedTh.agentAvatar || '', 'AI');
+        if (curSt.agentAvatar !== 'none' && !curSt.agentAvatar) {
+          syncAvPreview(agentAvPreview, computeEffectiveAgentAv(curSt), 'AI', true);
         }
 
         container.querySelectorAll('.agy-preset-card').forEach(c => {
           const isSel = c.dataset.name === name;
           const isRoy = c.dataset.group === 'royal';
+          c.setAttribute('aria-pressed', isSel ? 'true' : 'false');
           c.style.border = isSel
-            ? (isRoy ? '1.8px solid #facc15' : '1.5px solid #f4f4f5')
-            : (isRoy ? '1.2px solid rgba(250, 204, 21, 0.55)' : '1px solid rgba(255, 255, 255, 0.12)');
+            ? (isRoy ? '1.8px solid #facc15' : '1.5px solid #f8fafc')
+            : (isRoy ? '1.2px solid rgba(250, 204, 21, 0.50)' : '1px solid rgba(255, 255, 255, 0.11)');
           const slot = c.querySelector('.agy-card-check-slot');
           if (slot) slot.innerHTML = isSel ? CHECK_SVG : '';
         });
 
         container.querySelectorAll('.agy-bubble-card').forEach(b => {
           const isSel = b.dataset.name === name;
-          b.style.border = isSel ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)';
-          b.style.background = isSel ? 'rgba(42, 34, 30, 0.68)' : 'rgba(14, 12, 12, 0.78)';
+          b.setAttribute('aria-pressed', isSel ? 'true' : 'false');
+          b.style.border = isSel ? '1.5px solid #f8fafc' : '1px solid rgba(255, 255, 255, 0.11)';
+          b.style.background = isSel ? 'rgba(36, 30, 46, 0.72)' : 'rgba(17, 20, 29, 0.84)';
           const slot = b.querySelector('.agy-card-check-slot');
           if (slot) slot.innerHTML = isSel ? CHECK_SVG : '';
         });
@@ -2660,6 +3221,7 @@
     });
 
     container.querySelectorAll('.agy-bubble-card').forEach(card => {
+      bindCardKeyActivation(card);
       card.addEventListener('click', () => {
         const name = card.dataset.name;
         if (!THEMES[name]) return;
@@ -2667,8 +3229,9 @@
 
         container.querySelectorAll('.agy-bubble-card').forEach(b => {
           const isSel = b.dataset.name === name;
-          b.style.border = isSel ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)';
-          b.style.background = isSel ? 'rgba(42, 34, 30, 0.68)' : 'rgba(14, 12, 12, 0.78)';
+          b.setAttribute('aria-pressed', isSel ? 'true' : 'false');
+          b.style.border = isSel ? '1.5px solid #f8fafc' : '1px solid rgba(255, 255, 255, 0.11)';
+          b.style.background = isSel ? 'rgba(36, 30, 46, 0.72)' : 'rgba(17, 20, 29, 0.84)';
           const slot = b.querySelector('.agy-card-check-slot');
           if (slot) slot.innerHTML = isSel ? CHECK_SVG : '';
         });
@@ -2678,6 +3241,7 @@
     });
 
     container.querySelectorAll('.agy-input-card').forEach(card => {
+      bindCardKeyActivation(card);
       card.addEventListener('click', () => {
         const styleKey = card.dataset.style;
         if (!INPUT_STYLES[styleKey]) return;
@@ -2685,17 +3249,17 @@
 
         container.querySelectorAll('.agy-input-card').forEach(c => {
           const isSel = c.dataset.style === styleKey;
-          c.style.border = isSel ? '1.5px solid #f4f4f5' : '1px solid rgba(255, 255, 255, 0.12)';
-          c.style.background = isSel ? 'rgba(42, 34, 30, 0.68)' : 'rgba(14, 12, 12, 0.78)';
+          c.setAttribute('aria-pressed', isSel ? 'true' : 'false');
+          c.style.border = isSel ? '1.5px solid #f8fafc' : '1px solid rgba(255, 255, 255, 0.11)';
+          c.style.background = isSel ? 'rgba(36, 30, 46, 0.72)' : 'rgba(17, 20, 29, 0.84)';
           const slot = c.querySelector('.agy-card-check-slot');
           if (slot) slot.innerHTML = isSel ? CHECK_SVG : '';
         });
       });
     });
 
-    const nextInnerScroller = container.querySelector('#agy-theme-scroll-container');
-    if (nextInnerScroller && savedInnerScrollTop > 0) {
-      nextInnerScroller.scrollTop = savedInnerScrollTop;
+    if (innerScroller && savedInnerScrollTop > 0) {
+      innerScroller.scrollTop = savedInnerScrollTop;
     }
     if (savedOuterScrollTop > 0) {
       container.scrollTop = savedOuterScrollTop;

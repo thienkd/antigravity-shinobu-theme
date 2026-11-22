@@ -45,12 +45,24 @@ function createMockCtx2d(logCalls = false) {
 function createKernelVm(opts = {}) {
     let lostCalled = 0;
     let drawArraysCalled = 0;
+    let bufferSubDataCalled = 0;
+    let contextsCreated = 0;
+    let cvListeners = 0;
+    let docListeners = 0;
     const rendererName = opts.rendererName || 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11)';
     const enableWebGl = Boolean(opts.enableWebGl);
-    const frameStepMs = Number(opts.frameStepMs) || 4;
+    const frameStepMs = Number(opts.frameStepMs) !== undefined && opts.frameStepMs !== undefined ? Number(opts.frameStepMs) : 4;
     let nowClock = 1000;
+    let parallelReady = opts.parallelReady !== undefined ? Boolean(opts.parallelReady) : true;
+    const createdCanvases = [];
+    const timers = new Map();
+    let nextTimerId = 1;
+    const rafs = new Map();
+    let nextRafId = 1;
+    const storage = new Map();
 
     function createMockGl() {
+        contextsCreated++;
         return {
             VERTEX_SHADER: 0x8b31,
             FRAGMENT_SHADER: 0x8b30,
@@ -80,6 +92,9 @@ function createKernelVm(opts = {}) {
                         },
                     };
                 }
+                if (name === 'KHR_parallel_shader_compile' && opts.parallelCompile) {
+                    return { COMPLETION_STATUS_KHR: 0x91b1 };
+                }
                 if (name === 'OES_standard_derivatives') return {};
                 return null;
             },
@@ -96,7 +111,7 @@ function createKernelVm(opts = {}) {
             createProgram: () => ({}),
             attachShader: () => {},
             linkProgram: () => {},
-            getProgramParameter: () => true,
+            getProgramParameter: (_p, k) => (k === 0x91b1 ? parallelReady : !opts.linkFail),
             getProgramInfoLog: () => '',
             deleteProgram: () => {},
             useProgram: () => {},
@@ -105,7 +120,9 @@ function createKernelVm(opts = {}) {
             createBuffer: () => ({}),
             bindBuffer: () => {},
             bufferData: () => {},
-            bufferSubData: () => {},
+            bufferSubData: () => {
+                bufferSubDataCalled++;
+            },
             deleteBuffer: () => {},
             createVertexArray: () => ({}),
             bindVertexArray: () => {},
@@ -132,30 +149,95 @@ function createKernelVm(opts = {}) {
         };
     }
 
+    function makeMockElement(tag) {
+        const children = [];
+        return {
+            tagName: String(tag || 'div').toUpperCase(),
+            isConnected: true,
+            textContent: '',
+            id: '',
+            className: '',
+            style: { setProperty: () => {}, removeProperty: () => {} },
+            dataset: {},
+            classList: { add: () => {}, remove: () => {}, contains: () => false },
+            children,
+            appendChild(ch) {
+                children.push(ch);
+                return ch;
+            },
+            remove: () => {},
+            setAttribute: () => {},
+            getAttribute: () => null,
+            querySelector: () => null,
+            querySelectorAll: () => [],
+            addEventListener: () => {},
+            removeEventListener: () => {},
+        };
+    }
+
+    const docMap = new Map();
     const doc = {
         hidden: false,
         visibilityState: 'visible',
-        addEventListener: () => {},
-        removeEventListener: () => {},
+        head: makeMockElement('head'),
+        body: makeMockElement('body'),
+        documentElement: makeMockElement('html'),
+        addEventListener(type, fn) {
+            if (!docMap.has(type)) docMap.set(type, new Set());
+            const s = docMap.get(type);
+            if (!s.has(fn)) {
+                s.add(fn);
+                docListeners++;
+            }
+        },
+        removeEventListener(type, fn) {
+            const s = docMap.get(type);
+            if (s && s.delete(fn)) docListeners--;
+        },
+        getElementById: () => null,
+        querySelector: () => null,
+        querySelectorAll: () => [],
         createElement(tag) {
             if (String(tag).toLowerCase() === 'canvas') {
-                return {
+                const lMap = new Map();
+                const cv = {
                     width: 300,
                     height: 150,
-                    style: {},
-                    addEventListener: () => {},
-                    removeEventListener: () => {},
+                    style: { setProperty: () => {} },
+                    dataset: {},
+                    classList: { add: () => {}, remove: () => {} },
+                    addEventListener(type, fn) {
+                        if (!lMap.has(type)) lMap.set(type, new Set());
+                        const s = lMap.get(type);
+                        if (!s.has(fn)) {
+                            s.add(fn);
+                            cvListeners++;
+                        }
+                    },
+                    removeEventListener(type, fn) {
+                        const s = lMap.get(type);
+                        if (s && s.delete(fn)) cvListeners--;
+                    },
+                    fireContextLost() {
+                        const s = lMap.get('webglcontextlost');
+                        if (s) {
+                            for (const fn of [...s]) fn({ preventDefault: () => {} });
+                        }
+                    },
                     getContext(kind, attrs) {
-                        if (kind === '2d') return createMockCtx2d();
+                        if (kind === '2d') return createMockCtx2d(Boolean(opts.log2dCalls));
                         if (enableWebGl && (kind === 'webgl2' || kind === 'webgl')) {
+                            if (opts.rejectContext) return null;
                             if (opts.failCaveat && attrs && attrs.failIfMajorPerformanceCaveat) return null;
                             return createMockGl();
                         }
                         return null;
                     },
                 };
+                createdCanvases.push(cv);
+                return cv;
             }
-            return { style: {}, dataset: {}, appendChild: () => {}, remove: () => {} };
+            return makeMockElement(tag);
         },
     };
 
@@ -164,19 +246,41 @@ function createKernelVm(opts = {}) {
         devicePixelRatio: 1.5,
         innerWidth: 1440,
         innerHeight: 900,
+        localStorage: {
+            getItem: (k) => (storage.has(k) ? storage.get(k) : null),
+            setItem: (k, v) => storage.set(k, String(v)),
+            removeItem: (k) => storage.delete(k),
+        },
         performance: {
             now() {
-                nowClock += frameStepMs;
+                if (!opts.manualClock) nowClock += frameStepMs;
                 return nowClock;
             },
         },
-        setTimeout: (fn) => {
-            if (opts.instantTimers) fn();
-            return 1;
+        setTimeout: (fn, ms) => {
+            if (opts.instantTimers) {
+                fn();
+                return 1;
+            }
+            const id = nextTimerId++;
+            timers.set(id, { fn, at: nowClock + (Number(ms) || 0) });
+            return id;
         },
-        clearTimeout: () => {},
-        matchMedia: () => ({ matches: Boolean(opts.reducedMotion) }),
+        clearTimeout: (id) => {
+            timers.delete(id);
+        },
+        matchMedia: () => ({ matches: Boolean(opts.reducedMotion), addEventListener: () => {}, removeEventListener: () => {} }),
     };
+    if (!opts.noRaf) {
+        win.requestAnimationFrame = (fn) => {
+            const id = nextRafId++;
+            rafs.set(id, fn);
+            return id;
+        };
+        win.cancelAnimationFrame = (id) => {
+            rafs.delete(id);
+        };
+    }
     if (enableWebGl) {
         win.WebGLRenderingContext = function WebGLRenderingContext() {};
         win.WebGL2RenderingContext = function WebGL2RenderingContext() {};
@@ -187,8 +291,11 @@ function createKernelVm(opts = {}) {
         globalThis: win,
         document: doc,
         performance: win.performance,
+        localStorage: win.localStorage,
         WebGLRenderingContext: win.WebGLRenderingContext,
         WebGL2RenderingContext: win.WebGL2RenderingContext,
+        requestAnimationFrame: win.requestAnimationFrame,
+        cancelAnimationFrame: win.cancelAnimationFrame,
         Math,
         Number,
         String,
@@ -208,13 +315,48 @@ function createKernelVm(opts = {}) {
     });
 
     vm.runInContext(KERNEL_SRC, ctx);
-    vm.runInContext(SKILLS_SRC, ctx);
+    if (!opts.skipSkills) vm.runInContext(SKILLS_SRC, ctx);
 
     return {
         win,
+        ctx,
         vfx: win.__AGY_KNY_3D_VFX__,
         skills: win.__AGY_KNY_SKILLS__,
-        getStats: () => ({ lostCalled, drawArraysCalled }),
+        createdCanvases,
+        setParallelReady: (v) => {
+            parallelReady = Boolean(v);
+        },
+        advanceTime(ms) {
+            const target = nowClock + ms;
+            while (true) {
+                let best = null;
+                for (const [id, item] of timers.entries()) {
+                    if (item.at <= target && (!best || item.at < best[1].at)) best = [id, item];
+                }
+                if (!best) break;
+                timers.delete(best[0]);
+                nowClock = Math.max(nowClock, best[1].at);
+                best[1].fn();
+            }
+            nowClock = target;
+        },
+        stepRaf(dtMs) {
+            nowClock += dtMs;
+            const batch = [...rafs.values()];
+            rafs.clear();
+            for (const fn of batch) fn(nowClock);
+        },
+        hasRaf: () => rafs.size > 0,
+        getStats: () => ({
+            lostCalled,
+            drawArraysCalled,
+            bufferSubDataCalled,
+            contextsCreated,
+            cvListeners,
+            docListeners,
+            pendingTimers: timers.size,
+            pendingRafs: rafs.size,
+        }),
     };
 }
 
@@ -344,5 +486,256 @@ describe('F20 — Động Cơ Thi Triển Hơi Thở 3D Siêu Nhẹ (`kny_3d_vfx
         slow.vfx.renderFrontPass(ctx2d, 1280, 720, 0.35, giyu3, actor, {});
         assert.equal(slow.vfx.getDiagnostics().mode, 'canvas2d-3d', 'Watchdog phải tự hạ cấp về canvas2d-3d khi frame > 24ms');
         assert.equal(slow.vfx.getDiagnostics().fallbackReason, 'watchdog_24ms_exceeded');
+    });
+
+    it('F20-T2-03 [C-1 & M-5]: Kích hoạt Impact Frame/Hit-Stop ngay cả khi giật frame nhảy qua 0.365, effP không lùi & không sinh hit-stop ma', () => {
+        const env = createKernelVm({ enableWebGl: false, manualClock: true, skipSkills: true });
+        const frames = [];
+        const real = env.vfx;
+        const spy = {};
+        for (const k of Object.keys(real)) {
+            spy[k] = typeof real[k] === 'function'
+                ? (...args) => {
+                    const out = real[k](...args);
+                    if (k === 'renderBackPass') {
+                        frames.push({
+                            effP: args[3],
+                            opts: args[6] ? { ...args[6] } : {},
+                            actorHit: Boolean(args[5] && args[5].hitStopActive),
+                        });
+                    }
+                    return out;
+                }
+                : real[k];
+        }
+        env.win.__AGY_KNY_3D_VFX__ = spy;
+        vm.runInContext(SKILLS_SRC, env.ctx);
+
+        const res = env.win.__AGY_KNY_SKILLS__.castSkill('giyu', 'giyu_3', { composerEl: null, noActionSprite: true });
+        assert.equal(res.ok, true);
+
+        let jumped = false;
+        let guard = 0;
+        while (env.hasRaf() && guard++ < 400) {
+            const lastRaw = frames.length ? frames[frames.length - 1].opts.rawP : 0;
+            if (!jumped && lastRaw > 0.30) {
+                jumped = true;
+                env.stepRaf(230); // Giật 1 frame 230ms nhảy vọt qua cửa sổ hẹp 0.33..0.365
+            } else {
+                env.stepRaf(16.667);
+            }
+        }
+
+        const impactFrames = frames.filter((f) => f.opts.impactFrameActive);
+        const hitStopFrames = frames.filter((f) => f.opts.hitStopActive);
+        assert.ok(impactFrames.length >= 2, 'Phải kích hoạt Impact Frame dù frame giật vọt qua 0.365');
+        assert.ok(hitStopFrames.length >= 2, 'Phải kích hoạt Hit-Stop tiếp nối Impact Frame');
+
+        for (let i = 1; i < frames.length; i++) {
+            assert.ok(frames[i].effP >= frames[i - 1].effP - 1e-9, `effectiveP không được lùi ngược tại frame ${i}`);
+        }
+        const ghostHits = frames.filter((f) => !f.opts.hitStopActive && !f.opts.impactFrameActive && f.actorHit);
+        assert.equal(ghostHits.length, 0, 'Không được xuất hiện hit-stop ma ngoài vùng freeze của skills');
+
+        // Kiểm tra độc lập trên kernel: phase === 'hitstop' <=> hitStopActive và impactFrameKind trong [0.33, 0.36]
+        let sawImpactKind = false;
+        for (let p = 0.32; p <= 0.44; p += 0.002) {
+            const a = real.computeActor3DTrajectory(1440, 900, p, { id: 'giyu_3' });
+            assert.equal(a.phase === 'hitstop', a.hitStopActive, `Lệch phase vs hitStopActive tại p=${p}`);
+            if (p >= 0.33 && p <= 0.36 && a.impactFrameKind) sawImpactKind = true;
+        }
+        assert.equal(sawImpactKind, true, 'Kernel phải phát impactFrameKind trong cửa sổ [0.33, 0.36]');
+    });
+
+    it('F20-T2-04 [C-2 & T-3]: Tái upload VBO sau releaseGpuNow/contextLost cùng rawP & giữ 0 VRAM ở chế độ reduced-motion', () => {
+        const env = createKernelVm({ enableWebGl: true, manualClock: true });
+        const ctx2d = createMockCtx2d(true);
+        const giyu3 = env.skills.getSkillsForCharacter('giyu')[2];
+        const actor = env.vfx.computeActor3DTrajectory(1440, 900, 0.345, giyu3, null, null, {});
+
+        env.vfx.renderBackPass(ctx2d, 1440, 900, 0.345, giyu3, actor, {});
+        env.vfx.renderFrontPass(ctx2d, 1440, 900, 0.345, giyu3, actor, {});
+        const up1 = env.getStats().bufferSubDataCalled;
+        assert.equal(up1, 1, 'Frame đầu phải upload VBO đúng 1 lần cho cả Back & Front pass');
+
+        // Giải phóng GPU qua releaseGpuNow rồi render lại đúng cùng rawP = 0.345
+        env.vfx.releaseGpuNow();
+        env.vfx.renderBackPass(ctx2d, 1440, 900, 0.345, giyu3, actor, {});
+        env.vfx.renderFrontPass(ctx2d, 1440, 900, 0.345, giyu3, actor, {});
+        assert.equal(env.getStats().bufferSubDataCalled, 2, 'Sau releaseGpuNow phải upload lại VBO mới dù rawP không đổi');
+
+        // Chế độ reduced-motion không được khởi tạo WebGL context và vẫn vẽ đủ ribbon qua Canvas2D sau 31s
+        const redEnv = createKernelVm({ enableWebGl: true, manualClock: true, reducedMotion: true });
+        const redCtx1 = createMockCtx2d(true);
+        const redCtx2 = createMockCtx2d(true);
+        const redActor = redEnv.vfx.computeActor3DTrajectory(1440, 900, 0.48, giyu3, null, null, { reducedMotion: true });
+        redEnv.vfx.renderBackPass(redCtx1, 1440, 900, 0.35, giyu3, redActor, { reducedMotion: true });
+        redEnv.vfx.renderFrontPass(redCtx1, 1440, 900, 0.35, giyu3, redActor, { reducedMotion: true });
+        assert.equal(redEnv.getStats().contextsCreated, 0, 'reducedMotion không được cấp phát WebGL context');
+
+        redEnv.advanceTime(31000);
+        redEnv.vfx.renderBackPass(redCtx2, 1440, 900, 0.35, giyu3, redActor, { reducedMotion: true });
+        redEnv.vfx.renderFrontPass(redCtx2, 1440, 900, 0.35, giyu3, redActor, { reducedMotion: true });
+        const fills1 = redCtx1.ops.filter((o) => o.fn === 'fill').length;
+        const fills2 = redCtx2.ops.filter((o) => o.fn === 'fill').length;
+        assert.ok(fills1 > 20 && fills2 === fills1, 'Cast reduced-motion lần 2 sau 31s vẫn phải vẽ đủ ribbon 3D');
+    });
+
+    it('F20-T2-05 [M-1, M-2, M-4 & T-4]: Lease khi chờ KHR_parallel_shader_compile, chống hồi sinh sau destroy & xử lý mất context lặp lại', () => {
+        // 1. M-1: Parallel shader compile chưa hoàn tất vẫn phải đặt Warm Lease 30s
+        const par = createKernelVm({ enableWebGl: true, manualClock: true, parallelCompile: true, parallelReady: false });
+        par.vfx.mountStageLayers(null);
+        assert.equal(par.getStats().pendingTimers, 1, 'Đang chờ KHR_parallel_shader_compile vẫn phải có timer Warm Lease');
+        par.advanceTime(31000);
+        assert.equal(par.vfx.getDiagnostics().contextActive, false, 'Quá 30s chờ compile phải tự thu hồi WebGL context');
+
+        // 2. M-4 & T-4: webglcontextlost gỡ listener cũ, xóa fallbackReason khi hồi phục, khóa 2D sau 2 lần mất
+        const ctxEnv = createKernelVm({ enableWebGl: true, manualClock: true });
+        const ctx2d = createMockCtx2d();
+        const sk = { id: 'giyu_3' };
+        const act = ctxEnv.vfx.computeActor3DTrajectory(1440, 900, 0.5, sk);
+        ctxEnv.vfx.renderBackPass(ctx2d, 1440, 900, 0.5, sk, act, {});
+        assert.equal(ctxEnv.getStats().cvListeners, 1);
+
+        ctxEnv.createdCanvases[0].fireContextLost();
+        assert.equal(ctxEnv.getStats().cvListeners, 0, 'Phải gỡ listener khỏi canvas bị mất context');
+        ctxEnv.vfx.renderBackPass(ctx2d, 1440, 900, 0.52, sk, act, {});
+        assert.equal(ctxEnv.vfx.getDiagnostics().mode, 'webgl2');
+        assert.equal(ctxEnv.vfx.getDiagnostics().fallbackReason, '', 'Khôi phục WebGL2 thành công phải xóa fallbackReason');
+        assert.equal(ctxEnv.getStats().cvListeners, 1);
+
+        ctxEnv.createdCanvases[1].fireContextLost();
+        ctxEnv.vfx.renderBackPass(ctx2d, 1440, 900, 0.54, sk, act, {});
+        assert.equal(ctxEnv.vfx.getDiagnostics().mode, 'canvas2d-3d', 'Mất context ngoài ý muốn >= 2 lần phải khóa về canvas2d-3d');
+        assert.equal(ctxEnv.vfx.getDiagnostics().fallbackReason, 'webgl_context_lost_repeated');
+
+        const rejEnv = createKernelVm({ enableWebGl: true, rejectContext: true });
+        rejEnv.vfx.renderBackPass(ctx2d, 1440, 900, 0.5, sk, act, {});
+        assert.equal(rejEnv.getStats().cvListeners, 0, 'getContext trả null không được rò listener trên canvas bỏ đi');
+
+        // 3. M-2: Không hồi sinh tài nguyên khi gọi render/mount sau destroy()
+        const deadEnv = createKernelVm({ enableWebGl: true, manualClock: true });
+        deadEnv.vfx.renderBackPass(ctx2d, 1440, 900, 0.5, sk, act, {});
+        assert.equal(deadEnv.getStats().contextsCreated, 1);
+        deadEnv.vfx.destroy();
+        deadEnv.vfx.mountStageLayers(null);
+        deadEnv.vfx.renderBackPass(ctx2d, 1440, 900, 0.5, sk, act, {});
+        deadEnv.vfx.renderFrontPass(ctx2d, 1440, 900, 0.5, sk, act, {});
+        assert.equal(deadEnv.getStats().contextsCreated, 1, 'Sau destroy() không được tạo thêm WebGL context');
+        assert.equal(deadEnv.getStats().docListeners, 0, 'Sau destroy() không được gắn lại listener visibilitychange');
+        assert.equal(deadEnv.getStats().pendingTimers, 0, 'Sau destroy() không được đặt lại timer Lease');
+    });
+
+    it('F20-T2-06 [M-3, T-1..T-9]: Rodrigues góc gắt chính xác, guard prototype/NaN, viewport nhỏ, fallback rAF & setMuted("false")', () => {
+        // 1. M-3: Kiểm tra trực tiếp độ chính xác xoay Rodrigues trong appendRibbon trên đường gấp khúc góc gắt ~45°
+        const sIdx = KERNEL_SRC.indexOf('const STRIDE = 9');
+        const eIdx = KERNEL_SRC.indexOf('/* 3. 60 CANONICAL');
+        const ribCtx = vm.createContext({
+            Float32Array,
+            Int32Array,
+            hypot: Math.hypot,
+            abs: Math.abs,
+            cos: Math.cos,
+            sin: Math.sin,
+            clamp: (v, a, b) => (v < a ? a : v > b ? b : v),
+        });
+        const rib = vm.runInContext(
+            `${KERNEL_SRC.slice(sIdx, eIdx)};({ setNode, appendRibbon, RV, reset(){ RVC = 0; } })`,
+            ribCtx
+        );
+        const nNodes = 32;
+        for (let i = 0; i < nNodes; i++) {
+            const ang = i * 0.72;
+            rib.setNode(i, Math.cos(ang) * 180, Math.sin(ang * 1.7) * 150, i * 24, 44, 1, 0);
+        }
+        rib.reset();
+        rib.appendRibbon(nNodes);
+        const W = [];
+        const T = [];
+        for (let i = 0; i < nNodes; i++) {
+            const o = i * 18;
+            const wx = rib.RV[o + 9] - rib.RV[o];
+            const wy = rib.RV[o + 10] - rib.RV[o + 1];
+            const wz = rib.RV[o + 11] - rib.RV[o + 2];
+            const wl = Math.hypot(wx, wy, wz);
+            W.push([wx / wl, wy / wl, wz / wl]);
+            const a = Math.max(0, i - 1) * 18;
+            const b = Math.min(nNodes - 1, i + 1) * 18;
+            const tx = (rib.RV[b] + rib.RV[b + 9] - rib.RV[a] - rib.RV[a + 9]) * 0.5;
+            const ty = (rib.RV[b + 1] + rib.RV[b + 10] - rib.RV[a + 1] - rib.RV[a + 10]) * 0.5;
+            const tz = (rib.RV[b + 2] + rib.RV[b + 11] - rib.RV[a + 2] - rib.RV[a + 11]) * 0.5;
+            const tl = Math.hypot(tx, ty, tz);
+            T.push([tx / tl, ty / tl, tz / tl]);
+        }
+        let maxTwistDeg = 0;
+        for (let i = 1; i < nNodes; i++) {
+            const p = T[i - 1];
+            const t = T[i];
+            const vx = p[1] * t[2] - p[2] * t[1];
+            const vy = p[2] * t[0] - p[0] * t[2];
+            const vz = p[0] * t[1] - p[1] * t[0];
+            const sA = Math.hypot(vx, vy, vz);
+            const cA = p[0] * t[0] + p[1] * t[1] + p[2] * t[2];
+            let [wx, wy, wz] = W[i - 1];
+            if (sA > 1e-6) {
+                const kx = vx / sA;
+                const ky = vy / sA;
+                const kz = vz / sA;
+                const kd = (kx * wx + ky * wy + kz * wz) * (1 - cA);
+                const ox = wx;
+                const oy = wy;
+                const oz = wz;
+                wx = ox * cA + (ky * oz - kz * oy) * sA + kx * kd;
+                wy = oy * cA + (kz * ox - kx * oz) * sA + ky * kd;
+                wz = oz * cA + (kx * oy - ky * ox) * sA + kz * kd;
+            }
+            const dot = Math.min(1, Math.abs(wx * W[i][0] + wy * W[i][1] + wz * W[i][2]));
+            maxTwistDeg = Math.max(maxTwistDeg, (Math.acos(dot) * 180) / Math.PI);
+        }
+        assert.ok(maxTwistDeg < 0.5, `Sai số xoắn Rodrigues quá lớn: ${maxTwistDeg.toFixed(3)}°`);
+
+        // 2. T-1, T-2, T-5, T-6: Prototype guard, NaN index, viewport nhỏ 200x150, near===far & mat4Multiply aliasing
+        const env = createKernelVm({ enableWebGl: false, manualClock: true, noRaf: true });
+        const validSet = new Set(Object.values(env.vfx.ARCHETYPES));
+        for (const badInput of [
+            [{ id: 'constructor' }, { persona: 'toString' }],
+            [{ id: '__proto__', index: NaN }, { fxMode: 'constructor' }],
+            [{ id: 'hasOwnProperty', index: Infinity }, {}],
+        ]) {
+            const prof = env.vfx.resolveSkill3DProfile(badInput[0], badInput[1]);
+            assert.ok(validSet.has(prof.archetype), `Archetype hỏng với input prototype: ${prof.archetype}`);
+            assert.equal(Number.isFinite(prof.elemMode), true);
+            assert.equal(Number.isFinite(prof.formIndex), true);
+        }
+
+        const pEq = env.vfx.mat4Perspective(1.0, 1.6, 100, 100);
+        assert.equal(Array.from(pEq).every(Number.isFinite), true, 'mat4Perspective(near===far) phải hữu hạn');
+        const ma = Float32Array.from({ length: 16 }, (_, i) => (i % 5) - 1.5);
+        const mb = Float32Array.from({ length: 16 }, (_, i) => ((i * 3) % 7) - 2.5);
+        const mRef = env.vfx.mat4Multiply(ma, mb);
+        const mAlias = env.vfx.mat4Multiply(ma, mb, ma);
+        for (let i = 0; i < 16; i++) {
+            assert.ok(Math.abs(mRef[i] - mAlias[i]) < 1e-5, `mat4Multiply sai tại phần tử ${i} khi out === a`);
+        }
+
+        const smallActor = env.vfx.computeActor3DTrajectory(200, 150, 0.5, { id: 'giyu_1' });
+        const smallCam = env.vfx.computeCameraState(0.5, smallActor.archetype, { width: 200, height: 150 });
+        const smallProj = env.vfx.projectPoint3D(smallActor.worldX, smallActor.worldY, smallActor.worldZ, smallCam.vpMat, 200, 150);
+        assert.ok(Math.abs(smallActor.sx - smallProj.sx) < 1 && Math.abs(smallActor.sy - smallProj.sy) < 1, 'Viewport 200x150 phải đồng nhất');
+
+        // 3. T-9: setMuted('false') / setMuted('0') -> false
+        assert.equal(env.skills.setMuted('true'), true);
+        assert.equal(env.skills.isMuted(), true);
+        assert.equal(env.skills.setMuted('false'), false);
+        assert.equal(env.skills.isMuted(), false);
+        assert.equal(env.skills.setMuted('0'), false);
+        assert.equal(env.skills.isMuted(), false);
+
+        // 4. T-8: Fallback setTimeout khi thiếu requestAnimationFrame vẫn chạy nhiều frame bình thường
+        const castRes = env.skills.castSkill('giyu', 'giyu_3', { composerEl: null, noActionSprite: true });
+        assert.equal(castRes.ok, true);
+        env.advanceTime(400);
+        assert.ok(env.getStats().pendingTimers >= 1, 'Fallback setTimeout phải tiếp tục chạy chiêu thay vì dừng ngay frame đầu');
+        env.skills.destroy();
     });
 });
