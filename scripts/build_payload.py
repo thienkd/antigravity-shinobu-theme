@@ -19,7 +19,7 @@ import sys
 import urllib.parse
 from pathlib import Path
 
-ASSET_KEYS = ("wallpaper", "sticker", "cornerSvg", "userAvatar", "agentAvatar")
+ASSET_KEYS = ("wallpaper", "sticker", "actionSticker", "cornerSvg", "userAvatar", "agentAvatar")
 HYBRID_INLINE_CANDIDATES = {"cornerSvg", "userAvatar", "sticker"}
 HYBRID_INLINE_MAX_BYTES = 12 * 1024
 AVATAR_KEYS = {"userAvatar", "agentAvatar"}

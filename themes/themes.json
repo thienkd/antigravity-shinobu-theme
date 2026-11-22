@@ -115,7 +115,8 @@
         "thanks": "Không cần khách sáo đâu con của ta. Được nhìn thấy con trưởng thành và bình an mỗi ngày đã là niềm hạnh phúc lớn lao nhất của ta rồi. 🌸💜",
         "fallback": "Ta hiểu tấm lòng của con qua lời nhắn \"{input}\". Hãy cứ vững tin bước tiếp trên con đường con đã chọn nhé, lời chúc phúc của nhà Ubuyashiki luôn ở bên con. 👑🌸"
       }
-    }
+    },
+    "actionSticker": "assets/ubuyashiki_action.png"
   },
   "🦋 Trùng Trụ — Shinobu Kocho": {
     "concept": "Wisteria Moonlight & Interactive Chibi Shinobu NPC • 60fps Live Glass",
@@ -233,7 +234,8 @@
         "thanks": "Không có chi đâu nè~ Giúp bạn có thêm cảm hứng làm việc mỗi ngày là niềm vui của mình mà! 💜🦋",
         "fallback": "Ara ara~ \"{input}\" ư? Mình nghe rõ rồi nè! Cứ yên tâm triển khai tiếp nhé, mình luôn ngồi ngay đây tiếp sức cho bạn! 🦋✨"
       }
-    }
+    },
+    "actionSticker": "assets/shinobu_action.png"
   },
   "🌊 Thủy Trụ — Giyu Tomioka": {
     "concept": "Eleventh Form: Dead Calm & Azure Stream • Giyu Tomioka",
@@ -351,7 +353,8 @@
         "thanks": "...Không có gì đâu. Đó là việc ta nên làm mà. 🌊",
         "fallback": "...\"{input}\" sao? Ta đã nghe rõ rồi. Cứ giữ vững tâm thế tĩnh tại và tiến lên phía trước nhé. 🌊💧"
       }
-    }
+    },
+    "actionSticker": "assets/giyu_action.png"
   },
   "🔥 Viêm Trụ — Kyojuro Rengoku": {
     "concept": "Set Your Heart Ablaze • Ninth Form: Rengoku Crimson Gold",
@@ -469,7 +472,8 @@
         "thanks": "HAHAHA! Đừng khách sáo! Bảo vệ và tiếp lửa cho các đàn em tiến bước chính là trách nhiệm kiêu hãnh của đàn anh mà!! 🔥💪",
         "fallback": "TA HIỂU RỒI!! \"{input}\"—nghe tràn đầy quyết tâm đấy! Cứ giữ vững ngọn lửa kiêu hãnh trong tim và thẳng tiến lên phía trước nhé!! 🔥⚔️"
       }
-    }
+    },
+    "actionSticker": "assets/rengoku_action.png"
   },
   "💎 Âm Trụ — Tengen Uzui": {
     "concept": "God of Festivities • Flamboyant Ruby, Gold & Turquoise",
@@ -587,7 +591,8 @@
         "thanks": "Hahaha! Chuyện nhỏ như con thỏ! Cứ tiếp tục tỏa sáng rực rỡ đi là trả ơn ta xứng đáng nhất rồi! 💎✨",
         "fallback": "Ồ hố! \"{input}\" ư? Nghe có vẻ đầy tiềm năng bùng nổ đấy! Triển khai một cách hào nhoáng nhất đi nào, ta bảo kê cho!! 💎🎆"
       }
-    }
+    },
+    "actionSticker": "assets/uzui_action.png"
   },
   "🌫️ Hà Trụ — Muichiro Tokito": {
     "concept": "Seventh Form: Obscuring Clouds & Mint Mist • Muichiro Tokito",
@@ -705,7 +710,8 @@
         "thanks": "Hì, với bạn thì mình luôn sẵn lòng mà~ Bạn luôn tử tế với mình như Tanjiro vậy đó! 💚✨",
         "fallback": "Ưm... \"{input}\" hả? Mình ghi nhớ kỹ trong đầu rồi, không quên đâu! Cứ tự tin làm tiếp nhé, mình ở ngay cạnh bạn đây~ 🌫️🍃"
       }
-    }
+    },
+    "actionSticker": "assets/muichiro_action.png"
   },
   "🌸 Luyến Trụ — Mitsuri Kanroji": {
     "concept": "Love Breathing • Sakura Mochi Pink & Matcha Blossom",
@@ -823,7 +829,8 @@
         "thanks": "Hì hì, khách sáo gì đâu nè~! Được ở bên cạnh cổ vũ bạn mỗi ngày làm mình vui rộn ràng lắm luôn đó! 💖🌸",
         "fallback": "Oa~ \"{input}\" hả bạn?! Nghe thú vị ghê luôn đó, cứ tự tin làm tới đi nha, Mitsuri lúc nào cũng ủng hộ bạn hai tay hai chân luôn!! 🌸💕"
       }
-    }
+    },
+    "actionSticker": "assets/mitsuri_action.png"
   },
   "🐍 Xà Trụ — Obanai Iguro": {
     "concept": "Serpent Breathing • Indigo Night & Heterochromia Gold-Teal",
@@ -941,7 +948,8 @@
         "thanks": "...Hừ, không cần cảm ơn. Cứ giữ chất lượng công việc luôn sắc sảo không tì vết là được rồi. 🐍✨",
         "fallback": "\"{input}\" ư? Ta không tin mọi chuyện đơn giản thế đâu, nhưng cứ triển khai thử đi—ta và Kaburamaru sẽ bọc lót góc khuất cho ngươi. 🐍🤍"
       }
-    }
+    },
+    "actionSticker": "assets/obanai_action.png"
   },
   "🌪️ Phong Trụ — Sanemi Shinazugawa": {
     "concept": "Wind Breathing • Emerald Gale Slash & Storm Silver",
@@ -1059,7 +1067,8 @@
         "thanks": "Hừ, chuyện vặt ấy mà cảm ơn cái gì! Lo giữ gìn bản thân khỏe mạnh bình an là tốt lắm rồi! 💚🌪️",
         "fallback": "\"{input}\" hả?! Nghe rõ rồi! Đã quyết tâm thì cứ lao thẳng tới như cuồng phong đi, không thằng nào cản nổi ngươi đâu!! 🌪️⚔️"
       }
-    }
+    },
+    "actionSticker": "assets/sanemi_action.png"
   },
   "📿 Nham Trụ — Gyomei Himejima": {
     "concept": "Stone Breathing • Sacred Bodhi Amber & Mossy Bedrock",
@@ -1177,7 +1186,8 @@
         "thanks": "Nam Mô A Di Đà Phật... Con không cần bận lòng tạ ơn đâu, thấy con vững bước bình an là tâm nguyện lớn nhất của ta rồi. 🙏✨",
         "fallback": "Nam Mô A Di Đà Phật... Ta đã lắng nghe tâm ý \"{input}\" của con. Hãy giữ vững niềm tin kiên định như núi thái sơn và bước tiếp nhé. 📿🪨"
       }
-    }
+    },
+    "actionSticker": "assets/gyomei_action.png"
   },
   "☀️ Tanjiro Kamado — Nhật Luân": {
     "concept": "Hinokami Kagura & Flowing Water • Checkered Emerald & Crimson Sun",
@@ -1295,7 +1305,8 @@
         "thanks": "Không có chi đâu mà!! Giúp đỡ người bạn đồng hành tận tâm như bạn khiến mình thấy ấm áp hạnh phúc lắm! ☀️💚",
         "fallback": "Mình hiểu rõ ý \"{input}\" của bạn rồi! Cứ vững lòng bước tiếp nhé, dù thế nào mình cũng luôn đứng về phía bạn và cổ vũ hết mình! ☀️🔥"
       }
-    }
+    },
+    "actionSticker": "assets/tanjiro_action.png"
   },
   "🎋 Nezuko Kamado — Hồng Liên": {
     "concept": "Exploding Blood Pink Flame & Bamboo Ribbon • Nezuko Kamado",
@@ -1413,7 +1424,8 @@
         "thanks": "Không... có... chi~ Ưm ưm!! 🌸💖 (Nezuko cười tít mắt hạnh phúc vì giúp được người bạn quý mến!)",
         "fallback": "Ưm ưm~! \"{input}\"... Nezuko... hiểu... rồi!! 🎋🌸 (Nezuko gật đầu lia lịa và sẽ ngồi ngay đây bảo vệ tiến độ cho bạn nhé!)"
       }
-    }
+    },
+    "actionSticker": "assets/nezuko_action.png"
   },
   "⚡ Zenitsu Agatsuma — Lôi Minh": {
     "concept": "Thunderclap and Flash • Golden Lightning & Sunset Amber",
@@ -1531,7 +1543,8 @@
         "thanks": "Hì hì~ Có gì đâu mà cảm ơn, bạn không chê mình ồn ào mà còn quý mình là mình cảm động rớt nước mắt rồi nè! 💛⚡",
         "fallback": "\"{input}\" hả?! Tai mình nghe rõ từng chữ không sót âm nào rồi! Cứ phóng tới với tốc độ tia sét đi, mình và Chuntaro yểm trợ hết mình!! ⚡🐦"
       }
-    }
+    },
+    "actionSticker": "assets/zenitsu_action.png"
   },
   "🐗 Inosuke Hashibira — Dã Thú": {
     "concept": "Beast Breathing • Serrated Ice-Steel Blue & Wild Forest Emerald",
@@ -1649,7 +1662,8 @@
         "thanks": "WAHAHAHA! Có chuyện cỏn con thế thôi mà! Đã là chiến hữu chung bầy của Đấng Inosuke thì ta luôn bảo kê ngươi tới bến!! 🐗💙",
         "fallback": "WAHAHAHA!! \"{input}\" hả?! Tuy chẳng cần nghĩ lòng vòng nhưng nghe máu lửa lắm—cứ xông thẳng lên càn quét đi, Đấng Inosuke mở đường cho ngươi!! 🐗⚔️"
       }
-    }
+    },
+    "actionSticker": "assets/inosuke_action.png"
   },
   "WLOP Cosmic": {
     "concept": "Cosmic Violin & Starlight • High-Contrast Glass",

@@ -19,7 +19,7 @@
 
   Object.values(THEMES).forEach((cfg) => {
     if (!cfg || typeof cfg !== 'object') return;
-    ['wallpaper', 'sticker', 'cornerSvg', 'userAvatar', 'agentAvatar'].forEach((k) => {
+    ['wallpaper', 'sticker', 'actionSticker', 'cornerSvg', 'userAvatar', 'agentAvatar'].forEach((k) => {
       if (typeof cfg[k] === 'string' && cfg[k]) {
         cfg[k] = resolveThemeAssetUrl(cfg[k]);
       }
@@ -2410,40 +2410,59 @@
     const prof = getActiveNpcProfile(bTheme);
 
     document.querySelectorAll('.agy-user-bubble-frame').forEach(frame => {
-      if (frame.querySelector(':scope > .agy-chibi-hitbox')) return;
-      const hit = document.createElement('button');
-      hit.type = 'button';
-      hit.className = 'agy-chibi-hitbox';
-      hit.title = prof.title;
-      hit.setAttribute('aria-label', prof.title);
-      hit.addEventListener('click', (e) => {
-        e.stopPropagation();
-        triggerChibiBounce(frame);
-        const composerEl = document.querySelector('.surface-composer');
-        if (composerEl) triggerChibiBounce(composerEl);
-        const curText = document.querySelector('#agy-shinobu-npc-wrap .agy-npc-dialog-text')?.textContent || '';
-        speakShinobuLine(pickRandomLine('act1', curText), true);
-      });
-      frame.appendChild(hit);
+      let hit = frame.querySelector(':scope > .agy-chibi-hitbox');
+      if (!hit) {
+        hit = document.createElement('button');
+        hit.type = 'button';
+        hit.className = 'agy-chibi-hitbox';
+        hit.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill === 'function') {
+            window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill({
+              originEl: e.currentTarget,
+              sourceFrameEl: frame,
+              fromChibiClick: true
+            });
+            return;
+          }
+          triggerChibiBounce(frame);
+          const composerEl = document.querySelector('.surface-composer');
+          if (composerEl) triggerChibiBounce(composerEl);
+          const curText = document.querySelector('#agy-shinobu-npc-wrap .agy-npc-dialog-text')?.textContent || '';
+          speakShinobuLine(pickRandomLine('act1', curText), true);
+        });
+        frame.appendChild(hit);
+      }
+      hit.title = `⚡ Nhấn vào ${prof.badgeLabel || 'Chibi'} để nhảy ra thi triển Hơi Thở!`;
+      hit.setAttribute('aria-label', hit.title);
     });
 
     const composer = document.querySelector('.surface-composer');
     if (!composer) return;
 
-    if (!composer.querySelector(':scope > .agy-chibi-hitbox')) {
-      const mainHit = document.createElement('button');
+    let mainHit = composer.querySelector(':scope > .agy-chibi-hitbox');
+    if (!mainHit) {
+      mainHit = document.createElement('button');
       mainHit.type = 'button';
       mainHit.className = 'agy-chibi-hitbox';
-      mainHit.title = 'Chạm vào Chibi để trò chuyện';
-      mainHit.setAttribute('aria-label', 'Mở hộp thoại NPC Chibi');
       mainHit.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill === 'function') {
+          window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill({
+            originEl: e.currentTarget,
+            sourceFrameEl: composer,
+            fromChibiClick: true
+          });
+          return;
+        }
         triggerChibiBounce(composer);
         const curText = document.querySelector('#agy-shinobu-npc-wrap .agy-npc-dialog-text')?.textContent || '';
         speakShinobuLine(pickRandomLine('welcome', curText), true);
       });
       composer.appendChild(mainHit);
     }
+    mainHit.title = `⚡ Nhấn vào ${prof.badgeLabel || 'Chibi'} để nhảy ra thi triển Hơi Thở!`;
+    mainHit.setAttribute('aria-label', mainHit.title);
 
     if (!composer.dataset.agyNpcKeyBound) {
       composer.dataset.agyNpcKeyBound = '1';
@@ -2620,10 +2639,14 @@
       const charHint = bTheme.fxMode || activeBubbleKey;
       try {
         window.__AGY_KNY_CHIBI_AURA__.mountChibiAura(composer, bTheme, charHint);
-        window.__AGY_KNY_CHIBI_AURA__.mountSkillTriggerUi(composer, wrap, bTheme, charHint, (skill) => {
+        window.__AGY_KNY_CHIBI_AURA__.mountSkillTriggerUi(composer, wrap, bTheme, charHint, (skill, _idx, castOpts) => {
           const line = (skill && (skill.voiceLine || skill.quote)) || pickRandomLine('act1', '', prof);
           if (line) {
-            speakShinobuLine(line, false);
+            // Keep stage uncluttered when clicking Chibi directly unless NPC dialog is already open
+            const isDirectClick = Boolean(castOpts && castOpts.fromChibiClick);
+            if (!isDirectClick || !rt.npcCollapsed) {
+              speakShinobuLine(line, false);
+            }
           }
         });
       } catch (_) {}
@@ -2682,6 +2705,10 @@
   if (staleSidebarBtn) staleSidebarBtn.remove();
   const staleSettingsBtn = document.getElementById('agy-custom-theme-settings-btn');
   if (staleSettingsBtn) staleSettingsBtn.remove();
+  try { teardownLiveWallpaperFx(); } catch (e) {}
+  try { teardownShinobuNpc(); } catch (e) {}
+  try { if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.stopActiveSkill === 'function') window.__AGY_KNY_SKILLS__.stopActiveSkill(); } catch (e) {}
+  try { applyStyles(); } catch (e) {}
 
   window.__AGY_HOLE_EL__ = null;
   if (window.__AGY_MODAL_OBSERVER__) {

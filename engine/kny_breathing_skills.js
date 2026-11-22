@@ -2625,6 +2625,593 @@
   }
 
   /* ==========================================================================
+   * 6B. FULL-BODY ACTION CHIBI STAGE CHOREOGRAPHY (5-PHASE BALLISTIC & BLADE SYNC)
+   * ========================================================================== */
+
+  // Native facing of each extracted 384x384 <id>_action.png sprite (-1 = facing left, +1 = facing right)
+  const ACTION_SPRITE_META = {
+    ubuyashiki: { nativeFacing: -1, baseSize: 196, spinCapable: false },
+    shinobu:    { nativeFacing: -1, baseSize: 204, spinCapable: true  },
+    giyu:       { nativeFacing: -1, baseSize: 208, spinCapable: true  },
+    rengoku:    { nativeFacing: -1, baseSize: 214, spinCapable: true  },
+    uzui:       { nativeFacing:  1, baseSize: 218, spinCapable: true  },
+    muichiro:   { nativeFacing: -1, baseSize: 204, spinCapable: true  },
+    mitsuri:    { nativeFacing: -1, baseSize: 214, spinCapable: true  },
+    obanai:     { nativeFacing: -1, baseSize: 206, spinCapable: true  },
+    sanemi:     { nativeFacing: -1, baseSize: 210, spinCapable: true  },
+    gyomei:     { nativeFacing:  1, baseSize: 224, spinCapable: false },
+    tanjiro:    { nativeFacing: -1, baseSize: 208, spinCapable: true  },
+    nezuko:     { nativeFacing: -1, baseSize: 202, spinCapable: true  },
+    zenitsu:    { nativeFacing: -1, baseSize: 206, spinCapable: true  },
+    inosuke:    { nativeFacing:  1, baseSize: 210, spinCapable: true  }
+  };
+
+  const actionSpriteCache = Object.create(null);
+
+  function resolveActionSpriteUrl(charId, explicitUrl) {
+    if (typeof explicitUrl === 'string' && explicitUrl.trim()) {
+      const trimmed = explicitUrl.trim();
+      if (
+        trimmed.startsWith('data:') ||
+        trimmed.startsWith('http://') ||
+        trimmed.startsWith('https://') ||
+        trimmed.startsWith('blob:')
+      ) {
+        return trimmed;
+      }
+      const base = (ROOT_SCOPE && ROOT_SCOPE.__AGY_ASSET_BASE__) || './themes/';
+      return String(base).replace(/\/?$/, '/') + trimmed.replace(/^\/+/, '');
+    }
+    const safeId = resolveCharacterId(charId) || 'shinobu';
+    const base = (ROOT_SCOPE && ROOT_SCOPE.__AGY_ASSET_BASE__) || './themes/';
+    return String(base).replace(/\/?$/, '/') + `assets/${safeId}_action.png?v=act2`;
+  }
+
+  function preloadActionSprite(charId, explicitUrl) {
+    const safeId = resolveCharacterId(charId) || 'shinobu';
+    const url = resolveActionSpriteUrl(safeId, explicitUrl);
+    const existing = actionSpriteCache[safeId];
+    if (existing && existing.url === url && (existing.loaded || existing.loading)) {
+      return existing;
+    }
+    if (typeof Image === 'undefined') return null;
+    const entry = {
+      charId: safeId,
+      url,
+      img: new Image(),
+      loaded: false,
+      loading: true,
+      failed: false
+    };
+    entry.img.decoding = 'async';
+    entry.img.crossOrigin = 'anonymous';
+    entry.img.onload = () => {
+      entry.loaded = true;
+      entry.loading = false;
+    };
+    entry.img.onerror = () => {
+      entry.loading = false;
+      entry.failed = true;
+    };
+    entry.img.src = url;
+    actionSpriteCache[safeId] = entry;
+    return entry;
+  }
+
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function evalParabolicArc(x0, y0, x1, y1, liftPx, t) {
+    const u = clamp(t, 0, 1);
+    const ease = 1 - Math.pow(1 - u, 2.4);
+    const x = lerp(x0, x1, ease);
+    const y = lerp(y0, y1, ease) - Math.sin(u * Math.PI) * liftPx;
+    return { x, y };
+  }
+
+  // Subtle anime hit-stop compression around impact peak so slashes carry real physical weight
+  function warpProgressForHitStop(rawP) {
+    const p = clamp(rawP, 0, 1);
+    const hsStart = 0.34;
+    const hsEnd = 0.40;
+    if (p < hsStart) {
+      return (p / hsStart) * 0.36;
+    }
+    if (p <= hsEnd) {
+      return 0.36 + ((p - hsStart) / (hsEnd - hsStart)) * 0.015;
+    }
+    return 0.375 + ((p - hsEnd) / (1 - hsEnd)) * 0.625;
+  }
+
+  function getChoreographyPattern(vfx) {
+    switch (vfx) {
+      // Type A: High-speed horizontal / diagonal blitz slash (Chibi leads exact blade tip!)
+      case 'water_surface_slash':
+      case 'bee_sting_thrust':
+      case 'unknowing_fire':
+      case 'shifting_flow_slash':
+      case 'oboro_haze':
+      case 'shivers_of_first_love':
+      case 'winding_serpent_slash':
+      case 'dust_whirlwind_cutter':
+      case 'thunderclap_flash':
+      case 'godspeed_thunder':
+      case 'pierce_fangs':
+        return 'blitz_slash';
+
+      // Type B: Multi-point ricochet / zigzag combo across the viewport
+      case 'hundred_legged_zigzag':
+      case 'sixfold_thunder':
+      case 'constant_resounding_slashes':
+      case 'eight_layered_mist':
+      case 'catlove_shower':
+      case 'rhyolite_rapid_conquest':
+        return 'zigzag_combo';
+
+      // Type C: Dragon / Serpent / Tiger surge — Chibi surfs right alongside the elemental beast head
+      case 'water_dragon':
+      case 'striking_tide':
+      case 'flame_tiger':
+      case 'rengoku_dragon':
+      case 'love_pangs':
+      case 'slithering_serpent':
+      case 'solar_halo_dragon':
+      case 'flaming_thunder_god':
+        return 'beast_surge';
+
+      // Type D: Aerial 360° wheel / vortex spin in mid-air
+      case 'butterfly_caprice':
+      case 'rising_scorching_sun':
+      case 'string_performance':
+      case 'cat_legged_winds':
+      case 'coil_choke':
+      case 'primary_gale_slash':
+      case 'hinokami_waltz':
+      case 'clear_blue_sky':
+      case 'thirteenth_form':
+      case 'crazy_cutting':
+        return 'aerial_wheel';
+
+      // Type E: Sky-high leap -> meteoric downward X-cleave / earth-shattering slam
+      case 'roar_blast':
+      case 'claws_purifying_wind':
+      case 'serpentinite_bipolar':
+      case 'upper_smash':
+      case 'crimson_lotus_blaze':
+      case 'devour_slash':
+        return 'meteor_slam';
+
+      // Type F: Center-stage domain expansion / serene mastery (Nagi, Ubuyashiki, Oboro, Exploding Blood)
+      default:
+        return 'domain_center';
+    }
+  }
+
+  // Evaluate the core combat trajectory during Phase 2-4 (u in [0, 1])
+  function sampleCombatPoint(pattern, vfx, w, h, u) {
+    const cx = w * 0.5;
+    const cy = h * 0.47;
+    const minDim = Math.min(w, h);
+    const t = clamp(u, 0, 1);
+
+    if (pattern === 'blitz_slash') {
+      // Brief crouched iaijutsu charge (0..0.14) -> supersonic dash (0.14..0.76) -> brake slide (0.76..1.0)
+      const yStart = vfx === 'bee_sting_thrust' ? h * 0.68 : (vfx === 'thunderclap_flash' ? h * 0.60 : h * 0.50);
+      const yEnd = vfx === 'bee_sting_thrust' ? h * 0.28 : (vfx === 'thunderclap_flash' ? h * 0.36 : h * 0.46);
+      if (t < 0.14) {
+        const c = t / 0.14;
+        return {
+          x: w * 0.15 - c * 14,
+          y: yStart + c * 8,
+          rot: -0.18 * c,
+          scaleMul: 1 - c * 0.06,
+          facing: 1,
+          charging: 1 - Math.abs(c - 0.7)
+        };
+      }
+      if (t < 0.76) {
+        const d = easeOutQuint((t - 0.14) / 0.62);
+        const x = lerp(w * 0.14, w * 0.84, d);
+        const wave = (vfx === 'winding_serpent_slash' || vfx === 'shifting_flow_slash' || vfx === 'shivers_of_first_love')
+          ? Math.sin(d * Math.PI * 3) * (h * 0.11)
+          : 0;
+        const y = lerp(yStart, yEnd, d) + wave;
+        return {
+          x,
+          y,
+          rot: 0.16 * (1 - d * 0.5),
+          scaleMul: 1.08,
+          facing: 1,
+          slashing: 1
+        };
+      }
+      const b = easeOutCubic((t - 0.76) / 0.24);
+      return {
+        x: lerp(w * 0.84, w * 0.865, b),
+        y: yEnd + b * 6,
+        rot: lerp(0.08, 0, b),
+        scaleMul: lerp(1.06, 1.0, b),
+        facing: -1, // Turns back heroically toward center after slicing through!
+        posing: 1
+      };
+    }
+
+    if (pattern === 'zigzag_combo') {
+      const pts = [
+        { x: w * 0.16, y: h * 0.68 },
+        { x: w * 0.40, y: h * 0.22 },
+        { x: w * 0.78, y: h * 0.34 },
+        { x: w * 0.26, y: h * 0.70 },
+        { x: w * 0.82, y: h * 0.62 },
+        { x: w * 0.54, y: h * 0.36 }
+      ];
+      if (t < 0.80) {
+        const segFloat = (t / 0.80) * (pts.length - 1);
+        const idx = Math.min(pts.length - 2, Math.floor(segFloat));
+        const local = easeOutCubic(segFloat - idx);
+        const a = pts[idx];
+        const b = pts[idx + 1];
+        const dx = b.x - a.x;
+        return {
+          x: lerp(a.x, b.x, local),
+          y: lerp(a.y, b.y, local),
+          rot: clamp(dx / w, -0.35, 0.35) * 0.55,
+          scaleMul: 1.04 + Math.sin(local * Math.PI) * 0.08,
+          facing: dx >= 0 ? 1 : -1,
+          slashing: 1
+        };
+      }
+      const hold = easeOutCubic((t - 0.80) / 0.20);
+      const last = pts[pts.length - 1];
+      return {
+        x: last.x,
+        y: last.y - Math.sin(hold * Math.PI) * 8,
+        rot: 0,
+        scaleMul: 1.04,
+        facing: -1,
+        posing: 1
+      };
+    }
+
+    if (pattern === 'beast_surge') {
+      const prog = easeOutCubic(clamp(t / 0.84, 0, 1));
+      const x = lerp(w * 0.14, w * 0.80, prog);
+      const baseRise = (vfx === 'rengoku_dragon' || vfx === 'flaming_thunder_god')
+        ? lerp(h * 0.72, h * 0.30, prog)
+        : cy;
+      const wave = Math.sin(prog * Math.PI * 2.6) * (h * 0.15);
+      const dy = Math.cos(prog * Math.PI * 2.6) * 0.22;
+      return {
+        x,
+        y: baseRise + wave,
+        rot: clamp(dy, -0.28, 0.28),
+        scaleMul: t < 0.84 ? 1.10 : lerp(1.10, 1.02, (t - 0.84) / 0.16),
+        facing: 1,
+        slashing: t < 0.84 ? 1 : 0,
+        posing: t >= 0.84 ? 1 : 0
+      };
+    }
+
+    if (pattern === 'aerial_wheel') {
+      const wheelR = minDim * 0.15;
+      if (t < 0.76) {
+        const s = easeOutCubic(t / 0.76);
+        const ang = -HALF_PI + s * TWO_PI * 1.25;
+        return {
+          x: cx + Math.cos(ang) * wheelR * (1 - s * 0.45),
+          y: cy + Math.sin(ang) * wheelR * 0.72 * (1 - s * 0.45),
+          rot: s * TWO_PI,
+          scaleMul: 1.08 + Math.sin(s * Math.PI) * 0.08,
+          facing: Math.cos(ang) >= 0 ? 1 : -1,
+          slashing: 1,
+          allowFullSpin: true
+        };
+      }
+      const pHold = easeOutCubic((t - 0.76) / 0.24);
+      return {
+        x: cx,
+        y: cy + pHold * 8,
+        rot: 0,
+        scaleMul: lerp(1.10, 1.03, pHold),
+        facing: -1,
+        posing: 1
+      };
+    }
+
+    if (pattern === 'meteor_slam') {
+      if (t < 0.32) {
+        // Soar to apex above battlefield
+        const up = easeOutCubic(t / 0.32);
+        return {
+          x: lerp(cx + w * 0.08, cx, up),
+          y: lerp(h * 0.46, h * 0.17, up),
+          rot: -0.22 * up,
+          scaleMul: lerp(1.0, 1.12, up),
+          facing: -1,
+          charging: up
+        };
+      }
+      if (t < 0.56) {
+        // Meteoric downward cleave!
+        const slam = easeOutQuint((t - 0.32) / 0.24);
+        return {
+          x: cx,
+          y: lerp(h * 0.17, h * 0.56, slam),
+          rot: lerp(-0.22, 0.18, slam),
+          scaleMul: lerp(1.12, 1.18, slam),
+          facing: -1,
+          slashing: 1,
+          impactBurst: slam > 0.82 ? 1 : 0
+        };
+      }
+      const rec = easeOutCubic((t - 0.56) / 0.44);
+      return {
+        x: cx,
+        y: lerp(h * 0.56, h * 0.52, rec),
+        rot: lerp(0.18, 0, rec),
+        scaleMul: lerp(1.16, 1.04, rec),
+        facing: -1,
+        posing: 1
+      };
+    }
+
+    // 'domain_center' (Dead Calm, Ubuyashiki Sanctuary, Oboro, Exploding Blood, Spatial Awareness)
+    const floatBob = Math.sin(t * Math.PI * 2) * 8;
+    return {
+      x: cx,
+      y: cy - 10 + floatBob,
+      rot: Math.sin(t * Math.PI) * 0.04,
+      scaleMul: 1.08 + Math.sin(t * Math.PI) * 0.05,
+      facing: -1,
+      slashing: t > 0.18 && t < 0.72 ? 0.7 : 0,
+      posing: 1
+    };
+  }
+
+  function computeFullStageActorState(w, h, rawP, skill, homeOrigin) {
+    const meta = ACTION_SPRITE_META[skill.charId] || ACTION_SPRITE_META.shinobu;
+    const home = homeOrigin || { x: w * 0.80, y: h * 0.84 };
+    const pattern = getChoreographyPattern(skill.vfxType);
+    const p = warpProgressForHitStop(rawP);
+
+    const launchEnd = 0.15;
+    const returnStart = 0.84;
+
+    const entryTarget = sampleCombatPoint(pattern, skill.vfxType, w, h, 0);
+    const exitSource = sampleCombatPoint(pattern, skill.vfxType, w, h, 1);
+
+    let x = home.x;
+    let y = home.y;
+    let rot = 0;
+    let size = meta.baseSize;
+    let facing = entryTarget.facing || -1;
+    let phase = 'combat';
+    let slashing = 0;
+    let charging = 0;
+    let impactShake = 0;
+
+    if (p < launchEnd) {
+      // Phase 1: Parabolic Shunpo Launch out from the Composer Chibi corner!
+      phase = 'launch';
+      const lp = p / launchEnd;
+      const arc = evalParabolicArc(home.x, home.y, entryTarget.x, entryTarget.y, Math.min(180, h * 0.22), lp);
+      x = arc.x;
+      y = arc.y;
+      size = lerp(92, meta.baseSize, easeOutCubic(lp));
+      facing = entryTarget.x >= home.x ? 1 : -1;
+      rot = (facing > 0 ? 1 : -1) * Math.sin(lp * Math.PI) * 0.26;
+      charging = lp;
+    } else if (p < returnStart) {
+      // Phase 2-4: Main Combat Slash, Hit-Stop & Heroic Pose Hold
+      phase = 'combat';
+      const cu = (p - launchEnd) / (returnStart - launchEnd);
+      const pt = sampleCombatPoint(pattern, skill.vfxType, w, h, cu);
+      x = pt.x;
+      y = pt.y;
+      rot = (pt.allowFullSpin && !meta.spinCapable) ? 0 : (pt.rot || 0);
+      size = meta.baseSize * (pt.scaleMul || 1);
+      facing = pt.facing || -1;
+      slashing = pt.slashing || 0;
+      charging = pt.charging || 0;
+      if (rawP >= 0.33 && rawP <= 0.43) {
+        impactShake = 1 - Math.abs(rawP - 0.38) / 0.05;
+      }
+    } else {
+      // Phase 5: Agile Parabolic Somersault Return right back to the Composer corner!
+      phase = 'return';
+      const rp = (p - returnStart) / (1 - returnStart);
+      const arc = evalParabolicArc(exitSource.x, exitSource.y, home.x, home.y, Math.min(155, h * 0.18), rp);
+      x = arc.x;
+      y = arc.y;
+      size = lerp(meta.baseSize, 90, easeInOutQuad(rp));
+      facing = home.x >= exitSource.x ? 1 : -1;
+      rot = (meta.spinCapable ? 1 : 0.2) * Math.sin(rp * Math.PI) * 0.45 * (facing > 0 ? 1 : -1);
+    }
+
+    return {
+      x,
+      y,
+      rot,
+      size,
+      facing,
+      nativeFacing: meta.nativeFacing,
+      phase,
+      pattern,
+      slashing,
+      charging,
+      impactShake,
+      home
+    };
+  }
+
+  function easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  }
+
+  function drawShunpoTeleportRing(ctx, x, y, prog, primaryHex, accentHex) {
+    const u = clamp(prog, 0, 1);
+    const alpha = (1 - u) * 0.9;
+    if (alpha <= 0.01) return;
+    const rad = 14 + easeOutCubic(u) * 68;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    drawGlowArc(ctx, x, y, rad, 0, TWO_PI, 4.5 * (1 - u), primaryHex, accentHex, alpha);
+    drawGlowArc(ctx, x, y, rad * 0.58, u * 4, u * 4 + Math.PI * 1.4, 2.5, accentHex, '#ffffff', alpha * 0.85);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TWO_PI + u * 1.6;
+      const r1 = rad * 0.45;
+      const r2 = rad * 1.18;
+      drawGlowLine(
+        ctx,
+        x + Math.cos(a) * r1,
+        y + Math.sin(a) * r1,
+        x + Math.cos(a) * r2,
+        y + Math.sin(a) * r2,
+        2.4 * (1 - u),
+        primaryHex,
+        '#ffffff',
+        alpha * 0.8
+      );
+    }
+    ctx.restore();
+  }
+
+  function drawActionChibiOnStage(ctx, w, h, rawP, skill, homeOrigin, spriteEntry) {
+    const actor = computeFullStageActorState(w, h, rawP, skill, homeOrigin);
+    const pRgb = hexToRgb(skill.primaryColor);
+    const aRgb = hexToRgb(skill.accentColor);
+
+    // 1. Shunpo vanish burst at home corner on launch & landing ring on return
+    if (rawP < 0.18) {
+      drawShunpoTeleportRing(ctx, actor.home.x, actor.home.y, rawP / 0.18, skill.primaryColor, skill.accentColor);
+    } else if (rawP > 0.86) {
+      drawShunpoTeleportRing(ctx, actor.home.x, actor.home.y, 1 - (rawP - 0.86) / 0.14, skill.primaryColor, skill.accentColor);
+    }
+
+    // 2. Dynamic Sword-Follow Trail & Speed Lines linking Chibi directly to its Breathing Slash
+    if (actor.slashing > 0.1 || actor.phase === 'launch') {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let g = 5; g >= 1; g--) {
+        const lagP = Math.max(0, rawP - g * 0.022);
+        const ghost = computeFullStageActorState(w, h, lagP, skill, homeOrigin);
+        const gAlpha = (1 - g / 6) * 0.42;
+
+        // Luminous blade ribbon connecting ghost positions right through the Chibi's weapon path
+        const nextGhost = g === 1 ? actor : computeFullStageActorState(w, h, Math.max(0, rawP - (g - 1) * 0.022), skill, homeOrigin);
+        drawGlowLine(
+          ctx,
+          ghost.x,
+          ghost.y,
+          nextGhost.x,
+          nextGhost.y,
+          (18 - g * 2.4),
+          skill.primaryColor,
+          skill.accentColor,
+          gAlpha * 1.25
+        );
+
+        // Chromatic anime afterimage silhouettes
+        if (spriteEntry && spriteEntry.loaded && !spriteEntry.failed) {
+          ctx.save();
+          ctx.translate(ghost.x, ghost.y);
+          ctx.rotate(ghost.rot);
+          const flipX = ghost.facing * ghost.nativeFacing < 0 ? -1 : 1;
+          ctx.scale(flipX, 1);
+          ctx.globalAlpha = gAlpha * 0.55;
+          const gs = ghost.size * 0.96;
+          ctx.drawImage(spriteEntry.img, -gs * 0.5, -gs * 0.5, gs, gs);
+          ctx.restore();
+        } else {
+          drawOrb(ctx, ghost.x, ghost.y, ghost.size * 0.22, pRgb, gAlpha);
+        }
+      }
+      ctx.restore();
+    }
+
+    // 3. Elemental Aura Halo & Blade Charge Spark right behind the Full-Body Chibi
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const auraR = actor.size * (0.48 + actor.slashing * 0.14 + actor.charging * 0.10);
+    const haloGrad = ctx.createRadialGradient(actor.x, actor.y, 6, actor.x, actor.y, auraR);
+    haloGrad.addColorStop(0, `rgba(${aRgb}, 0.52)`);
+    haloGrad.addColorStop(0.45, `rgba(${pRgb}, 0.34)`);
+    haloGrad.addColorStop(1, `rgba(${pRgb}, 0)`);
+    ctx.fillStyle = haloGrad;
+    ctx.beginPath();
+    ctx.arc(actor.x, actor.y, auraR, 0, TWO_PI);
+    ctx.fill();
+
+    // Orbiting elemental slash ring around Chibi during active strike
+    if (actor.slashing > 0.2 || actor.charging > 0.3) {
+      const ringSpin = rawP * 18 * actor.facing;
+      drawGlowArc(
+        ctx,
+        actor.x,
+        actor.y,
+        actor.size * 0.46,
+        ringSpin,
+        ringSpin + Math.PI * 1.25,
+        5.5,
+        skill.primaryColor,
+        '#ffffff',
+        0.82
+      );
+    }
+    ctx.restore();
+
+    // 4. Crisp Full-Body Action Chibi Sprite (<id>_action.png)
+    if (spriteEntry && spriteEntry.loaded && !spriteEntry.failed) {
+      ctx.save();
+      ctx.translate(actor.x, actor.y);
+      ctx.rotate(actor.rot);
+      // Flip horizontally when actor's movement direction opposes the sprite's native artwork facing
+      const scaleX = actor.facing * actor.nativeFacing < 0 ? -1 : 1;
+      ctx.scale(scaleX, 1);
+
+      // Subtle glowing rim shadow so the cel-shaded Chibi pops dramatically over bright 4K wallpapers & VFX
+      ctx.shadowColor = skill.primaryColor;
+      ctx.shadowBlur = 18 + actor.slashing * 14;
+      const s = actor.size;
+      ctx.drawImage(spriteEntry.img, -s * 0.5, -s * 0.5, s, s);
+      ctx.restore();
+    } else {
+      // Instant glowing spirit silhouette fallback if PNG is still decoding on first millisecond
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      drawOrb(ctx, actor.x, actor.y, actor.size * 0.28, pRgb, 0.9);
+      drawGlowArc(ctx, actor.x, actor.y, actor.size * 0.34, 0, TWO_PI, 4, skill.primaryColor, '#ffffff', 0.9);
+      ctx.restore();
+    }
+
+    // 5. Impact Hit-Stop Starburst right at peak strike (p ~ 0.36)
+    if (actor.impactShake > 0.05) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const burstAlpha = actor.impactShake * 0.88;
+      const burstLen = actor.size * (0.75 + (1 - actor.impactShake) * 0.65);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI + 0.25;
+        drawGlowLine(
+          ctx,
+          actor.x - Math.cos(a) * burstLen,
+          actor.y - Math.sin(a) * burstLen,
+          actor.x + Math.cos(a) * burstLen,
+          actor.y + Math.sin(a) * burstLen,
+          (k % 2 === 0 ? 5.5 : 3.0) * actor.impactShake,
+          skill.accentColor,
+          '#ffffff',
+          burstAlpha
+        );
+      }
+      ctx.restore();
+    }
+
+    return actor;
+  }
+
+  /* ==========================================================================
    * 7. FULL-SCREEN OVERLAY DOM & UFOTABLE CINEMATIC BANNER
    * ========================================================================== */
 
@@ -2638,6 +3225,7 @@
   let activeRafId = 0;
   let activeBannerTimer = 0;
   let activeHideTimer = 0;
+  let activeStageCleanup = null;
 
   function prefersReducedMotion() {
     try {
@@ -2822,6 +3410,11 @@
       clearTimeout(activeHideTimer);
       activeHideTimer = 0;
     }
+    if (typeof activeStageCleanup === 'function') {
+      const fn = activeStageCleanup;
+      activeStageCleanup = null;
+      try { fn(); } catch (_) {}
+    }
     if (canvasEl && typeof canvasEl.getContext === 'function') {
       const ctx = canvasEl.getContext('2d');
       if (ctx) ctx.clearRect(0, 0, canvasEl.width || 0, canvasEl.height || 0);
@@ -2927,7 +3520,51 @@
       const ox = (Number(r.left) || 0) + (Number(r.width) || 0) * 0.5;
       const oy = (Number(r.top) || 0) + (Number(r.height) || 0) * 0.5;
       if (ox > 0 || oy > 0) origin = { x: ox, y: oy };
+    } else if (typeof document !== 'undefined') {
+      const hitEl = document.querySelector('.surface-composer > .agy-chibi-hitbox');
+      if (hitEl && typeof hitEl.getBoundingClientRect === 'function') {
+        const r = hitEl.getBoundingClientRect();
+        if (r.width > 0) origin = { x: r.left + r.width * 0.5, y: r.top + r.height * 0.5 };
+      }
     }
+
+    const explicitActionUrl = (opts.themeCfg && opts.themeCfg.actionSticker) || opts.actionSticker || '';
+    const spriteEntry = preloadActionSprite(skill.charId, explicitActionUrl);
+
+    // Hide the resting peeker Chibi on the chat frame while Full-Body Action Chibi leaps onto the stage!
+    const stagePeekerEls = [];
+    if (!prefersReducedMotion()) {
+      const compEl = opts.composerEl || (typeof document !== 'undefined' ? document.querySelector('.surface-composer') : null);
+      if (compEl && compEl.dataset) stagePeekerEls.push(compEl);
+      if (opts.sourceFrameEl && opts.sourceFrameEl.dataset && opts.sourceFrameEl !== compEl) {
+        stagePeekerEls.push(opts.sourceFrameEl);
+      }
+      stagePeekerEls.forEach((el) => {
+        delete el.dataset.chibiLanding;
+        el.dataset.chibiOutOnStage = '1';
+      });
+      if (typeof opts.onStageEnter === 'function') {
+        try { opts.onStageEnter(skill); } catch (_) {}
+      }
+    }
+
+    let returnedToCorner = false;
+    const triggerCornerReturn = () => {
+      if (returnedToCorner) return;
+      returnedToCorner = true;
+      stagePeekerEls.forEach((el) => {
+        delete el.dataset.chibiOutOnStage;
+        void el.offsetWidth;
+        el.dataset.chibiLanding = '1';
+        setTimeout(() => {
+          if (el && el.dataset) delete el.dataset.chibiLanding;
+        }, 420);
+      });
+      if (typeof opts.onStageReturn === 'function') {
+        try { opts.onStageReturn(skill); } catch (_) {}
+      }
+    };
+    activeStageCleanup = triggerCornerReturn;
 
     // Respect prefers-reduced-motion: render serene static illumination frame, zero motion shake, clean teardown
     if (prefersReducedMotion()) {
@@ -2935,12 +3572,13 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, vw, vh);
       renderSkillFrame(ctx, vw, vh, 0.35, skill, origin);
+      drawActionChibiOnStage(ctx, vw, vh, 0.48, skill, origin, spriteEntry);
       ctx.restore();
       activeHideTimer = setTimeout(stopActiveSkill, 2450);
       return { ok: true, charId: skill.charId, skill: skill, durationMs: 2450, reducedMotion: true };
     }
 
-    const duration = clamp(Number(opts.durationMs) || skill.durationMs || 2800, 2400, 3200);
+    const duration = clamp(Number(opts.durationMs) || skill.durationMs || 2750, 2350, 3150);
     const nowFn = (typeof performance !== 'undefined' && typeof performance.now === 'function')
       ? () => performance.now()
       : () => Date.now();
@@ -2951,15 +3589,30 @@
       const elapsed = Math.max(0, cur - startTs);
       const p = elapsed / duration;
 
+      if (p >= 0.96 && !returnedToCorner) {
+        triggerCornerReturn();
+      }
+
       if (p >= 1) {
         stopActiveSkill();
         return;
       }
 
+      const warpedP = warpProgressForHitStop(p);
+      // Crisp 4px camera impact micro-shake right at the Hit-Stop apex
+      let shakeX = 0;
+      let shakeY = 0;
+      if (p >= 0.34 && p <= 0.42) {
+        const mag = (1 - Math.abs(p - 0.38) / 0.04) * 5.5;
+        shakeX = Math.sin(elapsed * 0.18) * mag;
+        shakeY = Math.cos(elapsed * 0.23) * mag * 0.7;
+      }
+
       ctx.save();
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, vw, vh);
-      renderSkillFrame(ctx, vw, vh, p, skill, origin);
+      ctx.setTransform(dpr, 0, 0, dpr, shakeX * dpr, shakeY * dpr);
+      ctx.clearRect(-16, -16, vw + 32, vh + 32);
+      renderSkillFrame(ctx, vw, vh, warpedP, skill, origin);
+      drawActionChibiOnStage(ctx, vw, vh, p, skill, origin, spriteEntry);
       ctx.restore();
 
       activeRafId = requestFrame(tick);
@@ -2981,6 +3634,7 @@
     getAllSkills,
     castSkill,
     stopActiveSkill,
+    preloadActionSprite,
     playSkillSfx,
     isSoundMuted,
     setSoundMuted,

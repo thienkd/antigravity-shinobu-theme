@@ -12,7 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const ASSET_KEYS = ['wallpaper', 'sticker', 'cornerSvg', 'userAvatar', 'agentAvatar'];
+const ASSET_KEYS = ['wallpaper', 'sticker', 'actionSticker', 'cornerSvg', 'userAvatar', 'agentAvatar'];
 const HYBRID_INLINE_CANDIDATES = new Set(['cornerSvg', 'userAvatar', 'sticker']);
 const HYBRID_INLINE_MAX_BYTES = 12 * 1024;
 const PLACEHOLDER = '/*__THEMES_PLACEHOLDER__*/{}';

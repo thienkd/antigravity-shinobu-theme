@@ -1265,7 +1265,42 @@
         50% { transform: scaleX(1.05) translateY(-1px); opacity: 0.98; }
       }
 
-      /* 60fps Chibi Ultimate Skill Attack Choreography on .surface-composer::before */
+      /* Hide resting corner peeker Chibi while Full-Body Action Chibi leaps onto the main stage! */
+      .surface-composer[data-chibi-out-on-stage="1"]::before,
+      .agy-user-bubble-frame[data-chibi-out-on-stage="1"]::before {
+        opacity: 0 !important;
+        transform: translateY(-18px) scale(0.62) !important;
+        transition: opacity 0.08s ease-out, transform 0.11s cubic-bezier(0.22, 1, 0.36, 1) !important;
+      }
+
+      /* Elastic spring settle when Full-Body Chibi somersaults back onto the chat frame edge */
+      .surface-composer[data-chibi-landing="1"]::before,
+      .agy-user-bubble-frame[data-chibi-landing="1"]::before {
+        animation: agyChibiSpringLanding 0.38s cubic-bezier(0.22, 1, 0.36, 1) both !important;
+      }
+      @keyframes agyChibiSpringLanding {
+        0% {
+          opacity: 0.4;
+          transform: translateY(-16px) scale(0.86, 1.14);
+          filter: drop-shadow(0 0 14px var(--agy-chibi-atk-c1, #38bdf8)) brightness(1.18);
+        }
+        42% {
+          opacity: 1;
+          transform: translateY(3.5px) scale(1.09, 0.89);
+          filter: drop-shadow(0 0 10px var(--agy-chibi-atk-c1, #38bdf8));
+        }
+        72% {
+          transform: translateY(-2px) scale(0.97, 1.03);
+          filter: drop-shadow(0 0 4px var(--agy-chibi-atk-c1, #38bdf8));
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0) scale(1, 1);
+          filter: drop-shadow(0 0 0 transparent);
+        }
+      }
+
+      /* Fallback Chibi Attack Motion when full-screen stage is unavailable */
       .surface-composer[data-chibi-attack="1"]::before {
         animation: agyChibiSkillAttack 0.82s cubic-bezier(0.22, 1, 0.36, 1) both !important;
       }
@@ -1705,6 +1740,13 @@
     ensureStyles();
     const meta = resolveCharacterMeta(themeCfg, charId);
 
+    // Preload Full-Body Action Chibi PNG sprite into memory so 1st click leaps with 0ms latency!
+    if (typeof window !== 'undefined' && window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.preloadActionSprite === 'function') {
+      try {
+        window.__AGY_KNY_SKILLS__.preloadActionSprite(meta.charId, themeCfg && themeCfg.actionSticker);
+      } catch (_) {}
+    }
+
     // Idempotent fast-path when tick() re-invokes with identical composer & mode
     if (
       state.auraHost &&
@@ -1805,7 +1847,8 @@
     composer.style.setProperty('--agy-chibi-atk-c2', atkColor2);
 
     const reduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!reduced) {
+    const hasStageLeap = Boolean(typeof window !== 'undefined' && window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.castSkill === 'function');
+    if (!reduced && !hasStageLeap) {
       delete composer.dataset.chibiAttack;
       // Trigger reflow so rapid consecutive casts replay the 60fps CSS keyframe cleanly
       void composer.offsetWidth;
@@ -1919,23 +1962,25 @@
     syncBadgeShift();
   }
 
-  function executeSkillCast(skillIdx) {
+  function executeSkillCast(skillIdx, castOpts) {
+    const opts = castOpts && typeof castOpts === 'object' ? castOpts : {};
     const charId = state.uiCharId || state.auraCharId || 'shinobu';
     const meta = state.uiMeta || state.auraMeta || resolveCharacterMeta(state.uiThemeCfg, charId);
     const skills = state.uiSkills && state.uiSkills.length > 0 ? state.uiSkills : resolveSkillsForChar(charId, meta);
     const safeIdx = ((skillIdx % skills.length) + skills.length) % skills.length;
     const skill = skills[safeIdx];
 
-    // Advance sequential combo pointer for next "⚡ Xuất Chiêu" click
+    // Advance sequential combo pointer for next Chibi click or "⚡ Xuất Chiêu" click
     state.comboIdxByChar[charId] = (safeIdx + 1) % skills.length;
 
     const composer = state.uiComposer || state.auraComposer || (typeof document !== 'undefined' ? document.querySelector('.surface-composer') : null);
     const muted = isSfxMuted();
 
-    // 1. Trigger full-screen Breathing VFX + Katana SFX via window.__AGY_KNY_SKILLS__
+    // 1. Trigger Full-Body Action Chibi Stage Leap + Breathing VFX + Katana SFX via window.__AGY_KNY_SKILLS__
     let originRect = null;
     try {
       const originNode =
+        opts.originEl ||
         (composer && composer.querySelector && composer.querySelector(':scope > .agy-chibi-hitbox')) ||
         state.auraHost ||
         composer;
@@ -1953,7 +1998,9 @@
           skillIndex: safeIdx,
           skill,
           originRect,
+          sourceFrameEl: opts.sourceFrameEl || null,
           themeCfg: state.uiThemeCfg,
+          actionSticker: state.uiThemeCfg && state.uiThemeCfg.actionSticker,
           composerEl: composer,
           muted,
           sound: !muted,
@@ -1964,13 +2011,13 @@
       playFallbackKatanaWhoosh();
     }
 
-    // 2. Play 60fps Chibi jump-slash motion + 1.8s 2x <agy-chibi-aura> surge
+    // 2. Surge <agy-chibi-aura> at 2x intensity for 1.8s
     playChibiAttackMotion(composer, state.uiThemeCfg, skill);
 
-    // 3. Notify caller so NPC dialog shouts the Breathing Form's battle cry
+    // 3. Notify caller quietly (without forcing huge chat popover open over the action stage if user collapsed it)
     if (typeof state.uiOnSkillCast === 'function') {
       try {
-        state.uiOnSkillCast(skill, safeIdx);
+        state.uiOnSkillCast(skill, safeIdx, opts);
       } catch (_) {}
     } else if (skill && skill.quote) {
       speakFallbackIntoNpc(skill.quote);
@@ -1981,10 +2028,10 @@
     return skill;
   }
 
-  function castNextComboSkill() {
+  function castNextComboSkill(castOpts) {
     const charId = state.uiCharId || state.auraCharId || 'shinobu';
     const nextIdx = state.comboIdxByChar[charId] || 0;
-    return executeSkillCast(nextIdx);
+    return executeSkillCast(nextIdx, castOpts);
   }
 
   function buildSkillItemsDom(skills, onPick) {
