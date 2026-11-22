@@ -2102,6 +2102,52 @@ describe('F06 — NPC 2 Chiều, Theme Studio Modal, Teardown & Vòng Đời (`e
       assert.equal(env.core.getState().agentAvatar, '');
       assert.equal(agentSwitch2.getAttribute('aria-checked'), 'true');
     });
+
+    it('[F06-T1-09] Gói 3A: applyDaemonDelta (<1KB), Cầu chì AGY_DOM_CONTRACTS, Tách lớp Chibi/Hạt/Bo góc & Chế độ Tập trung sâu', () => {
+      const env = createTestEnv({ loadCore: true });
+
+      // 1. Kiểm tra không còn bộ đếm NPC tự nhắc 180s gây xao nhãng
+      assert.equal(env.window.__AGY_SHINOBU_RT__.remindTimer, 0, 'Không được đặt timer tự gõ chữ NPC 3 phút mặc định');
+
+      // 2. Kiểm tra diagnoseDomContracts khỏe mạnh ở trạng thái chuẩn
+      const diagOk = env.core.diagnoseDomContracts();
+      assert.equal(diagOk.healthy, true);
+      assert.equal(diagOk.degradedZones.length, 0);
+
+      // 3. Tắt riêng Chibi (chibiEnabled: false) nhưng vẫn giữ inputStyle = 'double_gold' & chỉnh bubbleRadius = 18
+      env.core.applyTheme({ inputStyle: 'double_gold', chibiEnabled: false, bubbleRadius: 18, fxDensity: 35 });
+      assert.equal(env.core.getState().inputStyle, 'double_gold', 'Tắt Chibi không được làm mất kiểu viền double_gold');
+      assert.equal(env.document.getElementById('agy-shinobu-npc-wrap'), null, 'chibiEnabled=false phải gỡ hộp thoại NPC');
+      assert.equal(env.userBubbleFrame.querySelector(':scope > .agy-chibi-hitbox'), null, 'chibiEnabled=false phải gỡ hitbox trên bong bóng chat');
+      assert.equal(env.window.__AGY_FX_DENSITY__, 0.35);
+      const cssAfter = env.document.getElementById('antigravity-custom-theme-active').textContent;
+      assert.ok(cssAfter.includes('border-radius: 18px !important;'), 'bubbleRadius=18 phải được áp vào khung chat');
+
+      // 4. Đồng bộ nhanh qua applyDaemonDelta (<1KB) không lưu ngược lại ra đĩa (chống Ping-Pong)
+      const savesBefore = env.savedConfigCalls.length;
+      const okDelta = env.core.applyDaemonDelta({
+        themeName: '🌊 Thủy Trụ — Giyu Tomioka',
+        chibiEnabled: true,
+        fxDensity: 80,
+        autoFinisher: false,
+        bubbleRadius: 10
+      });
+      assert.equal(okDelta, true);
+      assert.equal(env.savedConfigCalls.length, savesBefore, 'applyDaemonDelta tuyệt đối không được gọi saveConfigSecure gây Ping-Pong');
+      assert.equal(env.core.getState().themeName, '🌊 Thủy Trụ — Giyu Tomioka');
+      assert.equal(env.core.getState().chibiEnabled, true);
+      assert.equal(env.window.__AGY_AUTO_FINISHER__, false);
+      assert.ok(env.document.getElementById('agy-shinobu-npc-wrap'), 'chibiEnabled=true qua Delta phải dựng lại NPC');
+
+      // 5. Bấm nút Chế độ Tập trung sâu (#agy-focus-preset-btn) trong Studio
+      env.window.__ANTIGRAVITY_OPEN_THEME_MODAL__('backdrop');
+      env.document.getElementById('agy-focus-preset-btn').click();
+      const focusSt = env.core.getState();
+      assert.equal(focusSt.chibiEnabled, false);
+      assert.equal(focusSt.fxDensity, 20);
+      assert.equal(focusSt.autoFinisher, false);
+      assert.equal(focusSt.transparentWorld, true);
+    });
   });
 
   describe('Tier 2 — Biên, Bảo Mật & Sửa Lỗi Hợp Đồng', () => {

@@ -483,6 +483,8 @@ function createParentTracker(cid) {
         subagentsMap: new Map(),
         recentCompletedSubagents: [],
         knownSubagents: new Map(),
+        workStateItems: [],
+        workflowSeq: 0,
     };
 }
 
@@ -518,6 +520,13 @@ const OVERSIZE_TC_ARG_LIMITS = Object.freeze(
         recipient: 80,
         toolsummary: 180,
         description: 180,
+        action: 32,
+        name: 64,
+        brief: 180,
+        title: 120,
+        toolname: 64,
+        task: 180,
+        status: 32,
     })
 );
 
@@ -686,6 +695,9 @@ function createOversizeScanner(childMode = false) {
         zeroExit: false,
         hasGitPush: false,
         invokedSubagents: [],
+        swarmCalls: [],
+        workflowCalls: [],
+        workStateCalls: [],
         sendMessageRecipients: [],
         createdChildCid: '',
         senderCids: [],
@@ -797,6 +809,31 @@ function finalizeCurrentToolCall(scan) {
         if (UUID_RE.test(recipient) && scan.sendMessageRecipients.length < 16) {
             scan.sendMessageRecipients.push(recipient);
         }
+    } else if (tc.name === 'swarm') {
+        const action = sanitizeDisplayLabel(tc.action || '', 24).toLowerCase();
+        if ((action === 'add' || action === 'kill') && scan.swarmCalls.length < 8) {
+            scan.swarmCalls.push({
+                action,
+                name: sanitizeDisplayLabel(tc.name || 'worker', 48),
+                brief: sanitizeDisplayLabel(tc.brief || tc.title || 'Swarm Worker', 90),
+            });
+        }
+    } else if (tc.name === 'run_workflow') {
+        if (scan.workflowCalls.length < 4) {
+            scan.workflowCalls.push({
+                description: sanitizeDisplayLabel(tc.description || tc.toolSummary || 'Python Workflow', 90),
+            });
+        }
+    } else if (
+        (tc.name === 'call_mcp_tool' && String(tc.toolName || '').toLowerCase() === 'work_state_write') ||
+        String(tc.name || '').toLowerCase().endsWith('work_state_write')
+    ) {
+        if (tc.task && scan.workStateCalls.length < 12) {
+            scan.workStateCalls.push({
+                task: sanitizeDisplayLabel(tc.task, 120),
+                status: sanitizeDisplayLabel(tc.status || 'doing', 20).toLowerCase(),
+            });
+        }
     }
 }
 
@@ -808,6 +845,13 @@ function assignTcArgField(tc, keyLower, val) {
     else if (keyLower === 'recipient' && !tc.recipient) tc.recipient = val;
     else if (keyLower === 'toolsummary' && !tc.toolSummary) tc.toolSummary = val;
     else if (keyLower === 'description' && !tc.description) tc.description = val;
+    else if (keyLower === 'action' && !tc.action) tc.action = val;
+    else if (keyLower === 'name' && !tc.name) tc.name = val;
+    else if (keyLower === 'brief' && !tc.brief) tc.brief = val;
+    else if (keyLower === 'title' && !tc.title) tc.title = val;
+    else if (keyLower === 'toolname' && !tc.toolName) tc.toolName = val;
+    else if (keyLower === 'task' && !tc.task) tc.task = val;
+    else if (keyLower === 'status' && !tc.status) tc.status = val;
 }
 
 function commitTopLevelNumber(scan) {
@@ -1222,6 +1266,89 @@ function applyStepSignals(tracker, step, isLiveDelta) {
                 (acc, item) => acc + (item.isGitPush ? 1 : 0),
                 0
             );
+        } else if (tc.name === 'swarm') {
+            const action = String(args.action || '').trim().toLowerCase();
+            const rawName = sanitizeDisplayLabel(String(args.name || 'worker'), 32)
+                .toLowerCase()
+                .replace(/[^a-z0-9_-]/g, '') || 'worker';
+            if (action === 'add') {
+                const brief = sanitizeDisplayLabel(String(args.brief || args.title || 'Swarm Worker'), 90) || 'Swarm Worker';
+                const taskList = Array.isArray(args.tasks) ? args.tasks : [];
+                const copies = taskList.length > 0
+                    ? Math.min(6, taskList.length)
+                    : Math.min(6, Math.max(1, parseInt(args.n, 10) || 1));
+                for (let k = 0; k < copies; k++) {
+                    const rosterId = copies > 1 || taskList.length > 0 ? `${rawName}-${k + 1}` : rawName;
+                    const swarmCid = `swarm:${tracker.cid}:${rosterId}`;
+                    const sliceDesc = taskList[k] ? sanitizeDisplayLabel(String(taskList[k]), 56) : '';
+                    const roleLabel = sliceDesc
+                        ? `[Swarm ${rosterId}] ${sliceDesc}`
+                        : `[Swarm ${rosterId}] ${brief}`;
+                    tracker.recentCompletedSubagents = tracker.recentCompletedSubagents.filter((x) => x.cid !== swarmCid);
+                    const subEntry = {
+                        cid: swarmCid,
+                        role: roleLabel.slice(0, 90),
+                        typeName: 'swarm',
+                        status: 'working',
+                        stepCount: 1,
+                        lastTool: brief,
+                        startedAt: stepTsMs || Date.now(),
+                        completedAt: 0,
+                    };
+                    tracker.subagentsMap.set(swarmCid, subEntry);
+                    touchLruMap(tracker.knownSubagents, swarmCid, { ...subEntry }, MAX_KNOWN_SUBAGENTS);
+                }
+            } else if (action === 'kill') {
+                const targetPrefix = `swarm:${tracker.cid}:${rawName}`;
+                for (const key of Array.from(tracker.subagentsMap.keys())) {
+                    if (key === targetPrefix || key.startsWith(`${targetPrefix}-`) || rawName === 'all') {
+                        recordCompletedSubagent(tracker, key, stepTsMs, isLiveDelta);
+                    }
+                }
+            }
+        } else if (tc.name === 'run_workflow') {
+            const wfDesc = sanitizeDisplayLabel(
+                String(args.Description || args.description || args.ScriptPath || 'Python Workflow'),
+                90
+            ) || 'Python Workflow';
+            const wfCid = `workflow:${tracker.cid}:${++tracker.workflowSeq}`;
+            const wfEntry = {
+                cid: wfCid,
+                role: `[Workflow] ${wfDesc}`.slice(0, 90),
+                typeName: 'workflow',
+                status: 'working',
+                stepCount: 1,
+                lastTool: wfDesc,
+                startedAt: stepTsMs || Date.now(),
+                completedAt: 0,
+            };
+            tracker.subagentsMap.set(wfCid, wfEntry);
+            touchLruMap(tracker.knownSubagents, wfCid, { ...wfEntry }, MAX_KNOWN_SUBAGENTS);
+        } else if (
+            (tc.name === 'call_mcp_tool' && String(args.ToolName || args.toolName || '').toLowerCase() === 'work_state_write') ||
+            String(tc.name || '').toLowerCase().endsWith('work_state_write')
+        ) {
+            const innerArgs = (args.Arguments && typeof args.Arguments === 'object') ? args.Arguments : args;
+            const fields = (innerArgs && innerArgs.fields && typeof innerArgs.fields === 'object') ? innerArgs.fields : innerArgs;
+            const taskTitle = sanitizeDisplayLabel(String((fields && fields.task) || ''), 120);
+            const rawSt = String((fields && fields.status) || 'doing').trim().toLowerCase();
+            const normStatus = rawSt === 'done' || rawSt === 'todo' || rawSt === 'doing' ? rawSt : 'doing';
+            if (taskTitle) {
+                const existingIdx = tracker.workStateItems.findIndex((it) => it.task === taskTitle);
+                const nextItem = {
+                    task: taskTitle,
+                    status: normStatus,
+                    updatedAt: stepTsMs || Date.now(),
+                };
+                if (existingIdx >= 0) {
+                    tracker.workStateItems[existingIdx] = nextItem;
+                } else {
+                    tracker.workStateItems.push(nextItem);
+                    if (tracker.workStateItems.length > 12) {
+                        tracker.workStateItems.shift();
+                    }
+                }
+            }
         }
     }
 
@@ -1343,6 +1470,11 @@ function applyStepSignals(tracker, step, isLiveDelta) {
 
     if (tracker.isWorking && !nextIsWorking) {
         tracker.turnFinishedSeq++;
+        for (const key of Array.from(tracker.subagentsMap.keys())) {
+            if (key.startsWith('workflow:')) {
+                recordCompletedSubagent(tracker, key, stepTsMs, isLiveDelta);
+            }
+        }
     }
     tracker.isWorking = nextIsWorking;
 }
@@ -1354,6 +1486,24 @@ function applyOversizeScanSignals(tracker, scan, isLiveDelta) {
         syntheticToolCalls.push({
             name: 'invoke_subagent',
             args: { Role: sub.role, TypeName: sub.typeName },
+        });
+    }
+    for (const sw of scan.swarmCalls) {
+        syntheticToolCalls.push({
+            name: 'swarm',
+            args: { action: sw.action, name: sw.name, brief: sw.brief },
+        });
+    }
+    for (const wf of scan.workflowCalls) {
+        syntheticToolCalls.push({
+            name: 'run_workflow',
+            args: { Description: wf.description },
+        });
+    }
+    for (const ws of scan.workStateCalls) {
+        syntheticToolCalls.push({
+            name: 'call_mcp_tool',
+            args: { ToolName: 'work_state_write', Arguments: { fields: { task: ws.task, status: ws.status } } },
         });
     }
     for (const rcid of scan.sendMessageRecipients) {
@@ -1863,6 +2013,7 @@ function getConversationSnapshot(rawCid) {
         slashReason: tracker.slashReason,
         activeSubagents,
         recentCompletedSubagents,
+        workStateItems: tracker.workStateItems.slice(-12),
         fileBytes: st.size,
         updatedAt: Math.floor(st.mtimeMs),
     };
@@ -2705,6 +2856,19 @@ function buildRuntimeWrappedSource(opts = {}) {
 }
 const buildInjectedSource = buildRuntimeWrappedSource;
 
+function buildDeltaConfigSyncSource() {
+    const currentCfg = readConfig();
+    const deltaPayload = JSON.stringify({
+        syncFromDaemon: true,
+        config: currentCfg,
+    }).replace(/<\//g, '<\\/').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+    return `(() => {\nconst delta = ${deltaPayload};\nif (typeof window !== 'undefined' && window.__AGY_THEME_CORE__ && typeof window.__AGY_THEME_CORE__.applyDaemonDelta === 'function') {\n  return Boolean(window.__AGY_THEME_CORE__.applyDaemonDelta(delta.config));\n}\nreturn false;\n})()`;
+}
+
+function computeSourceHash(src) {
+    return crypto.createHash('sha256').update(src, 'utf8').digest('hex');
+}
+
 function isCandidateAntigravityUrl(rawUrl) {
     if (typeof rawUrl !== 'string') return false;
     const trimmed = rawUrl.trim();
@@ -2850,6 +3014,8 @@ function scheduleCrossWindowConfigSync(sourceTargetId) {
             if (!other.verified) continue;
             if (other.id === srcId) {
                 other.reinject({ onlyUpdateNewDoc: true });
+            } else if (typeof other.syncConfigDelta === 'function') {
+                other.syncConfigDelta();
             } else {
                 other.reinject({ syncFromDaemon: true });
             }
@@ -2872,7 +3038,7 @@ function createSession(target) {
         injecting: false,
         queuedReinjectOpts: null,
         evalScriptId: null,
-        lastRegisteredDocSource: '',
+        lastRegisteredDocHash: '',
     };
     sessions.set(target.id, session);
 
@@ -2950,7 +3116,8 @@ function createSession(target) {
     async function refreshNewDocumentScript() {
         const docSrc = buildRuntimeWrappedSource({ syncFromDaemon: false });
         if (!docSrc) return false;
-        if (docSrc === session.lastRegisteredDocSource && session.evalScriptId) {
+        const nextHash = computeSourceHash(docSrc);
+        if (nextHash === session.lastRegisteredDocHash && session.evalScriptId) {
             return true;
         }
         if (session.evalScriptId) {
@@ -2962,9 +3129,30 @@ function createSession(target) {
         }
         const addRes = await send('Page.addScriptToEvaluateOnNewDocument', { source: docSrc });
         session.evalScriptId = addRes && addRes.identifier ? String(addRes.identifier) : null;
-        session.lastRegisteredDocSource = docSrc;
+        session.lastRegisteredDocHash = nextHash;
         return true;
     }
+
+    session.syncConfigDelta = async () => {
+        if (!session.verified) return;
+        if (session.injecting) {
+            session.reinject({ syncFromDaemon: true });
+            return;
+        }
+        try {
+            await refreshNewDocumentScript();
+            const deltaExpr = buildDeltaConfigSyncSource();
+            const evalRes = await send('Runtime.evaluate', {
+                expression: deltaExpr,
+                returnByValue: true,
+                awaitPromise: false,
+            });
+            const val = evalRes && evalRes.result ? evalRes.result.value : undefined;
+            if (val === false) {
+                await session.reinject({ syncFromDaemon: true });
+            }
+        } catch (_) {}
+    };
 
     session.reinject = async (opts = {}) => {
         const allowUnverified = Boolean(opts && opts.initialAttach);

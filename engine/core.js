@@ -136,6 +136,63 @@
   const STORAGE_AVATAR_RADIUS = 'agy_avatar_radius_v3';
   const STORAGE_TRANSPARENT_WORLD = 'agy_transparent_world_v1';
   const STORAGE_MASTER_PERSONA = 'agy_master_persona_v1';
+  const STORAGE_CHIBI_ENABLED = 'agy_chibi_enabled_v1';
+  const STORAGE_FX_DENSITY = 'agy_fx_density_v1';
+  const STORAGE_AUTO_FINISHER = 'agy_auto_finisher_v1';
+  const STORAGE_BUBBLE_RADIUS = 'agy_bubble_radius_v1';
+  const STORAGE_ECO_BATTERY = 'agy_eco_battery_v1';
+
+  const AGY_DOM_CONTRACTS = Object.freeze({
+    shell: Object.freeze(['.agy-shell', '.monaco-workbench']),
+    titlebar: Object.freeze(['[class*="@container/titlebar"]', '[data-testid="pane-titlebar-toolbar"]', 'header']),
+    sidebarSplit: Object.freeze(['[data-testid="sidebar-split"]', '[data-sidebar="true"]', 'aside']),
+    mainBody: Object.freeze(['[data-main-content-body="true"]', '.agy-inset-shell']),
+    sidePanel: Object.freeze(['[data-side-panel-body="true"]']),
+    composer: Object.freeze(['.surface-composer', '[data-testid="composer"]']),
+    userBubble: Object.freeze(['.agy-user-bubble-frame', '[data-testid="user-message"]']),
+    agentResponse: Object.freeze(['[data-testid="agent-response"]'])
+  });
+
+  function diagnoseDomContracts() {
+    if (typeof document === 'undefined') {
+      return { healthy: false, zones: {}, degradedZones: ['document'] };
+    }
+    const zones = {};
+    const degradedZones = [];
+    for (const [zone, selectors] of Object.entries(AGY_DOM_CONTRACTS)) {
+      let matchedSelector = null;
+      let count = 0;
+      for (const sel of selectors) {
+        try {
+          const list = document.querySelectorAll(sel);
+          if (list && list.length > 0) {
+            matchedSelector = sel;
+            count = list.length;
+            break;
+          }
+        } catch (_) {}
+      }
+      let safe = true;
+      if (zone === 'userBubble' && matchedSelector === '.agy-user-bubble-frame') {
+        try {
+          const frames = document.querySelectorAll('.agy-user-bubble-frame');
+          for (const fr of frames) {
+            if (fr && typeof fr.closest === 'function' && fr.closest('button, input, textarea')) {
+              safe = false;
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+      if (!safe) degradedZones.push(zone);
+      zones[zone] = { present: Boolean(matchedSelector), matchedSelector, count, safe };
+    }
+    return {
+      healthy: Boolean(zones.shell && zones.shell.present && degradedZones.length === 0),
+      zones,
+      degradedZones
+    };
+  }
 
   const CHECK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
@@ -188,56 +245,87 @@
     return clean;
   }
 
+  function hydrateStorageFromConfigObject(syncCfg) {
+    if (!syncCfg || typeof syncCfg !== 'object') return false;
+    try {
+      const forgeMod = typeof window !== 'undefined' ? window.__AGY_THEME_FORGE__ : null;
+      if (forgeMod && typeof forgeMod.registerThemeIntoRegistry === 'function') {
+        if (syncCfg.activeForgedTheme && typeof syncCfg.activeForgedTheme === 'object') {
+          const fName = String(syncCfg.activeForgedTheme.name || syncCfg.themeName || '').trim();
+          if (fName) forgeMod.registerThemeIntoRegistry(THEMES, THEME_KEYS, fName, syncCfg.activeForgedTheme);
+        }
+        if (syncCfg.activeForgedBubbleTheme && typeof syncCfg.activeForgedBubbleTheme === 'object') {
+          const fbName = String(syncCfg.activeForgedBubbleTheme.name || syncCfg.bubbleName || '').trim();
+          if (fbName) forgeMod.registerThemeIntoRegistry(THEMES, THEME_KEYS, fbName, syncCfg.activeForgedBubbleTheme);
+        }
+      }
+      if (typeof syncCfg.themeName === 'string' && THEMES[syncCfg.themeName]) {
+        localStorage.setItem(STORAGE_THEME, syncCfg.themeName);
+      }
+      if (typeof syncCfg.bubbleName === 'string' && THEMES[syncCfg.bubbleName]) {
+        localStorage.setItem(STORAGE_BUBBLE, syncCfg.bubbleName);
+      }
+      if (typeof syncCfg.inputStyle === 'string' && INPUT_STYLES[syncCfg.inputStyle]) {
+        localStorage.setItem(STORAGE_INPUT, syncCfg.inputStyle);
+      }
+      if (typeof syncCfg.dimming === 'number' && Number.isFinite(syncCfg.dimming)) {
+        localStorage.setItem(STORAGE_DIMMING, String(clampInt(syncCfg.dimming, 15, 92, 69)));
+      }
+      if (typeof syncCfg.wpEnabled === 'boolean') {
+        localStorage.setItem(STORAGE_WP_ENABLED, String(syncCfg.wpEnabled));
+      }
+      if (typeof syncCfg.transparentWorld === 'boolean') {
+        localStorage.setItem(STORAGE_TRANSPARENT_WORLD, String(syncCfg.transparentWorld));
+      }
+      if (typeof syncCfg.chibiEnabled === 'boolean') {
+        localStorage.setItem(STORAGE_CHIBI_ENABLED, String(syncCfg.chibiEnabled));
+      }
+      if (typeof syncCfg.autoFinisher === 'boolean') {
+        localStorage.setItem(STORAGE_AUTO_FINISHER, String(syncCfg.autoFinisher));
+      }
+      if (typeof syncCfg.ecoBattery === 'boolean') {
+        localStorage.setItem(STORAGE_ECO_BATTERY, String(syncCfg.ecoBattery));
+      }
+      if (typeof syncCfg.fxDensity === 'number' && Number.isFinite(syncCfg.fxDensity)) {
+        localStorage.setItem(STORAGE_FX_DENSITY, String(clampInt(syncCfg.fxDensity, 0, 100, 100)));
+      }
+      if (typeof syncCfg.bubbleRadius === 'number' && Number.isFinite(syncCfg.bubbleRadius)) {
+        localStorage.setItem(STORAGE_BUBBLE_RADIUS, String(clampInt(syncCfg.bubbleRadius, 6, 22, 14)));
+      }
+      if (typeof syncCfg.masterPersona === 'string' && syncCfg.masterPersona) {
+        const cleanP = normalizeSafeMasterPersona(syncCfg.masterPersona);
+        localStorage.setItem(STORAGE_MASTER_PERSONA, cleanP);
+      }
+      if (typeof syncCfg.userAvatar === 'string') {
+        localStorage.setItem(STORAGE_USER_AVATAR, syncCfg.userAvatar === 'none' ? 'none' : (syncCfg.userAvatar ? resolveAssetUrl(syncCfg.userAvatar) : ''));
+      }
+      if (typeof syncCfg.agentAvatar === 'string') {
+        localStorage.setItem(STORAGE_AGENT_AVATAR, syncCfg.agentAvatar === 'none' ? 'none' : (syncCfg.agentAvatar ? resolveAssetUrl(syncCfg.agentAvatar) : ''));
+      }
+      if (typeof syncCfg.glassBlur === 'number' && Number.isFinite(syncCfg.glassBlur)) {
+        localStorage.setItem(STORAGE_GLASS_BLUR, String(clampInt(syncCfg.glassBlur, 0, 16, 0)));
+      }
+      if (typeof syncCfg.avatarSize === 'number' && Number.isFinite(syncCfg.avatarSize)) {
+        localStorage.setItem(STORAGE_AVATAR_SIZE, String(clampInt(syncCfg.avatarSize, 22, 52, 32)));
+      }
+      if (typeof syncCfg.avatarRadius === 'number' && Number.isFinite(syncCfg.avatarRadius)) {
+        localStorage.setItem(STORAGE_AVATAR_RADIUS, String(clampInt(syncCfg.avatarRadius, 0, 50, 50)));
+      }
+      if (typeof syncCfg.customWp === 'string') {
+        try {
+          localStorage.setItem(STORAGE_CUSTOM_WP, syncCfg.customWp ? resolveAssetUrl(syncCfg.customWp) : '');
+        } catch (_) {}
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Multi-window synchronization: when daemon re-injects secondary windows after a config save,
   // hydrate localStorage from initialConfig before rendering so every open window stays in sync.
   if (SEC && typeof SEC.isSyncFromDaemon === 'function' && SEC.isSyncFromDaemon()) {
-    try {
-      const syncCfg = SEC.getInitialConfig();
-      if (syncCfg && typeof syncCfg === 'object') {
-        if (typeof syncCfg.themeName === 'string' && THEMES[syncCfg.themeName]) {
-          localStorage.setItem(STORAGE_THEME, syncCfg.themeName);
-        }
-        if (typeof syncCfg.bubbleName === 'string' && THEMES[syncCfg.bubbleName]) {
-          localStorage.setItem(STORAGE_BUBBLE, syncCfg.bubbleName);
-        }
-        if (typeof syncCfg.inputStyle === 'string' && INPUT_STYLES[syncCfg.inputStyle]) {
-          localStorage.setItem(STORAGE_INPUT, syncCfg.inputStyle);
-        }
-        if (typeof syncCfg.dimming === 'number' && Number.isFinite(syncCfg.dimming)) {
-          localStorage.setItem(STORAGE_DIMMING, String(clampInt(syncCfg.dimming, 15, 92, 69)));
-        }
-        if (typeof syncCfg.wpEnabled === 'boolean') {
-          localStorage.setItem(STORAGE_WP_ENABLED, String(syncCfg.wpEnabled));
-        }
-        if (typeof syncCfg.transparentWorld === 'boolean') {
-          localStorage.setItem(STORAGE_TRANSPARENT_WORLD, String(syncCfg.transparentWorld));
-        }
-        if (typeof syncCfg.masterPersona === 'string' && syncCfg.masterPersona) {
-          const cleanP = normalizeSafeMasterPersona(syncCfg.masterPersona);
-          localStorage.setItem(STORAGE_MASTER_PERSONA, cleanP);
-        }
-        if (typeof syncCfg.userAvatar === 'string') {
-          localStorage.setItem(STORAGE_USER_AVATAR, syncCfg.userAvatar === 'none' ? 'none' : (syncCfg.userAvatar ? resolveAssetUrl(syncCfg.userAvatar) : ''));
-        }
-        if (typeof syncCfg.agentAvatar === 'string') {
-          localStorage.setItem(STORAGE_AGENT_AVATAR, syncCfg.agentAvatar === 'none' ? 'none' : (syncCfg.agentAvatar ? resolveAssetUrl(syncCfg.agentAvatar) : ''));
-        }
-        if (typeof syncCfg.glassBlur === 'number' && Number.isFinite(syncCfg.glassBlur)) {
-          localStorage.setItem(STORAGE_GLASS_BLUR, String(clampInt(syncCfg.glassBlur, 0, 16, 0)));
-        }
-        if (typeof syncCfg.avatarSize === 'number' && Number.isFinite(syncCfg.avatarSize)) {
-          localStorage.setItem(STORAGE_AVATAR_SIZE, String(clampInt(syncCfg.avatarSize, 22, 52, 32)));
-        }
-        if (typeof syncCfg.avatarRadius === 'number' && Number.isFinite(syncCfg.avatarRadius)) {
-          localStorage.setItem(STORAGE_AVATAR_RADIUS, String(clampInt(syncCfg.avatarRadius, 0, 50, 50)));
-        }
-        if (typeof syncCfg.customWp === 'string') {
-          try {
-            localStorage.setItem(STORAGE_CUSTOM_WP, syncCfg.customWp ? resolveAssetUrl(syncCfg.customWp) : '');
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
+    hydrateStorageFromConfigObject(SEC.getInitialConfig());
   }
 
   function getState() {
@@ -309,6 +397,29 @@
     const rawPersona = (storedPersona !== null && storedPersona !== '') ? storedPersona : (init.masterPersona || 'yoriichi');
     const masterPersona = normalizeSafeMasterPersona(rawPersona);
 
+    const storedChibi = localStorage.getItem(STORAGE_CHIBI_ENABLED);
+    const chibiEnabled = storedChibi !== null
+      ? storedChibi !== 'false'
+      : (init.chibiEnabled !== undefined ? Boolean(init.chibiEnabled) : true);
+
+    const storedFxDen = localStorage.getItem(STORAGE_FX_DENSITY);
+    const rawFxDen = (storedFxDen !== null && storedFxDen !== '') ? storedFxDen : init.fxDensity;
+    const fxDensity = rawFxDen !== undefined && rawFxDen !== null && rawFxDen !== '' ? clampInt(rawFxDen, 0, 100, 100) : 100;
+
+    const storedAutoFin = localStorage.getItem(STORAGE_AUTO_FINISHER);
+    const autoFinisher = storedAutoFin !== null
+      ? storedAutoFin !== 'false'
+      : (init.autoFinisher !== undefined ? Boolean(init.autoFinisher) : true);
+
+    const storedBubRad = localStorage.getItem(STORAGE_BUBBLE_RADIUS);
+    const rawBubRad = (storedBubRad !== null && storedBubRad !== '') ? storedBubRad : init.bubbleRadius;
+    const bubbleRadius = rawBubRad !== undefined && rawBubRad !== null && rawBubRad !== '' ? clampInt(rawBubRad, 6, 22, 14) : 14;
+
+    const storedEcoBatt = localStorage.getItem(STORAGE_ECO_BATTERY);
+    const ecoBattery = storedEcoBatt !== null
+      ? storedEcoBatt !== 'false'
+      : (init.ecoBattery !== undefined ? Boolean(init.ecoBattery) : true);
+
     return {
       themeName,
       bubbleName,
@@ -322,7 +433,12 @@
       avatarSize,
       avatarRadius,
       transparentWorld,
-      masterPersona
+      masterPersona,
+      chibiEnabled,
+      fxDensity,
+      autoFinisher,
+      bubbleRadius,
+      ecoBattery
     };
   }
 
@@ -530,7 +646,7 @@
       userAvatar: resolveAssetUrl('assets/yoriichi_avatar.jpg'),
       userSticker: resolveAssetUrl('assets/yoriichi_ornament.svg'),
       userCornerSvg: resolveAssetUrl('assets/yoriichi_corner.svg'),
-      actionSticker: resolveAssetUrl('assets/yoriichi_action.png')
+      actionSticker: resolveAssetUrl('assets/yoriichi_action.webp')
     };
   }
 
@@ -543,9 +659,17 @@
     st.glassBlur = clampInt(st.glassBlur, 0, 16, 0);
     st.avatarSize = clampInt(st.avatarSize, 22, 52, 32);
     st.avatarRadius = clampInt(st.avatarRadius, 0, 50, 50);
+    st.fxDensity = clampInt(st.fxDensity, 0, 100, 100);
+    st.bubbleRadius = clampInt(st.bubbleRadius, 6, 22, 14);
     st.inputStyle = INPUT_STYLES[st.inputStyle] ? st.inputStyle : 'sync';
     st.transparentWorld = st.transparentWorld !== false;
+    st.chibiEnabled = st.chibiEnabled !== false;
+    st.autoFinisher = st.autoFinisher !== false;
+    st.ecoBattery = st.ecoBattery !== false;
     st.masterPersona = normalizeSafeMasterPersona(st.masterPersona);
+
+    window.__AGY_FX_DENSITY__ = st.fxDensity / 100;
+    window.__AGY_AUTO_FINISHER__ = st.autoFinisher;
 
     if (isTransient) {
       transientOverrideState = { ...st };
@@ -558,6 +682,11 @@
         localStorage.setItem(STORAGE_DIMMING, String(st.dimming));
         localStorage.setItem(STORAGE_WP_ENABLED, String(st.wpEnabled));
         localStorage.setItem(STORAGE_TRANSPARENT_WORLD, String(st.transparentWorld));
+        localStorage.setItem(STORAGE_CHIBI_ENABLED, String(st.chibiEnabled));
+        localStorage.setItem(STORAGE_FX_DENSITY, String(st.fxDensity));
+        localStorage.setItem(STORAGE_AUTO_FINISHER, String(st.autoFinisher));
+        localStorage.setItem(STORAGE_BUBBLE_RADIUS, String(st.bubbleRadius));
+        localStorage.setItem(STORAGE_ECO_BATTERY, String(st.ecoBattery));
         localStorage.setItem(STORAGE_MASTER_PERSONA, st.masterPersona);
         if (overrides.userAvatar !== undefined) {
           localStorage.setItem(STORAGE_USER_AVATAR, overrides.userAvatar === 'none' ? 'none' : safeCssUrl(overrides.userAvatar));
@@ -791,8 +920,10 @@
     const uIsChibi = usingPersonaBubbleSticker || Boolean(bubbleTheme.isChibiNpc);
     const uIsOrnament = usingPersonaBubbleSticker || Boolean(bubbleTheme.isOrnament);
 
+    const chibiOn = st.chibiEnabled !== false;
+    const bRad = clampInt(st.bubbleRadius, 6, 22, 14);
     const bubblePadTop = Math.max(18, Math.abs(uTop) + 8);
-    const bubbleStickerCss = userBubbleStickerUrl ? (uIsOrnament ? `
+    const bubbleStickerCss = (chibiOn && userBubbleStickerUrl) ? (uIsOrnament ? `
       .group\\/user-input-step {
         padding-top: ${uIsChibi ? bubblePadTop : 18}px !important;
         overflow: visible !important;
@@ -839,7 +970,7 @@
       .agy-user-bubble-frame::before { display: none !important; }
     `;
 
-    const showInputSticker = st.inputStyle !== 'minimal' && Boolean(composerStickerUrl);
+    const showInputSticker = chibiOn && st.inputStyle !== 'minimal' && Boolean(composerStickerUrl);
     const composerMarginTop = Math.max(16, Math.abs(sTop) + 8);
     const isZeroComposerSticker = sW <= 0 || sH <= 0;
     const compOrnamentW = isZeroComposerSticker ? Math.max(0, sW) : (bubbleTheme.isChibiNpc ? sW : (sW + 8));
@@ -1022,7 +1153,7 @@
         ${isLight ? `color: ${uiInk} !important;` : ''}
         backdrop-filter: none !important;
         border: 1px solid ${aiCardBorderSafe} !important;
-        border-radius: 14px !important;
+        border-radius: ${bRad}px !important;
         padding: 12px 16px !important;
         box-shadow: ${isLight ? '0 4px 14px rgba(15, 23, 42, 0.08)' : '0 4px 14px rgba(0, 0, 0, 0.28)'} !important;
         box-sizing: border-box !important;
@@ -1300,7 +1431,7 @@
       /* User Chat Bubble Double-Border Frame & Ornament */
       .agy-user-bubble-frame {
         background: ${bubbleFrameBg} !important;
-        border-radius: ${bubbleTheme.isScroll ? '6px' : '14px'} !important;
+        border-radius: ${bubbleTheme.isScroll ? '6px' : `${bRad}px`} !important;
         box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 12px ${bubbleGlow} !important;
         position: relative !important;
         overflow: visible !important;
@@ -1323,7 +1454,7 @@
 
       .agy-user-bubble {
         background: ${bubbleBg} !important;
-        border-radius: ${bubbleTheme.isScroll ? '5px' : '13px'} !important;
+        border-radius: ${bubbleTheme.isScroll ? '5px' : `${Math.max(4, bRad - 1)}px`} !important;
         padding: 8px 16px !important;
         color: ${bubbleTextColor} !important;
         border: ${innerBubbleBorder} !important;
@@ -1579,6 +1710,9 @@
     }
     window.__AGY_HOLE_EL__ = null;
     window.__AGY_SIDE_EL__ = null;
+    delete window.__AGY_SYNC_BATTERY_ECO__;
+    delete window.__AGY_FX_DENSITY__;
+    delete window.__AGY_AUTO_FINISHER__;
     if (!IS_MAC && window.electronNative && typeof window.electronNative.setTitleBarOverlay === 'function') {
       try {
         window.electronNative.setTitleBarOverlay({ color: '#111114', symbolColor: '#f8fafc' });
@@ -1625,7 +1759,21 @@
       const restored = (snap && typeof snap === 'object') ? { ...getState(), ...snap } : getState();
       applyTheme(restored, { skipSaveDisk: true });
       return true;
-    }
+    },
+    applyDaemonDelta: (deltaCfg) => {
+      if (coreDestroyed || !deltaCfg || typeof deltaCfg !== 'object') return false;
+      if (!hydrateStorageFromConfigObject(deltaCfg)) return false;
+      transientOverrideState = null;
+      applyTheme(getState(), { skipSaveDisk: true });
+      const openBackdrop = typeof document !== 'undefined' ? document.getElementById('agy-custom-theme-modal-backdrop') : null;
+      if (openBackdrop && openBackdrop.style.display !== 'none') {
+        const modalBody = openBackdrop.querySelector('#agy-theme-modal-body');
+        if (modalBody) renderThemePanels(modalBody);
+      }
+      return true;
+    },
+    diagnoseDomContracts,
+    DOM_CONTRACTS: AGY_DOM_CONTRACTS
   };
 
   const STUDIO_TABS = [
@@ -2220,6 +2368,23 @@
               </label>
             </div>
           </div>
+
+          <div class="agy-studio-surface" style="border-color: ${escMainBorder}; background: ${escCardBg}; display: flex; flex-direction: column; gap: 12px;">
+            <div>
+              <div style="font-size: 14.5px; font-weight: 600; color: #f8fafc; margin-bottom: 3px;">Tách Lớp Nhân Vật Chibi &amp; Tuyệt Kỹ Tự Động</div>
+              <div style="font-size: 12.5px; color: #94a3b8;">Tắt riêng nhân vật Chibi trên khung chat mà vẫn giữ nguyên khung viền Hoàng Kim, hoặc tắt tự động xuất chiêu khi xong lệnh.</div>
+            </div>
+            <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+              <label style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 10px; background: rgba(11,14,22,0.62); border: 1px solid rgba(255,255,255,0.09); font-size: 12.5px; color: #f1f5f9; cursor: pointer;">
+                <span>Hiện nhân vật Chibi &amp; Hộp thoại NPC</span>
+                <input id="agy-chibi-toggle" type="checkbox" ${st.chibiEnabled !== false ? 'checked' : ''} style="accent-color: ${escMainPrimary}; cursor: pointer; width: 16px; height: 16px;" />
+              </label>
+              <label style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 10px; background: rgba(11,14,22,0.62); border: 1px solid rgba(255,255,255,0.09); font-size: 12.5px; color: #f1f5f9; cursor: pointer;">
+                <span>Tự tung chiêu Trảm Quỷ (tự nhường khi gõ code)</span>
+                <input id="agy-autofinisher-toggle" type="checkbox" ${st.autoFinisher !== false ? 'checked' : ''} style="accent-color: ${escMainPrimary}; cursor: pointer; width: 16px; height: 16px;" />
+              </label>
+            </div>
+          </div>
         </section>
 
         <!-- TAB 3: TIN NHẮN & KHUNG SOẠN THẢO -->
@@ -2275,8 +2440,17 @@
           </div>
 
           <div>
-            <div style="font-size: 15px; font-weight: 600; color: #f8fafc; margin-bottom: 3px;">Khung Tin Nhắn Người Dùng</div>
-            <div style="font-size: 12.5px; color: #94a3b8; margin-bottom: 12px;">Phối riêng màu viền khung chat và họa tiết góc độc lập với hình nền chính.</div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+              <div>
+                <div style="font-size: 15px; font-weight: 600; color: #f8fafc; margin-bottom: 3px;">Khung Tin Nhắn Người Dùng</div>
+                <div style="font-size: 12.5px; color: #94a3b8;">Phối riêng màu viền khung chat và độ bo góc độc lập với hình nền chính.</div>
+              </div>
+              <label style="display: inline-flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 9px; background: rgba(20,24,34,0.82); border: 1px solid rgba(255,255,255,0.11); font-size: 12.5px; color: #cbd5e1;">
+                <span>Độ bo góc khung chat</span>
+                <input id="agy-bubble-rad-slider" type="range" min="6" max="22" value="${st.bubbleRadius}" style="width: 105px; cursor: pointer; accent-color: ${escMainPrimary}; height: 5px;" />
+                <span id="agy-bubble-rad-val" class="agy-studio-tabular" style="min-width: 34px; font-weight: 600; color: #f8fafc;">${st.bubbleRadius}px</span>
+              </label>
+            </div>
             <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
               ${THEME_KEYS.map(name => {
                 const th = THEMES[name] || {};
@@ -2358,18 +2532,36 @@
                 </div>
                 <input id="agy-blur-slider" type="range" min="0" max="16" value="${st.glassBlur}" style="width: 100%; cursor: pointer; accent-color: ${escMainPrimary}; height: 5px;" />
               </label>
+
+              <label style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px; background: rgba(11,14,22,0.60); border: 1px solid rgba(255,255,255,0.08);">
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: #cbd5e1;">
+                  <span>Mật độ hạt hiệu ứng nền (0% = tắt hẳn)</span>
+                  <span id="agy-fx-density-val" class="agy-studio-tabular" style="font-weight: 600; color: #f8fafc;">${st.fxDensity}%</span>
+                </div>
+                <input id="agy-fx-density-slider" type="range" min="0" max="100" step="5" value="${st.fxDensity}" style="width: 100%; cursor: pointer; accent-color: ${escMainPrimary}; height: 5px;" />
+              </label>
+
+              <label style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; background: rgba(11,14,22,0.60); border: 1px solid rgba(255,255,255,0.08); font-size: 12.5px; color: #cbd5e1; cursor: pointer;">
+                <span>🔋 Tự ngưng hạt khi Pin Laptop &le;&nbsp;30%</span>
+                <input id="agy-eco-battery-toggle" type="checkbox" ${st.ecoBattery !== false ? 'checked' : ''} style="accent-color: #10b981; cursor: pointer; width: 16px; height: 16px;" />
+              </label>
             </div>
           </div>
 
           <div class="agy-studio-surface" style="border-color: ${escMainBorder}; background: ${escCardBg}; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div style="flex: 1; min-width: 240px;">
-              <div style="font-size: 14px; font-weight: 600; color: #fef08a; margin-bottom: 3px;">👁️ Thế Giới Trong Suốt (Tập trung sâu khi gõ code)</div>
-              <div style="font-size: 12.5px; color: #94a3b8;">Tự động làm dịu chuyển động hạt nền 20% &amp; giảm chói 35% khi gõ liên tục (&ge;&nbsp;4&nbsp;phím/giây) hoặc cuộn xem diff.</div>
+              <div style="font-size: 14px; font-weight: 600; color: #fef08a; margin-bottom: 3px;">👁️ Thế Giới Trong Suốt &amp; Chế Độ Tập Trung Sâu</div>
+              <div style="font-size: 12.5px; color: #94a3b8;">Tự làm dịu hạt nền khi gõ liên tục, hoặc nhấn nút bên cạnh để kích hoạt nhanh cấu hình Tập Trung Sâu.</div>
             </div>
-            <label style="display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border-radius: 999px; background: rgba(250, 204, 21, 0.10); border: 1px solid rgba(250, 204, 21, 0.35); font-size: 12.5px; color: #fef08a; font-weight: 600; cursor: pointer;">
-              <input id="agy-tw-toggle" type="checkbox" ${st.transparentWorld ? 'checked' : ''} style="accent-color: #facc15; cursor: pointer;" />
-              <span>Bật tự động làm dịu</span>
-            </label>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <button id="agy-focus-preset-btn" type="button" class="agy-studio-btn" style="background: rgba(56, 189, 248, 0.14); border-color: rgba(56, 189, 248, 0.40); color: #e0f2fe; font-weight: 600;">
+                ⚡ Bật chế độ Tập trung sâu
+              </button>
+              <label style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 13px; border-radius: 999px; background: rgba(250, 204, 21, 0.10); border: 1px solid rgba(250, 204, 21, 0.35); font-size: 12.5px; color: #fef08a; font-weight: 600; cursor: pointer;">
+                <input id="agy-tw-toggle" type="checkbox" ${st.transparentWorld ? 'checked' : ''} style="accent-color: #facc15; cursor: pointer;" />
+                <span>Tự động làm dịu</span>
+              </label>
+            </div>
           </div>
         </section>
 
@@ -2952,6 +3144,63 @@
       });
     }
 
+    const chibiToggle = container.querySelector('#agy-chibi-toggle');
+    if (chibiToggle) {
+      chibiToggle.addEventListener('change', (e) => {
+        applyTheme({ chibiEnabled: Boolean(e.target.checked) });
+      });
+    }
+
+    const autoFinisherToggle = container.querySelector('#agy-autofinisher-toggle');
+    if (autoFinisherToggle) {
+      autoFinisherToggle.addEventListener('change', (e) => {
+        applyTheme({ autoFinisher: Boolean(e.target.checked) });
+      });
+    }
+
+    const bubbleRadSlider = container.querySelector('#agy-bubble-rad-slider');
+    const bubbleRadVal = container.querySelector('#agy-bubble-rad-val');
+    if (bubbleRadSlider) {
+      bubbleRadSlider.addEventListener('input', (e) => {
+        const v = clampInt(e.target.value, 6, 22, 14);
+        if (bubbleRadVal) bubbleRadVal.textContent = v + 'px';
+        applyTheme({ bubbleRadius: v });
+      });
+    }
+
+    const fxDensitySlider = container.querySelector('#agy-fx-density-slider');
+    const fxDensityVal = container.querySelector('#agy-fx-density-val');
+    if (fxDensitySlider) {
+      fxDensitySlider.addEventListener('input', (e) => {
+        const v = clampInt(e.target.value, 0, 100, 100);
+        if (fxDensityVal) fxDensityVal.textContent = v + '%';
+        applyTheme({ fxDensity: v });
+      });
+    }
+
+    const ecoBattToggle = container.querySelector('#agy-eco-battery-toggle');
+    if (ecoBattToggle) {
+      ecoBattToggle.addEventListener('change', (e) => {
+        applyTheme({ ecoBattery: Boolean(e.target.checked) });
+        if (typeof window.__AGY_SYNC_BATTERY_ECO__ === 'function') {
+          window.__AGY_SYNC_BATTERY_ECO__();
+        }
+      });
+    }
+
+    const focusPresetBtn = container.querySelector('#agy-focus-preset-btn');
+    if (focusPresetBtn) {
+      focusPresetBtn.addEventListener('click', () => {
+        applyTheme({
+          chibiEnabled: false,
+          fxDensity: 20,
+          autoFinisher: false,
+          transparentWorld: true
+        });
+        renderThemePanels(container);
+      });
+    }
+
     const exportBtn = container.querySelector('#agy-export-btn');
     const importToggle = container.querySelector('#agy-import-toggle');
     const importBox = container.querySelector('#agy-import-box');
@@ -3022,6 +3271,21 @@
       }
       if (typeof parsed.transparentWorld === 'boolean') {
         allowed.transparentWorld = parsed.transparentWorld;
+      }
+      if (typeof parsed.chibiEnabled === 'boolean') {
+        allowed.chibiEnabled = parsed.chibiEnabled;
+      }
+      if (typeof parsed.autoFinisher === 'boolean') {
+        allowed.autoFinisher = parsed.autoFinisher;
+      }
+      if (typeof parsed.ecoBattery === 'boolean') {
+        allowed.ecoBattery = parsed.ecoBattery;
+      }
+      if (typeof parsed.fxDensity === 'number' && Number.isFinite(parsed.fxDensity)) {
+        allowed.fxDensity = clampInt(parsed.fxDensity, 0, 100, 100);
+      }
+      if (typeof parsed.bubbleRadius === 'number' && Number.isFinite(parsed.bubbleRadius)) {
+        allowed.bubbleRadius = clampInt(parsed.bubbleRadius, 6, 22, 14);
       }
       ['customWp', 'userAvatar', 'agentAvatar'].forEach((urlKey) => {
         if (typeof parsed[urlKey] === 'string') {
@@ -3124,6 +3388,11 @@
       localStorage.removeItem(STORAGE_DIMMING);
       localStorage.removeItem(STORAGE_WP_ENABLED);
       localStorage.removeItem(STORAGE_TRANSPARENT_WORLD);
+      localStorage.removeItem(STORAGE_CHIBI_ENABLED);
+      localStorage.removeItem(STORAGE_FX_DENSITY);
+      localStorage.removeItem(STORAGE_AUTO_FINISHER);
+      localStorage.removeItem(STORAGE_BUBBLE_RADIUS);
+      localStorage.removeItem(STORAGE_ECO_BATTERY);
       localStorage.removeItem(STORAGE_MASTER_PERSONA);
       const defTh = THEMES[DEFAULT_THEME_KEY] || {};
       const defDim = defTh.defaultDimming ?? 24;
@@ -3142,6 +3411,11 @@
         avatarSize: 32,
         avatarRadius: 50,
         transparentWorld: true,
+        chibiEnabled: true,
+        fxDensity: 100,
+        autoFinisher: true,
+        bubbleRadius: 14,
+        ecoBattery: true,
         masterPersona: 'yoriichi'
       });
       renderThemePanels(container);
@@ -3727,9 +4001,35 @@
     rt.fxDrawer = drawer || { noop: true };
 
     function shouldAnimate() {
-      if (document.hidden || viewSkipped || rt.fxPaused || rt.fxFocusPaused) return false;
+      const liveDen = Number(typeof window.__AGY_FX_DENSITY__ === 'number' ? window.__AGY_FX_DENSITY__ : 1);
+      if (document.hidden || viewSkipped || rt.fxPaused || rt.fxFocusPaused || rt.fxEcoPaused || liveDen <= 0.005) return false;
       if (reducedMq && reducedMq.matches) return false;
       return true;
+    }
+
+    if (!rt.batteryHooked && typeof navigator !== 'undefined' && typeof navigator.getBattery === 'function') {
+      rt.batteryHooked = true;
+      try {
+        Promise.resolve(navigator.getBattery()).then((batt) => {
+          if (!batt || coreDestroyed) return;
+          const syncBatt = () => {
+            if (coreDestroyed) return;
+            const curCfg = getEffectiveState();
+            const isLowUnplugged = curCfg.ecoBattery !== false && batt.charging === false && typeof batt.level === 'number' && batt.level <= 0.30;
+            if (Boolean(rt.fxEcoPaused) !== isLowUnplugged) {
+              rt.fxEcoPaused = isLowUnplugged;
+              if (typeof rt.fxResumeOrPause === 'function') rt.fxResumeOrPause();
+            }
+          };
+          window.__AGY_SYNC_BATTERY_ECO__ = syncBatt;
+          syncBatt();
+          if (typeof batt.addEventListener === 'function') {
+            const bOpts = window.__AGY_SCROLL_AC__ ? { signal: window.__AGY_SCROLL_AC__.signal } : undefined;
+            batt.addEventListener('chargingchange', syncBatt, bOpts);
+            batt.addEventListener('levelchange', syncBatt, bOpts);
+          }
+        }).catch(() => {});
+      } catch (_) {}
     }
 
     function drawStaticGlowFrame() {
@@ -4401,8 +4701,13 @@
     const persona = getActiveMasterPersona(st);
     const personaValid = hasValidMasterPersona(st.masterPersona);
     const personaExplicitOverride = Boolean(st.masterPersona && st.masterPersona !== 'yoriichi');
+    const domHealth = diagnoseDomContracts();
+    const bubbleZoneSafe = !(domHealth.zones.userBubble && domHealth.zones.userBubble.safe === false);
+    const chibiMasterOn = st.chibiEnabled !== false;
     const isMinimalZeroSticker = bTheme.isOrnament === false && !bTheme.sticker;
     const hasBubblePersonaSticker = Boolean(
+      chibiMasterOn &&
+      bubbleZoneSafe &&
       (!isMinimalZeroSticker || personaExplicitOverride) &&
       ((personaValid && persona.userSticker) || bTheme.userSticker || bTheme.sticker)
     );
@@ -4467,7 +4772,7 @@
       document.querySelectorAll('.agy-user-bubble-frame > .agy-chibi-hitbox').forEach(el => el.remove());
     }
 
-    if (st.inputStyle === 'minimal' || !bTheme.isChibiNpc) {
+    if (!chibiMasterOn || st.inputStyle === 'minimal' || !bTheme.isChibiNpc) {
       // Tear down only composer NPC & Chibi Aura while keeping User Bubble persona hitboxes intact if active
       const rtClean = window.__AGY_SHINOBU_RT__;
       if (rtClean) {
@@ -4751,18 +5056,10 @@
       } catch (_) {}
     }
 
-    if (!rt.remindTimer) {
-      rt.remindTimer = setInterval(() => {
-        if (coreDestroyed) {
-          clearInterval(rt.remindTimer);
-          rt.remindTimer = 0;
-          return;
-        }
-        if (!document.hidden && !rt.npcCollapsed) {
-          const curProf = getActiveNpcProfile();
-          speakShinobuLine(pickRandomLine('remind', '', curProf), false);
-        }
-      }, 180000);
+    // Periodic 3-minute NPC auto-typing timer removed by default in v3.0 to preserve uninterrupted deep coding focus.
+    if (rt.remindTimer) {
+      clearInterval(rt.remindTimer);
+      rt.remindTimer = 0;
     }
   }
 

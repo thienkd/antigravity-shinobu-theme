@@ -309,12 +309,12 @@ describe('F16 (R2) — Kiểm thử tĩnh, Build Parity, SVG XSS Guard & Tài s�
                 'inosuke',
             ];
             for (const id of kny14) {
-                const bgFile = id === 'shinobu' ? 'shinobu_wisteria_bg.jpg' : `${id}_bg.jpg`;
+                const bgFile = id === 'shinobu' ? 'shinobu_wisteria_bg.webp' : `${id}_bg.webp`;
                 const expectedFiles = [
                     bgFile,
                     `${id}_avatar.jpg`,
                     `${id}_user_avatar.svg`,
-                    `${id}_action.png`,
+                    `${id}_action.webp`,
                     `${id}_corner.svg`,
                     `${id}_ornament.svg`,
                 ];
@@ -325,7 +325,7 @@ describe('F16 (R2) — Kiểm thử tĩnh, Build Parity, SVG XSS Guard & Tài s�
 
             const yoriichiFiles = [
                 'yoriichi_avatar.jpg',
-                'yoriichi_action.png',
+                'yoriichi_action.webp',
                 'yoriichi_corner.svg',
                 'yoriichi_ornament.svg',
             ];

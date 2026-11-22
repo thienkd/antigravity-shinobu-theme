@@ -241,7 +241,7 @@
       userAvatar: 'assets/yoriichi_avatar.jpg',
       userSticker: 'assets/yoriichi_ornament.svg',
       userCornerSvg: 'assets/yoriichi_corner.svg',
-      actionSticker: 'assets/yoriichi_action.png'
+      actionSticker: 'assets/yoriichi_action.webp'
     },
     {
       id: 'shadow_monarch',
@@ -316,7 +316,7 @@
       userAvatar: isKny ? resolveLocalAsset(`assets/${item.id}_user_avatar.svg`) : resolveLocalAsset(item.userAvatar),
       userSticker: isKny ? resolveLocalAsset(`assets/${item.id}_ornament.svg`) : resolveLocalAsset(item.userSticker),
       userCornerSvg: isKny ? resolveLocalAsset(`assets/${item.id}_corner.svg`) : resolveLocalAsset(item.userCornerSvg),
-      actionSticker: isKny ? resolveLocalAsset(`assets/${item.id}_action.png`) : resolveLocalAsset(item.actionSticker || '')
+      actionSticker: isKny ? resolveLocalAsset(`assets/${item.id}_action.webp`) : resolveLocalAsset(item.actionSticker || '')
     };
     PERSONA_MAP[resolved.id] = resolved;
     return resolved;

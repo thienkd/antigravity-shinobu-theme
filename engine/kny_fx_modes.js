@@ -2704,22 +2704,31 @@
         : clamp(elapsedMs / 1000, 0.004, 0.05);
       lastNow = safeNow;
 
-      // Yoriichi's Transparent World ("Sukitōru Sekai"): slow particle velocity down to 20% & soften glare by 35%
+      // Yoriichi's Transparent World ("Sukitōru Sekai") & User FX Density Governor (0.0 -> 1.0)
       const tw = clamp(
         Number(typeof window !== 'undefined' && window.__AGY_TRANSPARENT_WORLD__ != null ? window.__AGY_TRANSPARENT_WORLD__ : 0) || 0,
         0,
         1
       );
+      const userDensity = clamp(
+        Number(typeof window !== 'undefined' && window.__AGY_FX_DENSITY__ != null ? window.__AGY_FX_DENSITY__ : 1),
+        0,
+        1
+      );
       const velScale = 1.0 - 0.80 * tw;
-      const alphaScale = 1.0 - 0.35 * tw;
+      const alphaScale = (1.0 - 0.35 * tw) * userDensity;
       const effectiveDt = (deltaSec * 60) * velScale;
       simNow += (deltaSec * 1000) * velScale;
 
       if (autoClear) {
         ctx.clearRect(0, 0, curW, curH);
       }
+      if (alphaScale <= 0.005) {
+        scene.drawStatic(ctx, curW, curH);
+        return;
+      }
       ctx.save();
-      if (tw > 0.001) {
+      if (alphaScale < 0.999) {
         ctx.globalAlpha *= alphaScale;
       }
       scene.step(ctx, curW, curH, simNow, effectiveDt);

@@ -143,6 +143,8 @@
     research: ['shinobu', 'muichiro', 'ubuyashiki'],
     design: ['uzui', 'mitsuri'],
     browser: ['obanai', 'inosuke', 'zenitsu'],
+    swarm: ['gyomei', 'sanemi', 'rengoku', 'giyu', 'uzui'],
+    workflow: ['ubuyashiki', 'muichiro', 'shinobu'],
     system: ['rengoku', 'giyu', 'sanemi', 'gyomei', 'tanjiro']
   };
 
@@ -202,6 +204,13 @@
     const t = String(typeName || '').toLowerCase();
     const r = String(roleText || '').toLowerCase();
     const combined = `${t} ${r}`;
+
+    if (t === 'workflow' || /workflow|pipeline|orchestrat/.test(t)) {
+      return 'workflow';
+    }
+    if (t === 'swarm') {
+      return 'swarm';
+    }
 
     if (
       t.includes('image') ||
@@ -884,7 +893,7 @@
     const meta = HERO_ROSTER[heroKey] || HERO_ROSTER.rengoku;
     const ornamentUrl = safeAssetUrl(`assets/${meta.hero}_ornament.svg`);
     const avatarFallbackUrl = safeAssetUrl(`assets/${meta.hero}_avatar.jpg`);
-    const actionUrl = safeAssetUrl(`assets/${meta.hero}_action.png`);
+    const actionUrl = safeAssetUrl(`assets/${meta.hero}_action.webp`);
 
     if (
       actionUrl &&

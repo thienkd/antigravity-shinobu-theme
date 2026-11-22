@@ -2470,7 +2470,7 @@
         ext.castSkill('yoriichi', fIdx, {
           charId: 'yoriichi',
           originRect,
-          actionSticker: safeResolveAsset('assets/yoriichi_action.png'),
+          actionSticker: safeResolveAsset('assets/yoriichi_action.webp'),
           composerEl: null,
           soundEnabled: !muted
         });
@@ -2492,7 +2492,7 @@
         ext.castSkill(requestedHero, fIdx, {
           charId: requestedHero,
           originRect,
-          actionSticker: safeResolveAsset(`assets/${requestedHero.replace(/[^a-z0-9_]/g, '')}_action.png`),
+          actionSticker: safeResolveAsset(`assets/${requestedHero.replace(/[^a-z0-9_]/g, '')}_action.webp`),
           composerEl: null,
           soundEnabled: !muted
         });

@@ -152,6 +152,9 @@
     kaguraSyncTimer: 0,
     cinemaSyncTimer: 0,
     fetchInFlight: false,
+    workStateItems: [],
+    detWorkStateRow: null,
+    detWorkStateVal: null,
     cleanups: []
   };
 
@@ -218,7 +221,7 @@
     const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
     const canonicalId = (ext && typeof ext.resolveCharacterId === 'function' && ext.resolveCharacterId(rawSkillId)) || rawSkillId;
     const safeSkillFile = String(canonicalId || 'yoriichi').replace(/[^a-z0-9_]/g, '') || 'yoriichi';
-    return sanitizeCssAssetUrl(`assets/${safeSkillFile}_action.png`);
+    return sanitizeCssAssetUrl(`assets/${safeSkillFile}_action.webp`);
   }
 
   function isSfxMutedNow() {
@@ -1015,6 +1018,25 @@
     }
   }
 
+  function shouldSuppressFullscreenFinisher() {
+    try {
+      if (typeof window !== 'undefined' && window.__AGY_AUTO_FINISHER__ === false) {
+        return true;
+      }
+      if (typeof document !== 'undefined' && document.activeElement) {
+        const ae = document.activeElement;
+        const tag = String(ae.tagName || '').toUpperCase();
+        if (tag === 'TEXTAREA' || tag === 'INPUT' || ae.isContentEditable) {
+          return true;
+        }
+        if (typeof ae.closest === 'function' && ae.closest('.monaco-editor, .xterm, [contenteditable="true"]')) {
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
   function executeDemonSlayCelebration(slashSeq, slashReason) {
     // 1. Immediately clear crisis blood demon border
     applyCrisisVisual(false);
@@ -1026,8 +1048,8 @@
 
     const reasonVi = formatSlashReasonVi(slashReason);
 
-    // 3. Auto-trigger Ultimate Finisher Slash (12s cooldown guarded; preserve right-corner Chibi origin!)
-    if (typeof window !== 'undefined' && typeof window.__AGY_TRIGGER_FINISHER__ === 'function') {
+    // 3. Auto-trigger Ultimate Finisher Slash (guarded when typing in Monaco/Terminal or disabled by user!)
+    if (!shouldSuppressFullscreenFinisher() && typeof window !== 'undefined' && typeof window.__AGY_TRIGGER_FINISHER__ === 'function') {
       try {
         window.__AGY_TRIGGER_FINISHER__({
           reason: slashReason || 'bug_slashed',
@@ -1176,6 +1198,12 @@
       executeDemonSlayCelebration(incomingSlashSeq, snap.slashReason || '');
     } else if (incomingSlashSeq < state.lastSlashSeq) {
       state.lastSlashSeq = incomingSlashSeq;
+    }
+
+    if (Array.isArray(snap.workStateItems)) {
+      state.workStateItems = snap.workStateItems
+        .filter((it) => it && typeof it === 'object' && typeof it.task === 'string' && it.task.trim())
+        .slice(-12);
     }
 
     if (typeof snap.turnFinishedSeq === 'number') {
@@ -1815,6 +1843,18 @@
         const modelName = state.modelLabel || state.serverModelName || 'Tác tử Antigravity';
         setTextIfChanged(state.detModelVal, modelName + qTxt);
       }
+      if (state.detWorkStateRow && state.detWorkStateVal) {
+        const items = Array.isArray(state.workStateItems) ? state.workStateItems : [];
+        if (items.length === 0) {
+          state.detWorkStateRow.style.display = 'none';
+        } else {
+          state.detWorkStateRow.style.display = 'flex';
+          const doneCnt = items.filter((x) => x.status === 'done').length;
+          const activeItem = items.find((x) => x.status === 'doing') || items[items.length - 1];
+          const shortTask = String(activeItem.task || '').slice(0, 34);
+          setTextIfChanged(state.detWorkStateVal, `${doneCnt}/${items.length} xong • ${shortTask}`);
+        }
+      }
     }
   }
 
@@ -2209,8 +2249,10 @@
     const rDraft = createIconRow(ic ? ic.getFuncSvg('draft_brush', 13) : '', 'Đang gõ trong ô chat:');
     const rSession = createIconRow(ic ? ic.getFuncSvg('session_sum', 13) : '', 'Tổng sinh ra cả phiên:');
     const rModel = createIconRow(ic ? ic.getFuncSvg('model_quota', 13) : '', 'Mô hình & Hạn mức:');
+    const rTasks = createIconRow(ic ? ic.getFuncSvg('breathing_forms', 13) : '', 'Tiến độ nhiệm vụ:');
+    rTasks.row.style.display = 'none';
 
-    [rCtx, rCache, rTurn, rBlade, rDraft, rSession, rModel].forEach((r) => rows.appendChild(r.row));
+    [rCtx, rCache, rTurn, rBlade, rDraft, rSession, rModel, rTasks].forEach((r) => rows.appendChild(r.row));
 
     pop.appendChild(hdr);
     pop.appendChild(meterWrap);
@@ -2298,6 +2340,8 @@
     state.detDraftVal = rDraft.valEl;
     state.detSessionVal = rSession.valEl;
     state.detModelVal = rModel.valEl;
+    state.detWorkStateRow = rTasks.row;
+    state.detWorkStateVal = rTasks.valEl;
 
     state.lastSessionSig = '';
     state.lastElemKey = '';

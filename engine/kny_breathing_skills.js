@@ -2833,7 +2833,7 @@
       return './themes/' + trimmed.replace(/^(?:\.\/)?(?:themes\/)?/, '').replace(/^\/+/, '');
     }
     const safeId = resolveCharacterId(charId) || 'shinobu';
-    const relAsset = `assets/${safeId}_action.png?v=act2`;
+    const relAsset = `assets/${safeId}_action.webp?v=act3`;
     if (typeof __AGY_SEC__ !== 'undefined' && __AGY_SEC__ && typeof __AGY_SEC__.resolveAssetUrl === 'function') {
       const viaSec = __AGY_SEC__.resolveAssetUrl(relAsset);
       if (viaSec) return viaSec;

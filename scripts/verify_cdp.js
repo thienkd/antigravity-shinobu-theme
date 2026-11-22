@@ -362,8 +362,12 @@ const INSPECT_EXPR = `(() => {
         return { isAntigravityDom: false };
     }
     const styleEl = document.getElementById('antigravity-custom-theme-active');
-    const shellEl = document.querySelector('.agy-shell');
-    const mainGrid = document.querySelector('div.flex.h-full.flex-col.overflow-hidden.relative > div.flex.flex-1.flex-row.overflow-hidden.relative');
+    const shellEl = document.querySelector('.agy-shell, .monaco-workbench');
+    const mainGrid = document.querySelector('[data-testid="sidebar-split"], div.flex.h-full.flex-col.overflow-hidden.relative > div.flex.flex-1.flex-row.overflow-hidden.relative');
+    const domDiagnostics =
+        window.__AGY_THEME_CORE__ && typeof window.__AGY_THEME_CORE__.diagnoseDomContracts === 'function'
+            ? window.__AGY_THEME_CORE__.diagnoseDomContracts()
+            : null;
     const projPill = document.querySelector('[data-testid="project-selector-trigger"]');
     const envPill = document.querySelector('[aria-label="Select Environment"]');
     const scrollers = Array.from(document.querySelectorAll('.overflow-y-auto, [data-main-content-body], [data-side-panel-body]'));
@@ -540,6 +544,7 @@ const INSPECT_EXPR = `(() => {
         userBubbleMissingGuardCount,
         masterPersona,
         yoriichiIdentityValid,
+        domDiagnostics,
     };
 })()`;
 

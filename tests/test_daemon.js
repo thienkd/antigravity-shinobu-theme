@@ -1798,5 +1798,89 @@ describe('F03 — CDP Lifecycle, Lọc Target, Anti-Double-Inject, Debounce & PI
             assert.equal(restored.activeTheme, '⚡ Zenitsu Agatsuma — Lôi Minh');
             await ctx.cleanup();
         });
+
+        it('F03-T3-03: Bắt sóng Native Swarm (add/tasks/kill), run_workflow & work_state_write lên snapshot telemetry', async () => {
+            const ctx = await startIsolatedDaemon();
+            await waitForInitialAttach(ctx, 'target-main');
+
+            const cid = 'a1b2c3d4-2222-3333-4444-555555555555';
+            ctx.writeTranscript(cid, [
+                { step_index: 1, type: 'USER_INPUT', status: 'DONE' },
+                {
+                    step_index: 2,
+                    type: 'PLANNER_RESPONSE',
+                    status: 'DONE',
+                    tool_calls: [
+                        {
+                            name: 'swarm',
+                            args: {
+                                action: 'add',
+                                name: 'auditor',
+                                brief: 'Kiểm thử phân mảnh',
+                                tasks: ['engine/core.js', 'daemon/theme_daemon.js'],
+                            },
+                        },
+                        {
+                            name: 'run_workflow',
+                            args: { Description: 'Chạy quy trình kiểm định song song' },
+                        },
+                        {
+                            name: 'call_mcp_tool',
+                            args: {
+                                ServerName: 'agy-mem_agy-mem',
+                                ToolName: 'work_state_write',
+                                Arguments: { list: 'tien-do', fields: { task: 'Nén ảnh WebP', status: 'doing' } },
+                            },
+                        },
+                    ],
+                },
+            ]);
+
+            const snap1Res = await rawHttpRequest({
+                port: ctx.assetPort,
+                path: `/__telemetry?cid=${cid}`,
+                headers: { 'X-Agy-Token': ctx.token },
+            });
+            const snap1 = JSON.parse(snap1Res.body.toString('utf8'));
+            assert.equal(snap1.ok, true);
+            assert.equal(snap1.activeSubagents.length, 3, 'Phải có 2 worker swarm + 1 workflow đang hoạt động');
+            assert.equal(snap1.activeSubagents.filter((s) => s.typeName === 'swarm').length, 2);
+            assert.equal(snap1.activeSubagents.filter((s) => s.typeName === 'workflow').length, 1);
+            assert.equal(Array.isArray(snap1.workStateItems) && snap1.workStateItems.length, 1);
+            assert.equal(snap1.workStateItems[0].task, 'Nén ảnh WebP');
+            assert.equal(snap1.workStateItems[0].status, 'doing');
+
+            // Gửi lệnh swarm kill + cập nhật work_state done + kết thúc lượt (tự đóng workflow)
+            ctx.appendTranscript(cid, [
+                {
+                    step_index: 3,
+                    type: 'PLANNER_RESPONSE',
+                    status: 'DONE',
+                    tool_calls: [
+                        { name: 'swarm', args: { action: 'kill', name: 'auditor' } },
+                        {
+                            name: 'call_mcp_tool',
+                            args: {
+                                ToolName: 'work_state_write',
+                                Arguments: { fields: { task: 'Nén ảnh WebP', status: 'done' } },
+                            },
+                        },
+                    ],
+                },
+                { step_index: 4, type: 'PLANNER_RESPONSE', status: 'DONE', tool_calls: [] },
+            ]);
+
+            const snap2Res = await rawHttpRequest({
+                port: ctx.assetPort,
+                path: `/__telemetry?cid=${cid}`,
+                headers: { 'X-Agy-Token': ctx.token },
+            });
+            const snap2 = JSON.parse(snap2Res.body.toString('utf8'));
+            assert.equal(snap2.activeSubagents.length, 0, 'Sau swarm kill và kết thúc lượt, mọi đơn vị ảo phải hoàn tất');
+            assert.ok(snap2.recentCompletedSubagents.length >= 3);
+            assert.equal(snap2.workStateItems[0].status, 'done');
+
+            await ctx.cleanup();
+        });
     });
 });

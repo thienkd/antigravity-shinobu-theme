@@ -40,7 +40,7 @@
     "arcColor1": "#facc15",
     "arcColor2": "#e879f9",
     "accentParticleColor": "#fef08a",
-    "wallpaper": "assets/ubuyashiki_bg.jpg",
+    "wallpaper": "assets/ubuyashiki_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -116,8 +116,8 @@
         "fallback": "Ta hiểu tấm lòng của con qua lời nhắn \"{input}\". Hãy cứ vững tin bước tiếp trên con đường con đã chọn nhé, lời chúc phúc của nhà Ubuyashiki luôn ở bên con. 👑🌸"
       }
     },
-    "actionSticker": "assets/ubuyashiki_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/ubuyashiki_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -162,7 +162,7 @@
     "arcColor1": "#c084fc",
     "arcColor2": "#5eead4",
     "accentParticleColor": "#f0abfc",
-    "wallpaper": "assets/shinobu_wisteria_bg.jpg",
+    "wallpaper": "assets/shinobu_wisteria_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -238,8 +238,8 @@
         "fallback": "Ara ara~ \"{input}\" ư? Mình nghe rõ rồi nè! Cứ yên tâm triển khai tiếp nhé, mình luôn ngồi ngay đây tiếp sức cho bạn! 🦋✨"
       }
     },
-    "actionSticker": "assets/shinobu_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/shinobu_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -284,7 +284,7 @@
     "arcColor1": "#38bdf8",
     "arcColor2": "#bae6fd",
     "accentParticleColor": "#7dd3fc",
-    "wallpaper": "assets/giyu_bg.jpg",
+    "wallpaper": "assets/giyu_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -360,8 +360,8 @@
         "fallback": "...\"{input}\" sao? Ta đã nghe rõ rồi. Cứ giữ vững tâm thế tĩnh tại và tiến lên phía trước nhé. 🌊💧"
       }
     },
-    "actionSticker": "assets/giyu_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/giyu_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -406,7 +406,7 @@
     "arcColor1": "#f97316",
     "arcColor2": "#facc15",
     "accentParticleColor": "#fef08a",
-    "wallpaper": "assets/rengoku_bg.jpg",
+    "wallpaper": "assets/rengoku_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -482,8 +482,8 @@
         "fallback": "TA HIỂU RỒI!! \"{input}\"—nghe tràn đầy quyết tâm đấy! Cứ giữ vững ngọn lửa kiêu hãnh trong tim và thẳng tiến lên phía trước nhé!! 🔥⚔️"
       }
     },
-    "actionSticker": "assets/rengoku_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/rengoku_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -528,7 +528,7 @@
     "arcColor1": "#f43f5e",
     "arcColor2": "#2dd4bf",
     "accentParticleColor": "#fbbf24",
-    "wallpaper": "assets/uzui_bg.jpg",
+    "wallpaper": "assets/uzui_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -604,8 +604,8 @@
         "fallback": "Ồ hố! \"{input}\" ư? Nghe có vẻ đầy tiềm năng bùng nổ đấy! Triển khai một cách hào nhoáng nhất đi nào, ta bảo kê cho!! 💎🎆"
       }
     },
-    "actionSticker": "assets/uzui_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/uzui_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -650,7 +650,7 @@
     "arcColor1": "#5eead4",
     "arcColor2": "#cbd5e1",
     "accentParticleColor": "#99f6e4",
-    "wallpaper": "assets/muichiro_bg.jpg",
+    "wallpaper": "assets/muichiro_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -726,8 +726,8 @@
         "fallback": "Ưm... \"{input}\" hả? Mình ghi nhớ kỹ trong đầu rồi, không quên đâu! Cứ tự tin làm tiếp nhé, mình ở ngay cạnh bạn đây~ 🌫️🍃"
       }
     },
-    "actionSticker": "assets/muichiro_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/muichiro_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -772,7 +772,7 @@
     "arcColor1": "#f472b6",
     "arcColor2": "#86efac",
     "accentParticleColor": "#fbcfe8",
-    "wallpaper": "assets/mitsuri_bg.jpg",
+    "wallpaper": "assets/mitsuri_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -848,8 +848,8 @@
         "fallback": "Oa~ \"{input}\" hả bạn?! Nghe thú vị ghê luôn đó, cứ tự tin làm tới đi nha, Mitsuri lúc nào cũng ủng hộ bạn hai tay hai chân luôn!! 🌸💕"
       }
     },
-    "actionSticker": "assets/mitsuri_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/mitsuri_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -894,7 +894,7 @@
     "arcColor1": "#818cf8",
     "arcColor2": "#2dd4bf",
     "accentParticleColor": "#facc15",
-    "wallpaper": "assets/obanai_bg.jpg",
+    "wallpaper": "assets/obanai_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -970,8 +970,8 @@
         "fallback": "\"{input}\" ư? Ta không tin mọi chuyện đơn giản thế đâu, nhưng cứ triển khai thử đi—ta và Kaburamaru sẽ bọc lót góc khuất cho ngươi. 🐍🤍"
       }
     },
-    "actionSticker": "assets/obanai_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/obanai_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -1016,7 +1016,7 @@
     "arcColor1": "#34d399",
     "arcColor2": "#a7f3d0",
     "accentParticleColor": "#ecfdf5",
-    "wallpaper": "assets/sanemi_bg.jpg",
+    "wallpaper": "assets/sanemi_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -1092,8 +1092,8 @@
         "fallback": "\"{input}\" hả?! Nghe rõ rồi! Đã quyết tâm thì cứ lao thẳng tới như cuồng phong đi, không thằng nào cản nổi ngươi đâu!! 🌪️⚔️"
       }
     },
-    "actionSticker": "assets/sanemi_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/sanemi_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -1138,7 +1138,7 @@
     "arcColor1": "#f59e0b",
     "arcColor2": "#a3e635",
     "accentParticleColor": "#fde047",
-    "wallpaper": "assets/gyomei_bg.jpg",
+    "wallpaper": "assets/gyomei_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -1214,8 +1214,8 @@
         "fallback": "Nam Mô A Di Đà Phật... Ta đã lắng nghe tâm ý \"{input}\" của con. Hãy giữ vững niềm tin kiên định như núi thái sơn và bước tiếp nhé. 📿🪨"
       }
     },
-    "actionSticker": "assets/gyomei_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/gyomei_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -1260,7 +1260,7 @@
     "arcColor1": "#ef4444",
     "arcColor2": "#10b981",
     "accentParticleColor": "#fef08a",
-    "wallpaper": "assets/tanjiro_bg.jpg",
+    "wallpaper": "assets/tanjiro_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -1336,8 +1336,8 @@
         "fallback": "Mình hiểu rõ ý \"{input}\" của bạn rồi! Cứ vững lòng bước tiếp nhé, dù thế nào mình cũng luôn đứng về phía bạn và cổ vũ hết mình! ☀️🔥"
       }
     },
-    "actionSticker": "assets/tanjiro_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/tanjiro_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -1382,7 +1382,7 @@
     "arcColor1": "#f472b6",
     "arcColor2": "#4ade80",
     "accentParticleColor": "#fbcfe8",
-    "wallpaper": "assets/nezuko_bg.jpg",
+    "wallpaper": "assets/nezuko_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -1458,8 +1458,8 @@
         "fallback": "Ưm ưm~! \"{input}\"... Nezuko... hiểu... rồi!! 🎋🌸 (Nezuko gật đầu lia lịa và sẽ ngồi ngay đây bảo vệ tiến độ cho bạn nhé!)"
       }
     },
-    "actionSticker": "assets/nezuko_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/nezuko_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -1504,7 +1504,7 @@
     "arcColor1": "#facc15",
     "arcColor2": "#fb923c",
     "accentParticleColor": "#fef08a",
-    "wallpaper": "assets/zenitsu_bg.jpg",
+    "wallpaper": "assets/zenitsu_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -1580,8 +1580,8 @@
         "fallback": "\"{input}\" hả?! Tai mình nghe rõ từng chữ không sót âm nào rồi! Cứ phóng tới với tốc độ tia sét đi, mình và Chuntaro yểm trợ hết mình!! ⚡🐦"
       }
     },
-    "actionSticker": "assets/zenitsu_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/zenitsu_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -1626,7 +1626,7 @@
     "arcColor1": "#60a5fa",
     "arcColor2": "#34d399",
     "accentParticleColor": "#e0f2fe",
-    "wallpaper": "assets/inosuke_bg.jpg",
+    "wallpaper": "assets/inosuke_bg.webp",
     "isOrnament": true,
     "isChibiNpc": true,
     "liveWallpaperFx": true,
@@ -1702,8 +1702,8 @@
         "fallback": "WAHAHAHA!! \"{input}\" hả?! Tuy chẳng cần nghĩ lòng vòng nhưng nghe máu lửa lắm—cứ xông thẳng lên càn quét đi, Đấng Inosuke mở đường cho ngươi!! 🐗⚔️"
       }
     },
-    "actionSticker": "assets/inosuke_action.png",
-    "userActionSticker": "assets/yoriichi_action.png",
+    "actionSticker": "assets/inosuke_action.webp",
+    "userActionSticker": "assets/yoriichi_action.webp",
     "userSticker": "assets/yoriichi_ornament.svg",
     "userCornerSvg": "assets/yoriichi_corner.svg"
   },
@@ -1747,7 +1747,7 @@
     "stickerTop": -15,
     "stickerRight": 14,
     "userAvatar": "assets/yoriichi_avatar.jpg",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.webp"
   },
   "Midnight Obsidian": {
     "concept": "Pure CSS Gradient • Zero-Image Ultra-Light",
@@ -1786,6 +1786,6 @@
     "stickerTop": 0,
     "stickerRight": 0,
     "userAvatar": "assets/yoriichi_avatar.jpg",
-    "userActionSticker": "assets/yoriichi_action.png"
+    "userActionSticker": "assets/yoriichi_action.webp"
   }
 }

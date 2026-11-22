@@ -718,8 +718,17 @@ const __AGY_SEC__ = (() => {
         if (typeof src.avatarRadius === 'number' && Number.isFinite(src.avatarRadius)) {
             out.avatarRadius = Math.max(0, Math.min(50, Math.round(src.avatarRadius)));
         }
+        if (typeof src.fxDensity === 'number' && Number.isFinite(src.fxDensity)) {
+            out.fxDensity = Math.max(0, Math.min(100, Math.round(src.fxDensity)));
+        }
+        if (typeof src.bubbleRadius === 'number' && Number.isFinite(src.bubbleRadius)) {
+            out.bubbleRadius = Math.max(6, Math.min(22, Math.round(src.bubbleRadius)));
+        }
         if (typeof src.wpEnabled === 'boolean') out.wpEnabled = src.wpEnabled;
         if (typeof src.transparentWorld === 'boolean') out.transparentWorld = src.transparentWorld;
+        if (typeof src.chibiEnabled === 'boolean') out.chibiEnabled = src.chibiEnabled;
+        if (typeof src.autoFinisher === 'boolean') out.autoFinisher = src.autoFinisher;
+        if (typeof src.ecoBattery === 'boolean') out.ecoBattery = src.ecoBattery;
 
         if (typeof src.customWp === 'string') {
             out.customWp = src.customWp.trim() === '' ? '' : sanitizeCssUrl(src.customWp);
