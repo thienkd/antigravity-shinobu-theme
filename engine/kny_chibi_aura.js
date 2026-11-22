@@ -1891,13 +1891,27 @@
     }
   }
 
+  function iconMarkup(kind, size, elemHint) {
+    const ic = typeof window !== 'undefined' ? window.__AGY_KNY_ICONS__ : null;
+    if (ic) {
+      if (kind === 'elemental' && typeof ic.getElementalSvg === 'function') {
+        return ic.getElementalSvg(elemHint || 'yoriichi', size || 13);
+      }
+      if (typeof ic.getFuncSvg === 'function') {
+        return ic.getFuncSvg(kind, size || 13);
+      }
+    }
+    return '';
+  }
+
   function refreshAllSfxButtons() {
     if (typeof document === 'undefined') return;
     const muted = isSfxMuted();
-    const label = muted ? '🔇 Tắt tiếng' : '🔊 Kiếm âm';
+    const svg = iconMarkup(muted ? 'sfx_off' : 'sfx_on', 12);
+    const text = muted ? 'Tắt tiếng' : 'Kiếm âm';
     const title = muted ? 'Bật âm thanh kiếm đạo' : 'Tắt âm thanh kiếm đạo';
     document.querySelectorAll('.agy-skill-sfx-btn').forEach((btn) => {
-      btn.textContent = label;
+      btn.innerHTML = `${svg}<span>${text}</span>`;
       btn.title = title;
       btn.setAttribute('aria-label', title);
       btn.setAttribute('aria-pressed', muted ? 'true' : 'false');
@@ -2069,7 +2083,7 @@
 
       const go = document.createElement('span');
       go.className = 'agy-skill-go';
-      go.textContent = '⚔️';
+      go.innerHTML = iconMarkup('nichirin_item', 13) || '⚔️';
 
       btn.appendChild(main);
       btn.appendChild(go);
@@ -2190,14 +2204,14 @@
     toggleBtn.setAttribute('aria-haspopup', 'true');
     toggleBtn.setAttribute('aria-expanded', 'false');
     toggleBtn.title = `Chọn 4 Thức — ${meta.styleTitle}`;
-    toggleBtn.textContent = '⚔️ Hơi Thở ▾';
+    toggleBtn.innerHTML = `${iconMarkup('elemental', 13, meta.auraMode || meta.charId)}<span>Hơi Thở ▾</span>`;
 
     const quickBtn = document.createElement('button');
     quickBtn.type = 'button';
     quickBtn.className = 'agy-skill-pill-btn agy-quick-cast-btn';
     quickBtn.dataset.skillAct = 'quick-cast';
     quickBtn.title = 'Tung ngay Thức tiếp theo trong chuỗi liên hoàn!';
-    quickBtn.textContent = '⚡ Xuất Chiêu';
+    quickBtn.innerHTML = `${iconMarkup('katana_cast', 13)}<span>Xuất Chiêu</span>`;
 
     const dropdown = document.createElement('div');
     dropdown.className = 'agy-skill-dropdown';
@@ -2207,7 +2221,8 @@
     hdr.className = 'agy-skill-menu-hdr';
     const hdrTitle = document.createElement('span');
     hdrTitle.className = 'agy-skill-menu-title';
-    hdrTitle.textContent = meta.styleTitle;
+    hdrTitle.style.cssText = 'display: inline-flex; align-items: center; gap: 5px;';
+    hdrTitle.innerHTML = `${iconMarkup('elemental', 13, meta.auraMode || meta.charId)}<span>${meta.styleTitle}</span>`;
     hdr.appendChild(hdrTitle);
     hdr.appendChild(createSfxToggleButton());
 
@@ -2250,7 +2265,7 @@
         npcSkillPill.className = 'agy-npc-pill agy-npc-skill-pill';
         npcSkillPill.dataset.npcAct = 'skills-toggle';
         npcSkillPill.setAttribute('aria-expanded', 'false');
-        npcSkillPill.textContent = '⚔️ Các Thức';
+        npcSkillPill.innerHTML = `${iconMarkup('breathing_forms', 12)}<span>Các Thức</span>`;
 
         const chatOpenBtn = pillsRow.querySelector('[data-npc-act="chat-open"]');
         if (chatOpenBtn) {

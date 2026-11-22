@@ -11,6 +11,7 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const { spawn, execFileSync } = require('child_process');
 
 if (typeof globalThis.WebSocket !== 'function') {
     console.error('[theme-daemon] Node.js >= 22 with built-in WebSocket is required.');
@@ -20,9 +21,11 @@ if (typeof globalThis.WebSocket !== 'function') {
 const ROOT_DIR = path.resolve(__dirname, '..');
 const PID_FILE = path.join(ROOT_DIR, 'daemon.pid');
 const CONFIG_FILE = process.env.AGY_CONFIG_PATH || path.join(ROOT_DIR, 'theme_config.json');
+const BACKUP_CONFIG_FILE = path.join(os.homedir(), '.gemini', 'antigravity', 'custom_theme_backup.json');
 const THEMES_DIR = path.join(ROOT_DIR, 'themes');
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
 const PAYLOAD_PATH = path.join(DIST_DIR, 'theme_payload.js');
+const BUILD_SCRIPT_JS = path.join(ROOT_DIR, 'scripts', 'build_payload.js');
 const LOG_FILE = path.join(ROOT_DIR, 'daemon.log');
 const DEFAULT_CONFIG = {};
 
@@ -375,15 +378,24 @@ function removePidLock() {
 }
 
 function readConfig() {
-    try {
-        if (fs.existsSync(CONFIG_FILE)) {
-            const parsed = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-            if (parsed && typeof parsed === 'object') {
-                return { ...DEFAULT_CONFIG, ...parsed };
+    for (const candidate of [CONFIG_FILE, BACKUP_CONFIG_FILE]) {
+        try {
+            if (fs.existsSync(candidate)) {
+                const parsed = JSON.parse(fs.readFileSync(candidate, 'utf8'));
+                if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+                    // Self-heal primary config if restored from immutable user backup
+                    if (candidate === BACKUP_CONFIG_FILE && !fs.existsSync(CONFIG_FILE)) {
+                        try {
+                            fs.writeFileSync(CONFIG_FILE, JSON.stringify(parsed, null, 2), 'utf8');
+                            log('Restored theme_config.json from immutable backup after update.');
+                        } catch (_) {}
+                    }
+                    return { ...DEFAULT_CONFIG, ...parsed };
+                }
             }
+        } catch (err) {
+            log(`Failed reading ${candidate}: ${err.message}`);
         }
-    } catch (err) {
-        log(`Failed reading theme_config.json: ${err.message}`);
     }
     return { ...DEFAULT_CONFIG };
 }
@@ -391,7 +403,12 @@ function readConfig() {
 function saveConfig(next) {
     try {
         const merged = { ...readConfig(), ...next };
-        fs.writeFileSync(CONFIG_FILE, JSON.stringify(merged, null, 2), 'utf8');
+        const serialized = JSON.stringify(merged, null, 2);
+        fs.writeFileSync(CONFIG_FILE, serialized, 'utf8');
+        try {
+            fs.mkdirSync(path.dirname(BACKUP_CONFIG_FILE), { recursive: true });
+            fs.writeFileSync(BACKUP_CONFIG_FILE, serialized, 'utf8');
+        } catch (_) {}
         return merged;
     } catch (err) {
         log(`Failed saving theme_config.json: ${err.message}`);
@@ -399,11 +416,112 @@ function saveConfig(next) {
     }
 }
 
+/* ==========================================================================
+ * SELF-HEALING UPDATE GUARD (Protects against Antigravity Installer overwrites)
+ * ========================================================================== */
+
+let lastKnownExeMtime = 0;
+let shortcutHealRunning = false;
+
+function resolveAntigravityExeWin() {
+    if (process.platform !== 'win32') return null;
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    const candidates = [
+        path.join(localAppData, 'Programs', 'antigravity', 'Antigravity.exe'),
+        path.join(localAppData, 'Programs', 'Antigravity', 'Antigravity.exe'),
+    ];
+    return candidates.find((p) => fs.existsSync(p)) || null;
+}
+
+function healWindowsShortcutsAsync(reason) {
+    if (process.platform !== 'win32' || shortcutHealRunning) return;
+    shortcutHealRunning = true;
+    const psScript = `
+$WshShell = New-Object -ComObject WScript.Shell
+$Dirs = @(
+  [Environment]::GetFolderPath('DesktopDirectory'),
+  [Environment]::GetFolderPath('Programs'),
+  [Environment]::GetFolderPath('Startup'),
+  (Join-Path $env:APPDATA 'Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar')
+) | Where-Object { $_ -and (Test-Path $_) }
+$patched = 0
+foreach ($d in $Dirs) {
+  Get-ChildItem -Path $d -Recurse -Filter '*.lnk' -ErrorAction SilentlyContinue | ForEach-Object {
+    try {
+      $sc = $WshShell.CreateShortcut($_.FullName)
+      if ($sc.TargetPath -and ($sc.TargetPath -imatch '\\\\Antigravity\\.exe$')) {
+        if ($sc.Arguments -notmatch '--remote-debugging-port') {
+          $sc.Arguments = ("$($sc.Arguments) --remote-debugging-port=0").Trim()
+          $sc.Save()
+          $patched++
+        }
+      }
+    } catch {}
+  }
+}
+if ($patched -gt 0) { Write-Output "Patched $patched shortcut(s)" }
+`;
+    try {
+        const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psScript], {
+            windowsHide: true,
+            stdio: ['ignore', 'pipe', 'ignore']
+        });
+        let out = '';
+        if (child.stdout) child.stdout.on('data', (c) => (out += String(c)));
+        child.on('close', () => {
+            shortcutHealRunning = false;
+            if (out.trim()) {
+                log(`[update-guard] Auto-healed Antigravity shortcuts (${reason}): ${out.trim()}`);
+            }
+        });
+        child.on('error', () => {
+            shortcutHealRunning = false;
+        });
+    } catch (_) {
+        shortcutHealRunning = false;
+    }
+}
+
+function checkAntigravityUpdateAndHeal() {
+    // 1. Auto-rebuild dist/theme_payload.js if missing after a git pull / skill update
+    if (!fs.existsSync(PAYLOAD_PATH) && fs.existsSync(BUILD_SCRIPT_JS)) {
+        try {
+            execFileSync(process.execPath, [BUILD_SCRIPT_JS], { cwd: ROOT_DIR, windowsHide: true, timeout: 15000 });
+            log('[update-guard] Auto-rebuilt missing dist/theme_payload.js.');
+        } catch (err) {
+            log(`[update-guard] Auto-rebuild failed: ${err.message}`);
+        }
+    }
+
+    // 2. Detect Antigravity.exe binary update on Windows & immediately re-patch overwritten .lnk shortcuts
+    if (process.platform === 'win32') {
+        const exePath = resolveAntigravityExeWin();
+        if (exePath) {
+            try {
+                const st = fs.statSync(exePath);
+                if (lastKnownExeMtime === 0) {
+                    lastKnownExeMtime = st.mtimeMs;
+                    healWindowsShortcutsAsync('daemon-startup');
+                } else if (st.mtimeMs !== lastKnownExeMtime) {
+                    lastKnownExeMtime = st.mtimeMs;
+                    log(`[update-guard] Detected Antigravity.exe update (${exePath}); healing shortcuts.`);
+                    healWindowsShortcutsAsync('app-updated');
+                    // Re-check again 8s later once installer finishes writing all shortcuts
+                    setTimeout(() => healWindowsShortcutsAsync('app-updated-followup'), 8000);
+                }
+            } catch (_) {}
+        }
+    }
+}
+
 let missingPayloadLogged = false;
 function buildInjectedSource() {
     if (!fs.existsSync(PAYLOAD_PATH)) {
+        checkAntigravityUpdateAndHeal();
+    }
+    if (!fs.existsSync(PAYLOAD_PATH)) {
         if (!missingPayloadLogged) {
-            log(`Payload not built yet (${PAYLOAD_PATH}). Run: python scripts/build_payload.py`);
+            log(`Payload not built yet (${PAYLOAD_PATH}). Run: node scripts/build_payload.js`);
             missingPayloadLogged = true;
         }
         return null;
@@ -637,8 +755,16 @@ acquirePidLock();
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('exit', removePidLock);
+process.on('uncaughtException', (err) => {
+    log(`[daemon-guard] Uncaught exception recovered: ${err && err.stack ? err.stack : err}`);
+});
+process.on('unhandledRejection', (reason) => {
+    log(`[daemon-guard] Unhandled rejection recovered: ${reason}`);
+});
 
 log(`Theme daemon started (PID ${process.pid}, platform=${process.platform}, portFile=${resolvePortFile()}).`);
+checkAntigravityUpdateAndHeal();
+setInterval(checkAntigravityUpdateAndHeal, 120000);
 startAssetServer().then(() => {
     watchPayload();
     scanPages();

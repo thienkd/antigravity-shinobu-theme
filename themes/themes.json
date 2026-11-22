@@ -50,7 +50,7 @@
     "stickerH": 70,
     "stickerTop": -61,
     "stickerRight": 8,
-    "userAvatar": "assets/ubuyashiki_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/ubuyashiki_avatar.jpg",
     "npc": {
       "badgeLabel": "👑 Chúa Công",
@@ -116,7 +116,8 @@
         "fallback": "Ta hiểu tấm lòng của con qua lời nhắn \"{input}\". Hãy cứ vững tin bước tiếp trên con đường con đã chọn nhé, lời chúc phúc của nhà Ubuyashiki luôn ở bên con. 👑🌸"
       }
     },
-    "actionSticker": "assets/ubuyashiki_action.png"
+    "actionSticker": "assets/ubuyashiki_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "🦋 Trùng Trụ — Shinobu Kocho": {
     "concept": "Wisteria Moonlight & Interactive Chibi Shinobu NPC • 60fps Live Glass",
@@ -169,7 +170,7 @@
     "stickerH": 66,
     "stickerTop": -58,
     "stickerRight": 10,
-    "userAvatar": "assets/shinobu_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/shinobu_avatar.jpg",
     "npc": {
       "badgeLabel": "🦋 Shinobu",
@@ -235,7 +236,8 @@
         "fallback": "Ara ara~ \"{input}\" ư? Mình nghe rõ rồi nè! Cứ yên tâm triển khai tiếp nhé, mình luôn ngồi ngay đây tiếp sức cho bạn! 🦋✨"
       }
     },
-    "actionSticker": "assets/shinobu_action.png"
+    "actionSticker": "assets/shinobu_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "🌊 Thủy Trụ — Giyu Tomioka": {
     "concept": "Eleventh Form: Dead Calm & Azure Stream • Giyu Tomioka",
@@ -288,7 +290,7 @@
     "stickerH": 66,
     "stickerTop": -58,
     "stickerRight": 10,
-    "userAvatar": "assets/giyu_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/giyu_avatar.jpg",
     "npc": {
       "badgeLabel": "🌊 Giyu",
@@ -354,7 +356,8 @@
         "fallback": "...\"{input}\" sao? Ta đã nghe rõ rồi. Cứ giữ vững tâm thế tĩnh tại và tiến lên phía trước nhé. 🌊💧"
       }
     },
-    "actionSticker": "assets/giyu_action.png"
+    "actionSticker": "assets/giyu_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "🔥 Viêm Trụ — Kyojuro Rengoku": {
     "concept": "Set Your Heart Ablaze • Ninth Form: Rengoku Crimson Gold",
@@ -407,7 +410,7 @@
     "stickerH": 66,
     "stickerTop": -58,
     "stickerRight": 10,
-    "userAvatar": "assets/rengoku_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/rengoku_avatar.jpg",
     "npc": {
       "badgeLabel": "🔥 Rengoku",
@@ -473,7 +476,8 @@
         "fallback": "TA HIỂU RỒI!! \"{input}\"—nghe tràn đầy quyết tâm đấy! Cứ giữ vững ngọn lửa kiêu hãnh trong tim và thẳng tiến lên phía trước nhé!! 🔥⚔️"
       }
     },
-    "actionSticker": "assets/rengoku_action.png"
+    "actionSticker": "assets/rengoku_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "💎 Âm Trụ — Tengen Uzui": {
     "concept": "God of Festivities • Flamboyant Ruby, Gold & Turquoise",
@@ -526,7 +530,7 @@
     "stickerH": 66,
     "stickerTop": -58,
     "stickerRight": 10,
-    "userAvatar": "assets/uzui_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/uzui_avatar.jpg",
     "npc": {
       "badgeLabel": "💎 Uzui",
@@ -592,7 +596,8 @@
         "fallback": "Ồ hố! \"{input}\" ư? Nghe có vẻ đầy tiềm năng bùng nổ đấy! Triển khai một cách hào nhoáng nhất đi nào, ta bảo kê cho!! 💎🎆"
       }
     },
-    "actionSticker": "assets/uzui_action.png"
+    "actionSticker": "assets/uzui_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "🌫️ Hà Trụ — Muichiro Tokito": {
     "concept": "Seventh Form: Obscuring Clouds & Mint Mist • Muichiro Tokito",
@@ -645,7 +650,7 @@
     "stickerH": 66,
     "stickerTop": -58,
     "stickerRight": 10,
-    "userAvatar": "assets/muichiro_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/muichiro_avatar.jpg",
     "npc": {
       "badgeLabel": "🌫️ Muichiro",
@@ -711,7 +716,8 @@
         "fallback": "Ưm... \"{input}\" hả? Mình ghi nhớ kỹ trong đầu rồi, không quên đâu! Cứ tự tin làm tiếp nhé, mình ở ngay cạnh bạn đây~ 🌫️🍃"
       }
     },
-    "actionSticker": "assets/muichiro_action.png"
+    "actionSticker": "assets/muichiro_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "🌸 Luyến Trụ — Mitsuri Kanroji": {
     "concept": "Love Breathing • Sakura Mochi Pink & Matcha Blossom",
@@ -764,7 +770,7 @@
     "stickerH": 66,
     "stickerTop": -58,
     "stickerRight": 10,
-    "userAvatar": "assets/mitsuri_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/mitsuri_avatar.jpg",
     "npc": {
       "badgeLabel": "🌸 Mitsuri",
@@ -830,7 +836,8 @@
         "fallback": "Oa~ \"{input}\" hả bạn?! Nghe thú vị ghê luôn đó, cứ tự tin làm tới đi nha, Mitsuri lúc nào cũng ủng hộ bạn hai tay hai chân luôn!! 🌸💕"
       }
     },
-    "actionSticker": "assets/mitsuri_action.png"
+    "actionSticker": "assets/mitsuri_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "🐍 Xà Trụ — Obanai Iguro": {
     "concept": "Serpent Breathing • Indigo Night & Heterochromia Gold-Teal",
@@ -883,7 +890,7 @@
     "stickerH": 66,
     "stickerTop": -58,
     "stickerRight": 10,
-    "userAvatar": "assets/obanai_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/obanai_avatar.jpg",
     "npc": {
       "badgeLabel": "🐍 Obanai",
@@ -949,7 +956,8 @@
         "fallback": "\"{input}\" ư? Ta không tin mọi chuyện đơn giản thế đâu, nhưng cứ triển khai thử đi—ta và Kaburamaru sẽ bọc lót góc khuất cho ngươi. 🐍🤍"
       }
     },
-    "actionSticker": "assets/obanai_action.png"
+    "actionSticker": "assets/obanai_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "🌪️ Phong Trụ — Sanemi Shinazugawa": {
     "concept": "Wind Breathing • Emerald Gale Slash & Storm Silver",
@@ -1002,7 +1010,7 @@
     "stickerH": 66,
     "stickerTop": -58,
     "stickerRight": 10,
-    "userAvatar": "assets/sanemi_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/sanemi_avatar.jpg",
     "npc": {
       "badgeLabel": "🌪️ Sanemi",
@@ -1068,7 +1076,8 @@
         "fallback": "\"{input}\" hả?! Nghe rõ rồi! Đã quyết tâm thì cứ lao thẳng tới như cuồng phong đi, không thằng nào cản nổi ngươi đâu!! 🌪️⚔️"
       }
     },
-    "actionSticker": "assets/sanemi_action.png"
+    "actionSticker": "assets/sanemi_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "📿 Nham Trụ — Gyomei Himejima": {
     "concept": "Stone Breathing • Sacred Bodhi Amber & Mossy Bedrock",
@@ -1121,7 +1130,7 @@
     "stickerH": 66,
     "stickerTop": -58,
     "stickerRight": 10,
-    "userAvatar": "assets/gyomei_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/gyomei_avatar.jpg",
     "npc": {
       "badgeLabel": "📿 Gyomei",
@@ -1187,7 +1196,8 @@
         "fallback": "Nam Mô A Di Đà Phật... Ta đã lắng nghe tâm ý \"{input}\" của con. Hãy giữ vững niềm tin kiên định như núi thái sơn và bước tiếp nhé. 📿🪨"
       }
     },
-    "actionSticker": "assets/gyomei_action.png"
+    "actionSticker": "assets/gyomei_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "☀️ Tanjiro Kamado — Nhật Luân": {
     "concept": "Hinokami Kagura & Flowing Water • Checkered Emerald & Crimson Sun",
@@ -1240,7 +1250,7 @@
     "stickerH": 66,
     "stickerTop": -58,
     "stickerRight": 10,
-    "userAvatar": "assets/tanjiro_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/tanjiro_avatar.jpg",
     "npc": {
       "badgeLabel": "☀️ Tanjiro",
@@ -1306,7 +1316,8 @@
         "fallback": "Mình hiểu rõ ý \"{input}\" của bạn rồi! Cứ vững lòng bước tiếp nhé, dù thế nào mình cũng luôn đứng về phía bạn và cổ vũ hết mình! ☀️🔥"
       }
     },
-    "actionSticker": "assets/tanjiro_action.png"
+    "actionSticker": "assets/tanjiro_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "🎋 Nezuko Kamado — Hồng Liên": {
     "concept": "Exploding Blood Pink Flame & Bamboo Ribbon • Nezuko Kamado",
@@ -1359,7 +1370,7 @@
     "stickerH": 66,
     "stickerTop": -58,
     "stickerRight": 10,
-    "userAvatar": "assets/nezuko_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/nezuko_avatar.jpg",
     "npc": {
       "badgeLabel": "🎋 Nezuko",
@@ -1425,7 +1436,8 @@
         "fallback": "Ưm ưm~! \"{input}\"... Nezuko... hiểu... rồi!! 🎋🌸 (Nezuko gật đầu lia lịa và sẽ ngồi ngay đây bảo vệ tiến độ cho bạn nhé!)"
       }
     },
-    "actionSticker": "assets/nezuko_action.png"
+    "actionSticker": "assets/nezuko_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "⚡ Zenitsu Agatsuma — Lôi Minh": {
     "concept": "Thunderclap and Flash • Golden Lightning & Sunset Amber",
@@ -1478,7 +1490,7 @@
     "stickerH": 66,
     "stickerTop": -58,
     "stickerRight": 10,
-    "userAvatar": "assets/zenitsu_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/zenitsu_avatar.jpg",
     "npc": {
       "badgeLabel": "⚡ Zenitsu",
@@ -1544,7 +1556,8 @@
         "fallback": "\"{input}\" hả?! Tai mình nghe rõ từng chữ không sót âm nào rồi! Cứ phóng tới với tốc độ tia sét đi, mình và Chuntaro yểm trợ hết mình!! ⚡🐦"
       }
     },
-    "actionSticker": "assets/zenitsu_action.png"
+    "actionSticker": "assets/zenitsu_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "🐗 Inosuke Hashibira — Dã Thú": {
     "concept": "Beast Breathing • Serrated Ice-Steel Blue & Wild Forest Emerald",
@@ -1597,7 +1610,7 @@
     "stickerH": 66,
     "stickerTop": -58,
     "stickerRight": 10,
-    "userAvatar": "assets/inosuke_user_avatar.svg",
+    "userAvatar": "assets/yoriichi_avatar.jpg",
     "agentAvatar": "assets/inosuke_avatar.jpg",
     "npc": {
       "badgeLabel": "🐗 Inosuke",
@@ -1663,7 +1676,8 @@
         "fallback": "WAHAHAHA!! \"{input}\" hả?! Tuy chẳng cần nghĩ lòng vòng nhưng nghe máu lửa lắm—cứ xông thẳng lên càn quét đi, Đấng Inosuke mở đường cho ngươi!! 🐗⚔️"
       }
     },
-    "actionSticker": "assets/inosuke_action.png"
+    "actionSticker": "assets/inosuke_action.png",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "WLOP Cosmic": {
     "concept": "Cosmic Violin & Starlight • High-Contrast Glass",
@@ -1703,7 +1717,9 @@
     "stickerW": 96,
     "stickerH": 30,
     "stickerTop": -15,
-    "stickerRight": 14
+    "stickerRight": 14,
+    "userAvatar": "assets/yoriichi_avatar.jpg",
+    "userActionSticker": "assets/yoriichi_action.png"
   },
   "Midnight Obsidian": {
     "concept": "Pure CSS Gradient • Zero-Image Ultra-Light",
@@ -1740,6 +1756,8 @@
     "stickerW": 0,
     "stickerH": 0,
     "stickerTop": 0,
-    "stickerRight": 0
+    "stickerRight": 0,
+    "userAvatar": "assets/yoriichi_avatar.jpg",
+    "userActionSticker": "assets/yoriichi_action.png"
   }
 }

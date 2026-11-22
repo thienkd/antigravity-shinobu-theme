@@ -12,7 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const ASSET_KEYS = ['wallpaper', 'sticker', 'actionSticker', 'cornerSvg', 'userAvatar', 'agentAvatar'];
+const ASSET_KEYS = ['wallpaper', 'sticker', 'actionSticker', 'userActionSticker', 'cornerSvg', 'userAvatar', 'agentAvatar'];
 const HYBRID_INLINE_CANDIDATES = new Set(['cornerSvg', 'userAvatar', 'sticker']);
 const HYBRID_INLINE_MAX_BYTES = 12 * 1024;
 const PLACEHOLDER = '/*__THEMES_PLACEHOLDER__*/{}';
@@ -126,7 +126,7 @@ function main() {
 
   let compiled = engineSrc.replace(PLACEHOLDER, () => JSON.stringify(resolved));
 
-  const extraModules = ['kny_fx_modes.js', 'kny_breathing_skills.js', 'kny_chibi_aura.js', 'kny_token_hud.js'];
+  const extraModules = ['kny_semantic_icons.js', 'kny_fx_modes.js', 'kny_breathing_skills.js', 'kny_chibi_aura.js', 'kny_token_hud.js'];
   const prepends = [];
   for (const modName of extraModules) {
     const modPath = path.join(path.dirname(enginePath), modName);

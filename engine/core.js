@@ -19,7 +19,7 @@
 
   Object.values(THEMES).forEach((cfg) => {
     if (!cfg || typeof cfg !== 'object') return;
-    ['wallpaper', 'sticker', 'actionSticker', 'cornerSvg', 'userAvatar', 'agentAvatar'].forEach((k) => {
+    ['wallpaper', 'sticker', 'actionSticker', 'userActionSticker', 'cornerSvg', 'userAvatar', 'agentAvatar'].forEach((k) => {
       if (typeof cfg[k] === 'string' && cfg[k]) {
         cfg[k] = resolveThemeAssetUrl(cfg[k]);
       }
@@ -450,7 +450,7 @@
       ${effectiveUserAvatar ? `
       .agy-shell [data-testid="user-message"] {
         position: relative !important;
-        padding-right: ${avSize + 10}px !important;
+        padding-right: ${avSize + 12}px !important;
       }
       .agy-shell [data-testid="user-message"]::after {
         content: "";
@@ -463,11 +463,15 @@
         background-image: url("${effectiveUserAvatar}");
         background-size: cover;
         background-position: center;
-        border: 1.5px solid ${mainTheme.primary};
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4), 0 0 8px ${mainTheme.glow};
+        border: 1.8px solid #fde047;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.55), 0 0 12px rgba(239, 68, 68, 0.52);
         pointer-events: none;
       }
       ` : ''}
+      .agy-shell [data-testid="user-message-content"] {
+        max-height: 28em !important;
+        overflow-y: auto !important;
+      }
       ${effectiveAgentAvatar ? `
       .agy-shell [data-testid="agent-response"] {
         position: relative !important;
@@ -835,12 +839,12 @@
       }
 
       ${bubbleTheme.composerHeaderBg ? `
-      .surface-composer > :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-chibi-skill-bar):not(agy-chibi-aura) {
+      .surface-composer > :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(#agy-chibi-skill-bar):not(agy-chibi-aura) {
         background: ${bubbleTheme.composerHeaderBg} !important;
         border-radius: 14.5px 14.5px 0 0 !important;
         padding: 4px 8px !important;
       }
-      .surface-composer:has(> :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-chibi-skill-bar):not(agy-chibi-aura)) .surface-composer-card {
+      .surface-composer:has(> :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(#agy-chibi-skill-bar):not(agy-chibi-aura)) .surface-composer-card {
         border-radius: 0 0 14.5px 14.5px !important;
       }
       ` : ''}
@@ -2310,6 +2314,48 @@
         border-color: var(--npc-primary, #c084fc);
         color: #ffffff;
       }
+      .agy-npc-user-sent {
+        display: none;
+        align-items: flex-start;
+        gap: 7px;
+        padding: 6px 9px;
+        border-radius: 9px;
+        background: linear-gradient(135deg, rgba(127, 29, 29, 0.42) 0%, rgba(30, 15, 25, 0.72) 100%);
+        border: 1px solid rgba(250, 204, 21, 0.48);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      }
+      .agy-npc-user-sent[data-show="1"] {
+        display: flex;
+      }
+      .agy-npc-user-av {
+        width: 22px;
+        height: 22px;
+        border-radius: 9999px;
+        background-size: cover;
+        background-position: center;
+        border: 1.4px solid #fde047;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .agy-npc-user-col {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5px;
+        min-width: 0;
+        flex: 1;
+      }
+      .agy-npc-user-tag {
+        font-size: 9.8px;
+        font-weight: 700;
+        color: #fde047;
+        letter-spacing: 0.15px;
+      }
+      .agy-npc-user-msg {
+        font-size: 11.8px;
+        line-height: 1.38;
+        color: #ffffff;
+        word-break: break-word;
+      }
       .agy-npc-dialog-text {
         font-size: 12.3px;
         line-height: 1.46;
@@ -2526,6 +2572,13 @@
               <button type="button" class="agy-npc-icon-btn" data-npc-act="close" title="Thu gọn hộp thoại" aria-label="Thu gọn hộp thoại">✕</button>
             </div>
           </div>
+          <div class="agy-npc-user-sent">
+            <span class="agy-npc-user-av" style="background-image: url('${bTheme.userAvatar || ''}')"></span>
+            <div class="agy-npc-user-col">
+              <span class="agy-npc-user-tag">Khai Tổ Hỏa Thần (Anh)</span>
+              <span class="agy-npc-user-msg"></span>
+            </div>
+          </div>
           <div class="agy-npc-dialog-text"></div>
           <div class="agy-npc-pills">
             ${pillsHtml}
@@ -2621,8 +2674,15 @@
       chatRow.addEventListener('submit', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const msg = chatInput.value;
+        const msg = (chatInput.value || '').trim();
+        if (!msg) return;
         chatInput.value = '';
+        const sentBox = wrap.querySelector('.agy-npc-user-sent');
+        const sentMsg = wrap.querySelector('.agy-npc-user-msg');
+        if (sentBox && sentMsg) {
+          sentMsg.textContent = msg;
+          sentBox.dataset.show = '1';
+        }
         triggerChibiBounce(composer);
         speakShinobuLine(getNpcReplyForInput(msg, prof), true);
       });
@@ -2663,15 +2723,34 @@
   }
 
   function syncTokenHud() {
-    const composer = document.querySelector('.surface-composer');
+    const composer = document.querySelector('.surface-composer') || document.querySelector('[data-testid="composer"]');
     if (!composer || !window.__AGY_TOKEN_HUD__ || typeof window.__AGY_TOKEN_HUD__.mountTokenHud !== 'function') {
       return;
     }
     const st = getState();
-    const bTheme = THEMES[st.bubbleName] || THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    const activeKey = st.bubbleName || st.themeName || DEFAULT_THEME_KEY;
+    const bTheme = THEMES[activeKey] || THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
     try {
-      window.__AGY_TOKEN_HUD__.mountTokenHud(composer, bTheme);
+      window.__AGY_TOKEN_HUD__.mountTokenHud(composer, bTheme, activeKey);
     } catch (_) {}
+
+    // Make user's Yoriichi avatar beside chat bubbles clickable to unleash Primordial Sun Breathing!
+    document.querySelectorAll('[data-testid="user-message"]').forEach((um) => {
+      if (um.querySelector(':scope > .agy-yoriichi-msg-hit')) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'agy-yoriichi-msg-hit';
+      btn.title = 'Khai Tổ Vũ Điệu Hỏa Thần — Nhấn để khai mở Nhật Chi Hô Hấp!';
+      btn.setAttribute('aria-label', btn.title);
+      btn.style.cssText = 'position:absolute;right:0;bottom:6px;width:34px;height:34px;border-radius:50%;background:transparent;border:none;cursor:pointer;z-index:5;padding:0;';
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.castYoriichiSunBreathing === 'function') {
+          window.__AGY_TOKEN_HUD__.castYoriichiSunBreathing(btn);
+        }
+      });
+      um.appendChild(btn);
+    });
   }
 
   function tick() {
@@ -2720,6 +2799,7 @@
   if (staleSettingsBtn) staleSettingsBtn.remove();
   try { teardownLiveWallpaperFx(); } catch (e) {}
   try { teardownShinobuNpc(); } catch (e) {}
+  try { document.querySelectorAll('.agy-yoriichi-msg-hit').forEach(el => el.remove()); } catch (e) {}
   try { if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.teardown === 'function') window.__AGY_TOKEN_HUD__.teardown(); } catch (e) {}
   try { if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.stopActiveSkill === 'function') window.__AGY_KNY_SKILLS__.stopActiveSkill(); } catch (e) {}
   try { applyStyles(); } catch (e) {}

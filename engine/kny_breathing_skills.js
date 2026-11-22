@@ -31,7 +31,8 @@
     'tanjiro',
     'nezuko',
     'zenitsu',
-    'inosuke'
+    'inosuke',
+    'yoriichi'
   ];
 
   const EXACT_ALIAS_MAP = {
@@ -102,10 +103,15 @@
 
     inosuke: 'inosuke',
     hashibira: 'inosuke',
-    beast: 'inosuke'
+    beast: 'inosuke',
+
+    yoriichi: 'yoriichi',
+    tsugikuni: 'yoriichi',
+    sun_origin: 'yoriichi'
   };
 
   const SUBSTRING_MATCHERS = [
+    { id: 'yoriichi', keys: ['yoriichi', 'tsugikuni', 'kiếm sĩ đầu tiên', 'khai tổ'] },
     { id: 'ubuyashiki', keys: ['ubuyashiki', 'chúa công', 'chua cong', 'kagaya', 'wisteria_royal', 'royal_wisteria'] },
     { id: 'shinobu', keys: ['shinobu', 'kocho', 'trùng trụ', 'trung tru'] },
     { id: 'giyu', keys: ['giyu', 'tomioka', 'thủy trụ', 'thuy tru'] },
@@ -973,6 +979,65 @@
         accentColor: '#cffafe',
         sfxElement: 'beast_radar',
         durationMs: 2950
+      }
+    ],
+
+    yoriichi: [
+      {
+        id: 'yoriichi_1',
+        formNumber: 'Khởi Nguyên Nhất Thức',
+        nameVi: 'Nhật Chi Hô Hấp: Viên Vũ Nhất Thiểm',
+        kanji: '日の呼吸 円舞一閃',
+        breathingName: 'Khai Tổ Vũ Điệu Hỏa Thần — Tsugikuni Yoriichi',
+        voiceLine: 'Thanh kiếm đầu tiên khai mở bình minh bất diệt!',
+        vfxType: 'hinokami_waltz',
+        primaryColor: '#ef4444',
+        secondaryColor: '#facc15',
+        accentColor: '#fef08a',
+        sfxElement: 'flame',
+        durationMs: 2800
+      },
+      {
+        id: 'yoriichi_2',
+        formNumber: 'Khởi Nguyên Lục Thức',
+        nameVi: 'Nhật Chi Hô Hấp: Chước Cốt Viêm Dương',
+        kanji: '日の呼吸 灼骨炎陽',
+        breathingName: 'Khai Tổ Vũ Điệu Hỏa Thần — Tsugikuni Yoriichi',
+        voiceLine: 'Hách Đao rực đỏ thiêu rụi mọi tà chướng trong chớp mắt!',
+        vfxType: 'rising_scorching_sun',
+        primaryColor: '#dc2626',
+        secondaryColor: '#f97316',
+        accentColor: '#ffffff',
+        sfxElement: 'flame',
+        durationMs: 2850
+      },
+      {
+        id: 'yoriichi_3',
+        formNumber: 'Khởi Nguyên Thập Nhất Thức',
+        nameVi: 'Nhật Chi Hô Hấp: Nhật Vựng Chi Long • Đầu Vũ',
+        kanji: '日の呼吸 日暈の龍・頭舞い',
+        breathingName: 'Khai Tổ Vũ Điệu Hỏa Thần — Tsugikuni Yoriichi',
+        voiceLine: 'Thái Dương Chi Long uốn lượn khai sáng vạn vật!',
+        vfxType: 'solar_halo_dragon',
+        primaryColor: '#ef4444',
+        secondaryColor: '#fb923c',
+        accentColor: '#fef08a',
+        sfxElement: 'flame_dragon',
+        durationMs: 3050
+      },
+      {
+        id: 'yoriichi_4',
+        formNumber: 'Bí Kỹ Khai Tổ',
+        nameVi: 'Thập Tam Thức — Vũ Điệu Hỏa Thần Khởi Nguyên',
+        kanji: '日の呼吸 拾参ノ型',
+        breathingName: 'Khai Tổ Vũ Điệu Hỏa Thần — Tsugikuni Yoriichi',
+        voiceLine: 'Mười hai thức nối liền thành vòng Thái Dương vĩnh hằng!',
+        vfxType: 'thirteenth_form',
+        primaryColor: '#facc15',
+        secondaryColor: '#dc2626',
+        accentColor: '#ffffff',
+        sfxElement: 'flame_dragon',
+        durationMs: 3150
       }
     ]
   };
@@ -2643,7 +2708,8 @@
     tanjiro:    { nativeFacing: -1, baseSize: 208, spinCapable: true  },
     nezuko:     { nativeFacing: -1, baseSize: 202, spinCapable: true  },
     zenitsu:    { nativeFacing: -1, baseSize: 206, spinCapable: true  },
-    inosuke:    { nativeFacing:  1, baseSize: 210, spinCapable: true  }
+    inosuke:    { nativeFacing:  1, baseSize: 210, spinCapable: true  },
+    yoriichi:   { nativeFacing:  1, baseSize: 222, spinCapable: true  }
   };
 
   const actionSpriteCache = Object.create(null);

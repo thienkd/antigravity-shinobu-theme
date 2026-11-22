@@ -19,7 +19,7 @@ import sys
 import urllib.parse
 from pathlib import Path
 
-ASSET_KEYS = ("wallpaper", "sticker", "actionSticker", "cornerSvg", "userAvatar", "agentAvatar")
+ASSET_KEYS = ("wallpaper", "sticker", "actionSticker", "userActionSticker", "cornerSvg", "userAvatar", "agentAvatar")
 HYBRID_INLINE_CANDIDATES = {"cornerSvg", "userAvatar", "sticker"}
 HYBRID_INLINE_MAX_BYTES = 12 * 1024
 AVATAR_KEYS = {"userAvatar", "agentAvatar"}
@@ -171,7 +171,7 @@ def build_payload(
     themes_json = json.dumps(resolved_themes, ensure_ascii=False)
     compiled = engine_src.replace(PLACEHOLDER, themes_json, 1)
 
-    extra_modules = ["kny_fx_modes.js", "kny_breathing_skills.js", "kny_chibi_aura.js", "kny_token_hud.js"]
+    extra_modules = ["kny_semantic_icons.js", "kny_fx_modes.js", "kny_breathing_skills.js", "kny_chibi_aura.js", "kny_token_hud.js"]
     prepends: list[str] = []
     for mod_name in extra_modules:
         mod_path = engine_path.parent / mod_name
