@@ -1067,12 +1067,12 @@
       }
 
       ${bubbleComposerHeaderBg ? `
-      .surface-composer > :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(#agy-chibi-skill-bar):not(agy-chibi-aura) {
+      .surface-composer > :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(#agy-chibi-skill-bar):not(agy-chibi-aura):not(agy-hashira-squad) {
         background: ${bubbleComposerHeaderBg} !important;
         border-radius: 14.5px 14.5px 0 0 !important;
         padding: 4px 8px !important;
       }
-      .surface-composer:has(> :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(#agy-chibi-skill-bar):not(agy-chibi-aura)) .surface-composer-card {
+      .surface-composer:has(> :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(#agy-chibi-skill-bar):not(agy-chibi-aura):not(agy-hashira-squad)) .surface-composer-card {
         border-radius: 0 0 14.5px 14.5px !important;
       }
       ` : ''}

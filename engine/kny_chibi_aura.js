@@ -2175,19 +2175,18 @@
     state.uiSkills = skills;
 
     const existingBar = document.getElementById(SKILL_BAR_ID);
+    if (existingBar) existingBar.remove();
     const existingNpcPill = npcWrap ? npcWrap.querySelector('.agy-npc-skill-pill') : null;
-    const barMatches = Boolean(
-      existingBar &&
-      existingBar.parentElement === composer &&
+    const uiMatches = Boolean(
+      state.uiComposer === composer &&
       state.uiCharId === meta.charId &&
       (!npcWrap || existingNpcPill)
     );
 
-    if (barMatches) {
+    if (uiMatches) {
       state.uiNpcWrap = npcWrap;
-      syncBadgeShift();
       refreshAllSfxButtons();
-      return existingBar;
+      return null;
     }
 
     teardownSkillUi();
@@ -2199,82 +2198,11 @@
     state.uiThemeCfg = themeCfg || null;
     state.uiOnSkillCast = typeof onSkillCast === 'function' ? onSkillCast : null;
     state.uiSkills = skills;
-    composer.dataset.agySkillbar = '1';
 
-    // 1. Floating Pill Bar (#agy-chibi-skill-bar) next to Chibi on Composer top edge
-    const bar = document.createElement('div');
-    bar.id = SKILL_BAR_ID;
-    bar.setAttribute('role', 'toolbar');
-    bar.setAttribute('aria-label', `Thi triển ${meta.styleTitle}`);
-    bar.style.setProperty('--skill-primary', meta.primary);
-    bar.style.setProperty('--skill-secondary', meta.secondary);
-    bar.style.setProperty('--skill-border', meta.borderColor);
-    bar.style.setProperty('--skill-glow', meta.glow);
-    bar.style.setProperty('--skill-surface', meta.surface);
+    // Floating "Hơi Thở ▾" & "Xuất Chiêu" pill bar intentionally omitted:
+    // Clicking the Chibi directly triggers castNextComboSkill() cleanly without button clutter.
 
-    const toggleBtn = document.createElement('button');
-    toggleBtn.type = 'button';
-    toggleBtn.className = 'agy-skill-pill-btn';
-    toggleBtn.dataset.skillAct = 'toggle-menu';
-    toggleBtn.setAttribute('aria-haspopup', 'true');
-    toggleBtn.setAttribute('aria-expanded', 'false');
-    toggleBtn.title = `Chọn 4 Thức — ${meta.styleTitle}`;
-    toggleBtn.innerHTML = `${iconMarkup('elemental', 13, meta.auraMode || meta.charId)}<span>Hơi Thở ▾</span>`;
-
-    const quickBtn = document.createElement('button');
-    quickBtn.type = 'button';
-    quickBtn.className = 'agy-skill-pill-btn agy-quick-cast-btn';
-    quickBtn.dataset.skillAct = 'quick-cast';
-    quickBtn.title = 'Tung ngay Thức tiếp theo trong chuỗi liên hoàn!';
-    quickBtn.innerHTML = `${iconMarkup('katana_cast', 13)}<span>Xuất Chiêu</span>`;
-
-    const dropdown = document.createElement('div');
-    dropdown.className = 'agy-skill-dropdown';
-    dropdown.setAttribute('role', 'menu');
-
-    const hdr = document.createElement('div');
-    hdr.className = 'agy-skill-menu-hdr';
-    const hdrTitle = document.createElement('span');
-    hdrTitle.className = 'agy-skill-menu-title';
-    hdrTitle.style.cssText = 'display: inline-flex; align-items: center; gap: 5px;';
-    const hdrIcoWrap = document.createElement('span');
-    hdrIcoWrap.style.cssText = 'display: inline-flex; align-items: center; line-height: 1;';
-    hdrIcoWrap.innerHTML = iconMarkup('elemental', 13, meta.auraMode || meta.charId);
-    const hdrTitleTxt = document.createElement('span');
-    hdrTitleTxt.textContent = meta.styleTitle;
-    hdrTitle.appendChild(hdrIcoWrap);
-    hdrTitle.appendChild(hdrTitleTxt);
-    hdr.appendChild(hdrTitle);
-    hdr.appendChild(createSfxToggleButton());
-
-    dropdown.appendChild(hdr);
-    dropdown.appendChild(buildSkillItemsDom(skills, (idx) => executeSkillCast(idx)));
-
-    bar.appendChild(toggleBtn);
-    bar.appendChild(quickBtn);
-    bar.appendChild(dropdown);
-    composer.appendChild(bar);
-
-    toggleBtn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      // Refresh skill metadata dynamically in case window.__AGY_KNY_SKILLS__ loaded after mount
-      const freshSkills = resolveSkillsForChar(meta.charId, meta);
-      if (freshSkills !== state.uiSkills) {
-        state.uiSkills = freshSkills;
-        const oldList = dropdown.querySelector('.agy-skill-list');
-        if (oldList) oldList.replaceWith(buildSkillItemsDom(freshSkills, (idx) => executeSkillCast(idx)));
-      }
-      setFloatingDropdownOpen(!state.dropdownOpen);
-    });
-
-    quickBtn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      quickBtn.dataset.flash = '1';
-      setTimeout(() => { delete quickBtn.dataset.flash; }, 180);
-      castNextComboSkill();
-    });
-
-    // 2. Integrated "⚔️ Các Thức" Pill & Expandable 4-Form Drawer inside #agy-shinobu-npc-wrap
+    // Integrated "⚔️ Các Thức" Pill & Expandable 4-Form Drawer inside #agy-shinobu-npc-wrap (only when NPC dialog is expanded)
     if (npcWrap) {
       const pillsRow = npcWrap.querySelector('.agy-npc-pills');
       const popover = npcWrap.querySelector('.agy-npc-popover');
@@ -2326,32 +2254,10 @@
           setNpcSkillsDrawerOpen(!state.npcDrawerOpen);
         });
       }
-
-      const badge = npcWrap.querySelector('.agy-npc-badge');
-      if (badge && typeof MutationObserver !== 'undefined') {
-        state.badgeObserver = new MutationObserver(() => syncBadgeShift());
-        state.badgeObserver.observe(badge, { attributes: true, attributeFilter: ['style', 'class'] });
-      }
     }
 
-    const onOutsideClick = (ev) => {
-      if (!state.dropdownOpen) return;
-      if (bar.contains(ev.target)) return;
-      setFloatingDropdownOpen(false);
-    };
-    const onKeyDown = (ev) => {
-      if (ev.key === 'Escape' && state.dropdownOpen) {
-        setFloatingDropdownOpen(false);
-      }
-    };
-    document.addEventListener('click', onOutsideClick);
-    document.addEventListener('keydown', onKeyDown);
-    state.uiCleanups.push(() => document.removeEventListener('click', onOutsideClick));
-    state.uiCleanups.push(() => document.removeEventListener('keydown', onKeyDown));
-
     refreshAllSfxButtons();
-    syncBadgeShift();
-    return bar;
+    return null;
   }
 
   /* ==========================================================================
