@@ -30,11 +30,13 @@ Bộ tùy biến giao diện **60fps Zero-Live-Blur** dành cho ứng dụng **G
 
 ---
 
-## ✨ Kiến trúc Hiệu năng cao
+## ✨ Kiến trúc Hiệu năng cao & Hệ thống 56 Tuyệt Kỹ Hơi Thở
 
-- **Local Asset HTTP Server (`127.0.0.1`) + Hybrid Payload (`~300 KB`)**: Tải tức thì toàn bộ hình nền 2K và Chibi SVG tách nền mà không làm nặng bộ nhớ của Electron; chuyển đổi giữa 16 chủ đề trong **0.02 giây**.
+- **Cảnh quan nền động ufotable 60fps (`engine/kny_fx_modes.js`)**: Mỗi chủ đề sở hữu cảnh quan đa tầng riêng biệt (ví dụ Thủy Trụ có mặt nước lăn tăn 3 lớp sóng phản chiếu ánh trăng, bong bóng nước trong suốt nổi lên và dải dòng chảy Thủy Hô Hấp viền bọt trắng; Gia Đình Chúa Công có mặt hồ tử đằng gợn sóng, đèn lồng giấy bay & mưa hoa 3D; Viêm Trụ có biển lửa nhiệt lượng & dải lụa lửa...).
+- **Hào quang Hơi Thở quanh Chibi & Thanh Nút Xuất Chiêu (`engine/kny_chibi_aura.js`)**: Nhân vật Chibi ở góc khung nhập chat tỏa hào quang nguyên tố động liên tục, kèm cụm nút **`⚔️ Hơi Thở ▾`** (chọn từng Thức), **`⚡ Xuất Chiêu`** (tung liên hoàn 1 chạm) và nút **`⚔️ Các Thức`** ngay trong hộp thoại NPC.
+- **56 Thức Hơi Thở Toàn Màn Hình & Âm thanh Kiếm Đạo (`engine/kny_breathing_skills.js`)**: Đầy đủ **4 Thức chuẩn nguyên tác cho mỗi nhân vật** (14 × 4 = 56 chiêu thức như *Thủy Long Sinh Sinh Lưu Chuyển*, *Thập Nhất Thức: Tĩnh*, *Cửu Thức: Luyện Ngục*, *Hỏa Lôi Thần*, *Nhật Vựng Chi Long*, *Vạn Đăng Chúc Phúc*...) kèm Banner thư pháp phát sáng kiểu điện ảnh và hiệu ứng âm thanh Web Audio (`🔊`/`🔇`).
+- **Local Asset HTTP Server (`127.0.0.1`) + Hybrid Payload (`~618 KB`)**: Tải tức thì toàn bộ hình nền 2K và Chibi SVG tách nền mà không làm nặng bộ nhớ của Electron; chuyển đổi giữa 16 chủ đề trong **0.02 giây**.
 - **Zero Live Blur (60/120fps)**: Sử dụng kính mờ dựng sẵn trên offscreen canvas thay vì `backdrop-filter: blur()` trực tiếp.
-- **NPC Đa Nhân Vật Động**: Tự động đổi Chibi góc khung chat, tiêu đề, màu sắc hộp thoại, các nút hành động đặc trưng và lời đáp Chat 2 chiều Tiếng Việt theo đúng nhân vật đang chọn.
 
 ---
 

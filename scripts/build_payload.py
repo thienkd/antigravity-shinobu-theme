@@ -169,10 +169,14 @@ def build_payload(
     themes_json = json.dumps(resolved_themes, ensure_ascii=False)
     compiled = engine_src.replace(PLACEHOLDER, themes_json, 1)
 
-    fx_modes_path = engine_path.parent / "kny_fx_modes.js"
-    if fx_modes_path.is_file() and "__AGY_KNY_FX_DRAWERS__ =" not in engine_src:
-        fx_src = fx_modes_path.read_text(encoding="utf-8")
-        compiled = f"{fx_src}\n{compiled}"
+    extra_modules = ["kny_fx_modes.js", "kny_breathing_skills.js", "kny_chibi_aura.js"]
+    prepends: list[str] = []
+    for mod_name in extra_modules:
+        mod_path = engine_path.parent / mod_name
+        if mod_path.is_file():
+            prepends.append(mod_path.read_text(encoding="utf-8"))
+    if prepends:
+        compiled = "\n".join(prepends) + "\n" + compiled
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(compiled, encoding="utf-8")

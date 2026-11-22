@@ -2157,6 +2157,12 @@
       if (rt.remindTimer) { clearInterval(rt.remindTimer); rt.remindTimer = 0; }
       rt.activeNpcKey = '';
     }
+    if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.teardown === 'function') {
+      try { window.__AGY_KNY_CHIBI_AURA__.teardown(); } catch (_) {}
+    }
+    if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.stopActiveSkill === 'function') {
+      try { window.__AGY_KNY_SKILLS__.stopActiveSkill(); } catch (_) {}
+    }
     const npcStyle = document.getElementById('antigravity-shinobu-npc-style');
     if (npcStyle) npcStyle.remove();
     const wrap = document.getElementById('agy-shinobu-npc-wrap');
@@ -2626,6 +2632,19 @@
 
       const welcomeList = Array.isArray(prof.dialogs.welcome) ? prof.dialogs.welcome : [String(prof.dialogs.welcome || '')];
       speakShinobuLine(welcomeList[0] || '', false);
+    }
+
+    if (window.__AGY_KNY_CHIBI_AURA__) {
+      const charHint = bTheme.fxMode || activeBubbleKey;
+      try {
+        window.__AGY_KNY_CHIBI_AURA__.mountChibiAura(composer, bTheme, charHint);
+        window.__AGY_KNY_CHIBI_AURA__.mountSkillTriggerUi(composer, wrap, bTheme, charHint, (skill) => {
+          const line = (skill && (skill.voiceLine || skill.quote)) || pickRandomLine('act1', '', prof);
+          if (line) {
+            speakShinobuLine(line, false);
+          }
+        });
+      } catch (_) {}
     }
 
     if (!rt.remindTimer) {

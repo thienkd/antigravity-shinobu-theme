@@ -124,10 +124,16 @@ function main() {
 
   let compiled = engineSrc.replace(PLACEHOLDER, () => JSON.stringify(resolved));
 
-  const fxModesPath = path.join(path.dirname(enginePath), 'kny_fx_modes.js');
-  if (fs.existsSync(fxModesPath) && !engineSrc.includes('__AGY_KNY_FX_DRAWERS__ =')) {
-    const fxSrc = fs.readFileSync(fxModesPath, 'utf8');
-    compiled = `${fxSrc}\n${compiled}`;
+  const extraModules = ['kny_fx_modes.js', 'kny_breathing_skills.js', 'kny_chibi_aura.js'];
+  const prepends = [];
+  for (const modName of extraModules) {
+    const modPath = path.join(path.dirname(enginePath), modName);
+    if (fs.existsSync(modPath)) {
+      prepends.push(fs.readFileSync(modPath, 'utf8'));
+    }
+  }
+  if (prepends.length > 0) {
+    compiled = `${prepends.join('\n')}\n${compiled}`;
   }
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
