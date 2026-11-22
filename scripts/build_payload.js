@@ -68,12 +68,14 @@ function resolveAssetValue(key, value, themesDir, inlineAll) {
     return encodeFileAsDataUri(assetPath);
   }
 
-  const fileSize = fs.statSync(assetPath).size;
+  const st = fs.statSync(assetPath);
+  const fileSize = st.size;
   if (HYBRID_INLINE_CANDIDATES.has(key) && fileSize < HYBRID_INLINE_MAX_BYTES) {
     return encodeFileAsDataUri(assetPath);
   }
 
-  return relPosix;
+  const ver = Math.floor(st.mtimeMs).toString(36);
+  return `${relPosix}?v=${ver}`;
 }
 
 function parseArgs(argv, repoRoot) {

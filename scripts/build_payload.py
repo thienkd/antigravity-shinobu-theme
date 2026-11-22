@@ -122,11 +122,13 @@ def resolve_asset_value(
     if rel_posix is None:
         return encode_asset_inline(asset_path, max_dim)
 
-    file_size = asset_path.stat().st_size
+    st = asset_path.stat()
+    file_size = st.st_size
     if key in HYBRID_INLINE_CANDIDATES and file_size < HYBRID_INLINE_MAX_BYTES:
         return encode_asset_inline(asset_path, max_dim)
 
-    return rel_posix
+    ver = hex(int(st.st_mtime * 1000))[2:]
+    return f"{rel_posix}?v={ver}"
 
 
 def build_payload(

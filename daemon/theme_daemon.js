@@ -46,7 +46,7 @@ function startAssetServer() {
         const server = http.createServer((req, res) => {
             const corsHeaders = {
                 'Access-Control-Allow-Origin': '*',
-                'Cache-Control': 'public, max-age=3600',
+                'Cache-Control': 'no-cache',
             };
 
             if (req.method === 'OPTIONS') {
@@ -102,10 +102,17 @@ function startAssetServer() {
 
                 const ext = path.extname(resolvedPath).toLowerCase();
                 const contentType = ASSET_MIME_TYPES[ext] || 'application/octet-stream';
+                const etag = `"${stat.size}-${Math.floor(stat.mtimeMs)}"`;
+                if (req.headers['if-none-match'] === etag) {
+                    res.writeHead(304, { ...corsHeaders, ETag: etag });
+                    res.end();
+                    return;
+                }
                 res.writeHead(200, {
                     ...corsHeaders,
                     'Content-Type': contentType,
                     'Content-Length': stat.size,
+                    ETag: etag,
                 });
 
                 if (req.method === 'HEAD') {

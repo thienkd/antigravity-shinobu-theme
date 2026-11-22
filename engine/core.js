@@ -78,7 +78,7 @@
     const userAvatar = localStorage.getItem(STORAGE_USER_AVATAR) ?? init.userAvatar ?? '';
     const agentAvatar = localStorage.getItem(STORAGE_AGENT_AVATAR) ?? init.agentAvatar ?? '';
     const rawBlur = localStorage.getItem(STORAGE_GLASS_BLUR) ?? init.glassBlur;
-    const glassBlur = rawBlur !== undefined && rawBlur !== null && rawBlur !== '' ? parseInt(rawBlur, 10) : 3;
+    const glassBlur = rawBlur !== undefined && rawBlur !== null && rawBlur !== '' ? parseInt(rawBlur, 10) : 0;
     const rawAvSize = localStorage.getItem(STORAGE_AVATAR_SIZE) ?? init.avatarSize;
     const avatarSize = rawAvSize !== undefined && rawAvSize !== null && rawAvSize !== '' ? parseInt(rawAvSize, 10) : 32;
     const rawAvRad = localStorage.getItem(STORAGE_AVATAR_RADIUS) ?? init.avatarRadius;
@@ -119,7 +119,9 @@
   // Pre-bake L-shaped header/sidebar glass blur once per theme/dimming change to avoid per-frame GPU backdrop readback
   function syncPrebakedGlass(wpUrl, overlayRgb, overlayAlpha, tintBg, blurStr) {
     const shell = document.querySelector('.agy-shell');
-    if (!wpUrl) {
+    const pxMatch = String(blurStr !== undefined ? blurStr : '0px').match(/(\d+(?:\.\d+)?)/);
+    const rawBlurNum = pxMatch ? parseFloat(pxMatch[1]) : 0;
+    if (!wpUrl || rawBlurNum <= 0.2) {
       if (shell) shell.style.removeProperty('--agy-l-glass-bg');
       return;
     }
@@ -136,17 +138,16 @@
     }
     img.onload = () => {
       try {
-        const w = 640;
-        const h = Math.max(180, Math.round((img.naturalHeight || 1440) * (w / (img.naturalWidth || 2560))));
+        const w = 1920;
+        const h = Math.max(360, Math.round((img.naturalHeight || 2160) * (w / (img.naturalWidth || 3840))));
         const canvas = document.createElement('canvas');
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        const pxMatch = String(blurStr !== undefined ? blurStr : '3px').match(/(\d+(?:\.\d+)?)/);
-        const scaledBlur = Math.max(0, Math.min(16, Math.round((pxMatch ? parseFloat(pxMatch[1]) : 3) * 0.75)));
+        const scaledBlur = Math.max(0, Math.min(18, Math.round(rawBlurNum * 0.85)));
         ctx.filter = scaledBlur > 0 ? `blur(${scaledBlur}px)` : 'none';
-        ctx.drawImage(img, -12, -12, w + 24, h + 24);
+        ctx.drawImage(img, -16, -16, w + 32, h + 32);
         ctx.filter = 'none';
         ctx.fillStyle = `rgba(${overlayRgb}, ${overlayAlpha})`;
         ctx.fillRect(0, 0, w, h);
@@ -154,7 +155,7 @@
           ctx.fillStyle = tintBg;
           ctx.fillRect(0, 0, w, h);
         }
-        const baked = canvas.toDataURL('image/webp', 0.85);
+        const baked = canvas.toDataURL('image/webp', 0.92);
         window.__AGY_BLUR_CACHE__[key] = baked;
         const curShell = document.querySelector('.agy-shell');
         if (curShell) curShell.style.setProperty('--agy-l-glass-bg', 'url("' + baked + '")');
@@ -634,26 +635,7 @@
     }
 
     const sidePanelCss = st.wpEnabled ? `
-      /* Frosted pre-baked glass + dark/light reading scrim for right-side Artifact / Text / Diff split panels */
-      ${useUnifiedGlass ? `
-      .agy-shell[data-agy-side-glass="1"]::before {
-        clip-path: polygon(
-          evenodd,
-          0 0,
-          100% 0,
-          100% var(--agy-hdr-h, 75px),
-          var(--agy-sidebar-w, 256px) var(--agy-hdr-h, 75px),
-          var(--agy-sidebar-w, 256px) 100%,
-          0 100%,
-          0 0,
-          var(--agy-side-l, 100%) var(--agy-side-t, 75px),
-          var(--agy-side-r, 100%) var(--agy-side-t, 75px),
-          var(--agy-side-r, 100%) var(--agy-side-b, 100%),
-          var(--agy-side-l, 100%) var(--agy-side-b, 100%),
-          var(--agy-side-l, 100%) var(--agy-side-t, 75px)
-        ) !important;
-      }
-      ` : ''}
+      /* Keep right-side Artifact / Text / Diff split panels crystal-clear over native 4K backdrop (never cover right character with blurred canvas) */
       body:not([data-has-browser-hole="true"]) .agy-shell [data-side-panel-body="true"]:not([data-has-browser-hole="true"]):not(:has([data-browser-hole]:not([data-browser-hole="false"]))) {
         background: ${mainTheme.aiCardBg || `rgba(${overlayRgb}, 0.72)`} !important;
         ${isLight ? `color: ${uiInk} !important;` : ''}
