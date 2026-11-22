@@ -19,7 +19,9 @@ const { StringDecoder } = require('string_decoder');
 const { spawn, execFileSync } = require('child_process');
 
 if (typeof globalThis.WebSocket !== 'function') {
-    console.error('[theme-daemon] Node.js >= 22 with built-in WebSocket is required.');
+    console.error(
+        `[theme-daemon] Node.js >= 22 with built-in WebSocket is required (found ${process.version} at ${process.execPath}).`
+    );
     process.exit(1);
 }
 
@@ -109,17 +111,54 @@ function stripProtoKeys(obj, depth = 0) {
     return Object.assign({}, clean);
 }
 
+function buildPathRedactionRegexes(rawPath) {
+    if (typeof rawPath !== 'string') return [];
+    const trimmed = rawPath.replace(/[/\\]+$/, '');
+    if (trimmed.length <= 1 || /^[A-Za-z]:$/.test(trimmed)) return [];
+    const baseForms = new Set([trimmed]);
+    try {
+        baseForms.add(trimmed.normalize('NFC'));
+    } catch (_) {}
+    try {
+        baseForms.add(trimmed.normalize('NFD'));
+    } catch (_) {}
+
+    const variants = new Set();
+    for (const form of baseForms) {
+        if (!form || form.length <= 1) continue;
+        const fwd = form.split('\\').join('/');
+        const back = form.split('/').join('\\');
+        variants.add(fwd);
+        variants.add(back);
+        try {
+            const enc = encodeURI(fwd);
+            if (enc && enc.length > 1) variants.add(enc);
+        } catch (_) {}
+    }
+
+    return Array.from(variants)
+        .sort((a, b) => b.length - a.length)
+        .map((v) => new RegExp(v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'));
+}
+
 function redactLog(msg) {
     let text = String(msg == null ? '' : msg);
-    const home = os.homedir();
-    if (home) {
-        const fwd = home.split('\\').join('/').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const back = home.split('/').join('\\').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        if (back) text = text.replace(new RegExp(back, 'gi'), '~');
-        if (fwd) text = text.replace(new RegExp(fwd, 'gi'), '~');
-    }
-    text = text.replace(/\?(?:project|tab|folder|workspace)=[^\s)"']*/gi, '?[redacted-query]');
+    text = text.replace(/file:\/\/\/[^\s&)"']*/gi, 'file:///[redacted-path]');
     text = text.replace(/file%3A%2F%2F[^\s&)"']*/gi, 'file://[redacted-path]');
+
+    const home = os.homedir();
+    if (home && home.length > 1) {
+        for (const re of buildPathRedactionRegexes(home)) {
+            text = text.replace(re, '~');
+        }
+    }
+    if (ROOT_DIR && ROOT_DIR.length > 1) {
+        for (const re of buildPathRedactionRegexes(ROOT_DIR)) {
+            text = text.replace(re, '[repo-root]');
+        }
+    }
+
+    text = text.replace(/\?(?:project|tab|folder|workspace)=[^\s)"']*/gi, '?[redacted-query]');
     text = text.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '[redacted-id]');
     return text;
 }
@@ -1255,11 +1294,29 @@ function resolvePortFile() {
         candidates = [
             path.join(xdgConfig, 'antigravity', 'DevToolsActivePort'),
             path.join(xdgConfig, 'Antigravity', 'DevToolsActivePort'),
+            path.join(home, 'snap', 'antigravity', 'current', '.config', 'Antigravity', 'DevToolsActivePort'),
+            path.join(home, 'snap', 'antigravity', 'current', '.config', 'antigravity', 'DevToolsActivePort'),
         ];
+        const flatpakBase = path.join(home, '.var', 'app');
+        try {
+            if (fs.existsSync(flatpakBase)) {
+                for (const entry of fs.readdirSync(flatpakBase)) {
+                    if (/antigravity/i.test(entry)) {
+                        candidates.push(
+                            path.join(flatpakBase, entry, 'config', 'Antigravity', 'DevToolsActivePort'),
+                            path.join(flatpakBase, entry, 'config', 'antigravity', 'DevToolsActivePort')
+                        );
+                    }
+                }
+            }
+        } catch (_) {}
     }
 
     return candidates.find((p) => fs.existsSync(p)) || candidates[0];
 }
+
+const NODE_PROC_RE = /\bnode(?:js|\d+)?(?:\.exe)?\b/i;
+const DAEMON_SCRIPT_RE = /theme_daemon\.js/;
 
 function isPidAlive(pid) {
     try {
@@ -1270,10 +1327,63 @@ function isPidAlive(pid) {
     }
 }
 
+function isVerifiedDaemonProcess(pid) {
+    if (!Number.isInteger(pid) || pid <= 0 || !isPidAlive(pid)) return false;
+
+    if (process.platform === 'win32') {
+        try {
+            const out = execFileSync(
+                'powershell.exe',
+                [
+                    '-NoProfile',
+                    '-NonInteractive',
+                    '-Command',
+                    `$p = Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" -ErrorAction SilentlyContinue; if ($p) { "$($p.Name)|$($p.CommandLine)" }`,
+                ],
+                { encoding: 'utf8', windowsHide: true, timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
+            ).trim();
+            if (!out) return false;
+            return NODE_PROC_RE.test(out) && DAEMON_SCRIPT_RE.test(out);
+        } catch (_) {
+            try {
+                const tl = execFileSync('tasklist.exe', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], {
+                    encoding: 'utf8',
+                    windowsHide: true,
+                    timeout: 4000,
+                    stdio: ['ignore', 'pipe', 'ignore'],
+                }).trim();
+                return NODE_PROC_RE.test(tl);
+            } catch (__) {
+                return false;
+            }
+        }
+    }
+
+    if (process.platform === 'linux') {
+        try {
+            const rawCmd = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0+/g, ' ').trim();
+            if (rawCmd) {
+                return NODE_PROC_RE.test(rawCmd) && DAEMON_SCRIPT_RE.test(rawCmd);
+            }
+        } catch (_) {}
+    }
+
+    try {
+        const cmdline = execFileSync('ps', ['-ww', '-p', String(pid), '-o', 'command='], {
+            encoding: 'utf8',
+            timeout: 3000,
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+        return NODE_PROC_RE.test(cmdline) && DAEMON_SCRIPT_RE.test(cmdline);
+    } catch (_) {
+        return false;
+    }
+}
+
 function acquirePidLock() {
     if (fs.existsSync(PID_FILE)) {
         const existingPid = parseInt(stripBom(fs.readFileSync(PID_FILE, 'utf8')).trim(), 10);
-        if (existingPid && existingPid !== process.pid && isPidAlive(existingPid)) {
+        if (existingPid && existingPid !== process.pid && isVerifiedDaemonProcess(existingPid)) {
             log(`Another daemon instance is already running (PID ${existingPid}). Exiting.`);
             process.exit(0);
         }
@@ -1780,12 +1890,14 @@ async function scanPages() {
     }
 }
 
+let payloadWatcher = null;
+
 function watchPayload() {
     try {
         if (!fs.existsSync(DIST_DIR)) {
             fs.mkdirSync(DIST_DIR, { recursive: true });
         }
-        fs.watch(DIST_DIR, (_eventType, filename) => {
+        payloadWatcher = fs.watch(DIST_DIR, (_eventType, filename) => {
             if (filename && filename !== 'theme_payload.js') return;
             clearTimeout(reloadTimer);
             reloadTimer = setTimeout(() => {
@@ -1795,6 +1907,15 @@ function watchPayload() {
                 }
             }, 250);
         });
+        payloadWatcher.on('error', (err) => {
+            log(`fs.watch error (${err && err.code ? err.code : 'ERR'}): ${err ? err.message : err}`);
+            if (payloadWatcher) {
+                try {
+                    payloadWatcher.close();
+                } catch (_) {}
+                payloadWatcher = null;
+            }
+        });
     } catch (err) {
         log(`fs.watch skipped: ${err.message}`);
     }
@@ -1802,6 +1923,13 @@ function watchPayload() {
 
 function shutdown(signal) {
     log(`Shutting down on ${signal}.`);
+    clearTimeout(reloadTimer);
+    if (payloadWatcher) {
+        try {
+            payloadWatcher.close();
+        } catch (_) {}
+        payloadWatcher = null;
+    }
     while (sseClients.length > 0) {
         const client = sseClients.pop();
         if (client) client.close();

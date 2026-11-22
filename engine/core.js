@@ -14,6 +14,11 @@
 
   const MAX_IMAGE_UPLOAD_BYTES = 15 * 1024 * 1024;
   const ALLOWED_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+  const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(String(navigator.platform || navigator.userAgent || ''));
+  const BLUR_CACHE_MAX_ENTRIES = 12;
+
+  let transientOverrideState = null;
+  let blurSliderDebounceTimer = 0;
 
   function isValidImageUploadFile(file) {
     return Boolean(
@@ -189,6 +194,10 @@
     };
   }
 
+  function getEffectiveState() {
+    return transientOverrideState ? { ...transientOverrideState } : getState();
+  }
+
   // Downscale user/agent avatar uploads to 192x192 WebP once (strictly validated <= 15MB & image MIME; aborts safely on decode error)
   function compressAvatarFile(file, callback) {
     if (!isValidImageUploadFile(file)) return;
@@ -272,8 +281,12 @@
     }
     const key = `${safeWp.slice(0, 64)}|${safeWp.length}|${overlayRgb}|${overlayAlpha.toFixed(3)}|${tintBg}|${blurStr}`;
     window.__AGY_BLUR_CACHE__ = window.__AGY_BLUR_CACHE__ || {};
-    const cached = window.__AGY_BLUR_CACHE__[key];
+    const cache = window.__AGY_BLUR_CACHE__;
+    const cached = cache[key];
     if (cached) {
+      // Refresh LRU insertion order
+      delete cache[key];
+      cache[key] = cached;
       if (shell) shell.style.setProperty('--agy-l-glass-bg', 'url("' + cached + '")');
       return;
     }
@@ -303,7 +316,14 @@
         const rawBaked = canvas.toDataURL('image/webp', 0.92);
         const baked = safeCssUrl(rawBaked);
         if (!baked) return;
-        window.__AGY_BLUR_CACHE__[key] = baked;
+        const store = window.__AGY_BLUR_CACHE__ || (window.__AGY_BLUR_CACHE__ = {});
+        if (key in store) delete store[key];
+        const existingKeys = Object.keys(store);
+        while (existingKeys.length >= BLUR_CACHE_MAX_ENTRIES) {
+          const oldest = existingKeys.shift();
+          if (oldest !== undefined) delete store[oldest];
+        }
+        store[key] = baked;
         const curShell = document.querySelector('.agy-shell');
         if (curShell) curShell.style.setProperty('--agy-l-glass-bg', 'url("' + baked + '")');
       } catch (e) {}
@@ -312,7 +332,7 @@
   }
 
   function getActiveMasterPersona(stOverride) {
-    const st = stOverride || getState();
+    const st = stOverride || getEffectiveState();
     if (typeof window !== 'undefined' && window.__AGY_THEME_FORGE__ && typeof window.__AGY_THEME_FORGE__.getPersona === 'function') {
       return window.__AGY_THEME_FORGE__.getPersona(st.masterPersona || 'yoriichi');
     }
@@ -329,7 +349,9 @@
     };
   }
 
-  function applyTheme(overrides = {}) {
+  function applyTheme(overrides = {}, applyOpts = {}) {
+    const isTransient = Boolean(applyOpts && applyOpts.transient);
+    const skipSaveDisk = Boolean(applyOpts && applyOpts.skipSaveDisk);
     const st = { ...getState(), ...overrides };
     st.dimming = clampInt(st.dimming, 15, 92, 69);
     st.glassBlur = clampInt(st.glassBlur, 0, 16, 0);
@@ -339,35 +361,42 @@
     st.transparentWorld = st.transparentWorld !== false;
     st.masterPersona = String(st.masterPersona || 'yoriichi').replace(/[^a-zA-Z0-9_-]/g, '') || 'yoriichi';
 
-    try {
-      localStorage.setItem(STORAGE_THEME, st.themeName);
-      localStorage.setItem(STORAGE_BUBBLE, st.bubbleName);
-      localStorage.setItem(STORAGE_INPUT, st.inputStyle);
-      localStorage.setItem(STORAGE_DIMMING, String(st.dimming));
-      localStorage.setItem(STORAGE_WP_ENABLED, String(st.wpEnabled));
-      localStorage.setItem(STORAGE_TRANSPARENT_WORLD, String(st.transparentWorld));
-      localStorage.setItem(STORAGE_MASTER_PERSONA, st.masterPersona);
-      if (overrides.customWp !== undefined) {
-        localStorage.setItem(STORAGE_CUSTOM_WP, overrides.customWp ? safeCssUrl(overrides.customWp) : '');
-      }
-      if (overrides.userAvatar !== undefined) {
-        localStorage.setItem(STORAGE_USER_AVATAR, overrides.userAvatar === 'none' ? 'none' : safeCssUrl(overrides.userAvatar));
-      }
-      if (overrides.agentAvatar !== undefined) {
-        localStorage.setItem(STORAGE_AGENT_AVATAR, overrides.agentAvatar === 'none' ? 'none' : safeCssUrl(overrides.agentAvatar));
-      }
-      if (overrides.glassBlur !== undefined) {
-        localStorage.setItem(STORAGE_GLASS_BLUR, String(st.glassBlur));
-      }
-      if (overrides.avatarSize !== undefined) {
-        localStorage.setItem(STORAGE_AVATAR_SIZE, String(st.avatarSize));
-      }
-      if (overrides.avatarRadius !== undefined) {
-        localStorage.setItem(STORAGE_AVATAR_RADIUS, String(st.avatarRadius));
-      }
-    } catch (e) {}
+    if (isTransient) {
+      transientOverrideState = { ...st };
+    } else {
+      transientOverrideState = null;
+      try {
+        localStorage.setItem(STORAGE_THEME, st.themeName);
+        localStorage.setItem(STORAGE_BUBBLE, st.bubbleName);
+        localStorage.setItem(STORAGE_INPUT, st.inputStyle);
+        localStorage.setItem(STORAGE_DIMMING, String(st.dimming));
+        localStorage.setItem(STORAGE_WP_ENABLED, String(st.wpEnabled));
+        localStorage.setItem(STORAGE_TRANSPARENT_WORLD, String(st.transparentWorld));
+        localStorage.setItem(STORAGE_MASTER_PERSONA, st.masterPersona);
+        if (overrides.customWp !== undefined) {
+          localStorage.setItem(STORAGE_CUSTOM_WP, overrides.customWp ? safeCssUrl(overrides.customWp) : '');
+        }
+        if (overrides.userAvatar !== undefined) {
+          localStorage.setItem(STORAGE_USER_AVATAR, overrides.userAvatar === 'none' ? 'none' : safeCssUrl(overrides.userAvatar));
+        }
+        if (overrides.agentAvatar !== undefined) {
+          localStorage.setItem(STORAGE_AGENT_AVATAR, overrides.agentAvatar === 'none' ? 'none' : safeCssUrl(overrides.agentAvatar));
+        }
+        if (overrides.glassBlur !== undefined) {
+          localStorage.setItem(STORAGE_GLASS_BLUR, String(st.glassBlur));
+        }
+        if (overrides.avatarSize !== undefined) {
+          localStorage.setItem(STORAGE_AVATAR_SIZE, String(st.avatarSize));
+        }
+        if (overrides.avatarRadius !== undefined) {
+          localStorage.setItem(STORAGE_AVATAR_RADIUS, String(st.avatarRadius));
+        }
+      } catch (e) {}
 
-    SEC.saveConfigSecure(st);
+      if (!skipSaveDisk) {
+        SEC.saveConfigSecure(st);
+      }
+    }
     if (typeof syncTransparentWorldSetting === 'function') {
       syncTransparentWorldSetting(st.transparentWorld);
     }
@@ -1141,6 +1170,20 @@
         backdrop-filter: none !important;
       }
 
+      #agy-custom-theme-modal-backdrop {
+        -webkit-app-region: no-drag !important;
+      }
+      @media (max-width: 680px) {
+        #agy-custom-theme-modal-backdrop {
+          padding: 12px !important;
+        }
+        #agy-theme-scroll-container {
+          padding: 16px 16px 36px 16px !important;
+        }
+        #agy-custom-theme-modal-backdrop .agy-modal-grid-2 {
+          grid-template-columns: 1fr !important;
+        }
+      }
       #agy-custom-theme-modal-dialog {
         background: ${modalBg} !important;
         border-color: ${mainBorderColor} !important;
@@ -1163,10 +1206,12 @@
     scheduleTitleBarSync(st);
     syncLiveWallpaperFx(st, mainTheme);
     syncShinobuNpc(st, bubbleTheme);
+    syncTokenHud(st);
   }
 
   function syncTitleBarOverlay(stOverride) {
-    const st = stOverride || getState();
+    if (IS_MAC) return;
+    const st = stOverride || getEffectiveState();
     const activeTh = THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
     if (window.electronNative && typeof window.electronNative.setTitleBarOverlay === 'function') {
       try {
@@ -1187,7 +1232,8 @@
 
   function scheduleTitleBarSync(stOverride) {
     clearTitleBarTimers();
-    const st = stOverride || getState();
+    if (IS_MAC) return;
+    const st = stOverride || getEffectiveState();
     syncTitleBarOverlay(st);
     [300, 900, 2000, 4000, 7000].forEach(ms => {
       window.__AGY_TBO_TIMERS__.push(setTimeout(() => syncTitleBarOverlay(), ms));
@@ -1195,15 +1241,52 @@
   }
 
   function removeCustomTheme() {
+    transientOverrideState = null;
+    if (window.__AGY_MODAL_OBSERVER__) {
+      try { window.__AGY_MODAL_OBSERVER__.disconnect(); } catch (e) {}
+      window.__AGY_MODAL_OBSERVER__ = null;
+    }
+    if (window.__AGY_TICK_RAF__) {
+      cancelAnimationFrame(window.__AGY_TICK_RAF__);
+      window.__AGY_TICK_RAF__ = 0;
+    }
+    if (window.__AGY_SHELL_RO__) {
+      try { window.__AGY_SHELL_RO__.disconnect(); } catch (e) {}
+      window.__AGY_SHELL_RO__ = null;
+    }
+    if (window.__AGY_SCROLL_AC__) {
+      try { window.__AGY_SCROLL_AC__.abort(); } catch (e) {}
+      window.__AGY_SCROLL_AC__ = null;
+    }
     clearTitleBarTimers();
+    if (blurSliderDebounceTimer) {
+      clearTimeout(blurSliderDebounceTimer);
+      blurSliderDebounceTimer = 0;
+    }
     teardownLiveWallpaperFx();
     teardownShinobuNpc();
     if (typeof teardownTransparentWorldFlow === 'function') {
       teardownTransparentWorldFlow();
     }
-    if (window.__AGY_SCROLL_AC__) {
-      try { window.__AGY_SCROLL_AC__.abort(); } catch (e) {}
-    }
+    [
+      window.__AGY_TOKEN_HUD__,
+      window.__AGY_SQUAD_RAID__,
+      window.__AGY_BIO_AUDIO__,
+      window.__AGY_CINEMA_DIRECTOR__,
+      window.__AGY_KNY_CHIBI_AURA__,
+      window.__AGY_KNY_SKILLS__
+    ].forEach((mod) => {
+      if (!mod) return;
+      try {
+        if (typeof mod.teardown === 'function') mod.teardown();
+        else if (typeof mod.destroy === 'function') mod.destroy();
+      } catch (e) {}
+    });
+    document.querySelectorAll('[data-agy-scroll-bound]').forEach(el => delete el.dataset.agyScrollBound);
+    document.querySelectorAll('[data-agy-tbo-mounted]').forEach(el => delete el.dataset.agyTboMounted);
+    document.querySelectorAll('[data-agy-npc-key-bound]').forEach(el => delete el.dataset.agyNpcKeyBound);
+    document.querySelectorAll('.agy-yoriichi-msg-hit').forEach(el => el.remove());
+
     const styleEl = document.getElementById('antigravity-custom-theme-active');
     if (styleEl) styleEl.remove();
     const navBtn = document.getElementById('agy-custom-theme-sidebar-btn');
@@ -1215,10 +1298,20 @@
     const shell = document.querySelector('.agy-shell');
     if (shell) {
       delete shell.dataset.agyHoleActive;
+      delete shell.dataset.agySideGlass;
+      delete shell.dataset.agyTboMounted;
       shell.style.removeProperty('--agy-hole-clip');
       shell.style.removeProperty('--agy-l-glass-bg');
+      shell.style.removeProperty('--agy-sidebar-w');
+      shell.style.removeProperty('--agy-hdr-h');
+      shell.style.removeProperty('--agy-side-l');
+      shell.style.removeProperty('--agy-side-t');
+      shell.style.removeProperty('--agy-side-r');
+      shell.style.removeProperty('--agy-side-b');
     }
-    if (window.electronNative && typeof window.electronNative.setTitleBarOverlay === 'function') {
+    window.__AGY_HOLE_EL__ = null;
+    window.__AGY_SIDE_EL__ = null;
+    if (!IS_MAC && window.electronNative && typeof window.electronNative.setTitleBarOverlay === 'function') {
       try {
         window.electronNative.setTitleBarOverlay({ color: '#111114', symbolColor: '#f8fafc' });
       } catch (e) {}
@@ -1228,10 +1321,37 @@
   window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__ = applyTheme;
   window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__ = removeCustomTheme;
   window.__ANTIGRAVITY_OPEN_THEME_MODAL__ = openCustomThemeModal;
-
-  teardownLiveWallpaperFx();
-  teardownShinobuNpc();
-  applyTheme();
+  window.__AGY_THEME_CORE__ = {
+    getThemeKeys: () => [...THEME_KEYS],
+    getSnapshot: () => ({ ...getState() }),
+    applyTransientTheme: (themeKey) => {
+      const q = String(themeKey || '').trim();
+      if (!q) return false;
+      const qLower = q.toLowerCase();
+      const matched = THEMES[q]
+        ? q
+        : THEME_KEYS.find((k) => String(k || '').toLowerCase().includes(qLower));
+      if (!matched || !THEMES[matched]) return false;
+      const baseSt = getState();
+      const picked = THEMES[matched] || {};
+      const nextDim = picked.defaultDimming !== undefined ? picked.defaultDimming : 36;
+      applyTheme({
+        ...baseSt,
+        themeName: matched,
+        bubbleName: matched,
+        customWp: '',
+        dimming: nextDim,
+        wpEnabled: true
+      }, { transient: true });
+      return true;
+    },
+    restoreSnapshot: (snap) => {
+      transientOverrideState = null;
+      const restored = (snap && typeof snap === 'object') ? { ...getState(), ...snap } : getState();
+      applyTheme(restored, { skipSaveDisk: true });
+      return true;
+    }
+  };
 
   function openCustomThemeModal() {
     let backdrop = document.getElementById('agy-custom-theme-modal-backdrop');
@@ -1248,10 +1368,11 @@
         padding: 32px;
         background: rgba(0, 0, 0, 0.65);
         backdrop-filter: blur(10px);
+        -webkit-app-region: no-drag;
       `;
 
       backdrop.innerHTML = `
-        <div id="agy-custom-theme-modal-dialog" style="background: rgba(16, 12, 11, 0.97); border: 1.2px solid rgba(212, 148, 106, 0.35); border-radius: 18px; width: 100%; max-width: 900px; height: 86vh; max-height: 860px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.9), 0 0 32px rgba(224, 142, 85, 0.25); font-family: system-ui, -apple-system, sans-serif;">
+        <div id="agy-custom-theme-modal-dialog" style="background: rgba(16, 12, 11, 0.97); border: 1.2px solid rgba(212, 148, 106, 0.35); border-radius: 18px; width: 100%; max-width: 900px; height: 86vh; max-height: 860px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.9), 0 0 32px rgba(224, 142, 85, 0.25); font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;">
           <div id="agy-custom-theme-modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 18px 26px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: rgba(22, 16, 14, 0.85);">
             <div style="display: flex; align-items: center; gap: 10px;">
               <span style="font-size: 17px; font-weight: 600; color: #f4f4f5; letter-spacing: -0.2px;">Custom Theme Studio</span>
@@ -1271,11 +1392,13 @@
       backdrop.querySelector('#agy-theme-modal-close-btn').addEventListener('click', () => {
         backdrop.style.display = 'none';
       });
+      const modalKeyOpts = window.__AGY_SCROLL_AC__ ? { signal: window.__AGY_SCROLL_AC__.signal } : undefined;
       window.addEventListener('keydown', (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
         if (e.key === 'Escape' && backdrop.style.display !== 'none') {
           backdrop.style.display = 'none';
         }
-      });
+      }, modalKeyOpts);
     }
 
     backdrop.style.display = 'flex';
@@ -1486,7 +1609,7 @@
         <div style="margin-bottom: 28px;">
           <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">User Chat Bubble</div>
           <div style="font-size: 12.5px; color: #a1a1aa; margin-bottom: 14px;">Mix and match bubble frame &amp; ornament independently from the active wallpaper.</div>
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+          <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
             ${THEME_KEYS.map(name => {
               const th = THEMES[name] || {};
               const safeNameHtml = SEC.escapeHtml(name);
@@ -1523,7 +1646,7 @@
         <div style="margin-bottom: 28px;">
           <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">Composer Style</div>
           <div style="font-size: 12.5px; color: #a1a1aa; margin-bottom: 14px;">Customize the chat input frame without affecting keyboard shortcuts or attachments.</div>
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+          <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
             ${Object.entries(INPUT_STYLES).map(([key, item]) => {
               const isSelected = key === st.inputStyle;
               const activeBubbleTh = THEMES[st.bubbleName] || mainTheme;
@@ -1578,7 +1701,7 @@
               <button type="button" class="agy-filter-chip" data-filter="classic" style="padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #e4e4e7; font-size: 11.5px; cursor: pointer;">✨ Khác</button>
             </div>
           </div>
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+          <div class="agy-modal-grid-2" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
             ${THEME_KEYS.map(name => {
               const th = THEMES[name] || {};
               const safeNameHtml = SEC.escapeHtml(name);
@@ -1760,8 +1883,9 @@
 
       const handleForgeFile = (file) => {
         if (!file) return;
+        const activePersonaId = getState().masterPersona || 'yoriichi';
         showForgeStatus('⏳ Đang quét histogram 64×64 & giải phương trình màu OKLCH...', false);
-        forge.forgeFromWallpaperFile(file).then((res) => {
+        forge.forgeFromWallpaperFile(file, { personaId: activePersonaId }).then((res) => {
           pendingForged = res;
           if (forgeBench) forgeBench.style.display = 'flex';
           if (forgeName) forgeName.value = res.suggestedName;
@@ -1912,7 +2036,11 @@
       blurSlider.addEventListener('input', (e) => {
         const v = clampInt(e.target.value, 0, 16, 0);
         if (blurLabel) blurLabel.textContent = v + 'px';
-        applyTheme({ glassBlur: v });
+        clearTimeout(blurSliderDebounceTimer);
+        blurSliderDebounceTimer = setTimeout(() => {
+          blurSliderDebounceTimer = 0;
+          applyTheme({ glassBlur: v });
+        }, 60);
       });
     }
 
@@ -2350,13 +2478,15 @@
     if (!shell) return;
     if (!shell.dataset.agyTboMounted) {
       shell.dataset.agyTboMounted = '1';
-      scheduleTitleBarSync();
+      if (!IS_MAC) scheduleTitleBarSync();
     }
     if (!window.__AGY_SHELL_RO__ && typeof ResizeObserver !== 'undefined') {
       const ro = new ResizeObserver(syncShellMetrics);
       ro.observe(shell);
       const sidebarPane = shell.querySelector('[data-testid="sidebar-split"]')?.firstElementChild;
       if (sidebarPane) ro.observe(sidebarPane);
+      const titleBar = shell.querySelector('[class*="@container/titlebar"]');
+      if (titleBar) ro.observe(titleBar);
       window.__AGY_SHELL_RO__ = ro;
     }
     syncShellMetrics();
@@ -2458,7 +2588,8 @@
   function bindTransparentWorldListeners(signal) {
     twEnabledFlag = getState().transparentWorld !== false;
     window.addEventListener('keydown', (e) => {
-      if (!twEnabledFlag || !e || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!e || e.isComposing || e.keyCode === 229) return;
+      if (!twEnabledFlag || e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === 'Shift' || e.key === 'CapsLock' || e.key === 'Tab' || e.key === 'Escape') return;
       const t = e.target;
       if (!t || !t.tagName) return;
@@ -2558,7 +2689,7 @@
   }
 
   function syncLiveWallpaperFx(stOverride, themeOverride) {
-    const st = stOverride || getState();
+    const st = stOverride || getEffectiveState();
     const th = themeOverride || THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
     const fxMode = th.fxMode || (th.liveWallpaperFx ? 'wisteria' : '');
     const shell = document.querySelector('.agy-shell');
@@ -2602,6 +2733,7 @@
 
     let width = 1280;
     let height = 720;
+    let currentDpr = 1;
     let viewSkipped = false;
     let blurPauseTimer = 0;
     const reducedMq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -2612,6 +2744,7 @@
     function resize() {
       const rect = shell.getBoundingClientRect();
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      currentDpr = dpr;
       width = Math.max(320, Math.round(rect.width || window.innerWidth || 1280));
       height = Math.max(240, Math.round(rect.height || window.innerHeight || 720));
       canvas.width = Math.round(width * dpr);
@@ -2635,6 +2768,8 @@
     }
 
     function drawStaticGlowFrame() {
+      const liveDpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      if (Math.abs(liveDpr - currentDpr) > 0.01) resize();
       if (drawer && typeof drawer.drawStatic === 'function') {
         drawer.drawStatic(ctx, width, height);
       } else {
@@ -2648,6 +2783,8 @@
         drawStaticGlowFrame();
         return;
       }
+      const liveDpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      if (Math.abs(liveDpr - currentDpr) > 0.01) resize();
       if (drawer && typeof drawer.render === 'function') {
         drawer.render(ctx, width, height, now);
       } else {
@@ -2717,6 +2854,34 @@
     rt.fxCleanups.push(() => window.removeEventListener('focus', wakeFromFocusOrHover));
     rt.fxCleanups.push(() => window.removeEventListener('mouseenter', wakeFromFocusOrHover));
     rt.fxCleanups.push(() => document.removeEventListener('visibilitychange', onVis));
+
+    let dprMediaCleanup = null;
+    const watchDisplayDprChange = () => {
+      if (dprMediaCleanup) {
+        try { dprMediaCleanup(); } catch (_) {}
+        dprMediaCleanup = null;
+      }
+      if (!window.matchMedia) return;
+      try {
+        const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+        const onDprFlip = () => {
+          resize();
+          if (!shouldAnimate()) drawStaticGlowFrame();
+          watchDisplayDprChange();
+        };
+        if (typeof mq.addEventListener === 'function') {
+          mq.addEventListener('change', onDprFlip, { once: true });
+          dprMediaCleanup = () => mq.removeEventListener('change', onDprFlip);
+        }
+      } catch (_) {}
+    };
+    watchDisplayDprChange();
+    rt.fxCleanups.push(() => {
+      if (dprMediaCleanup) {
+        try { dprMediaCleanup(); } catch (_) {}
+        dprMediaCleanup = null;
+      }
+    });
 
     if (typeof document.hasFocus === 'function' && !document.hasFocus()) {
       scheduleBlurArbitration();
@@ -2814,7 +2979,7 @@
   }
 
   function getActiveNpcProfile(bThemeOverride) {
-    const st = getState();
+    const st = getEffectiveState();
     const bTheme = bThemeOverride || THEMES[st.bubbleName] || THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
     const def = getDefaultNpcProfile();
     if (!bTheme.npc || typeof bTheme.npc !== 'object') return def;
@@ -2946,6 +3111,7 @@
     const wrap = document.getElementById('agy-shinobu-npc-wrap');
     if (wrap) wrap.remove();
     document.querySelectorAll('.agy-chibi-hitbox').forEach(el => el.remove());
+    document.querySelectorAll('[data-agy-npc-key-bound]').forEach(el => delete el.dataset.agyNpcKeyBound);
   }
 
   function ensureShinobuNpcStyles() {
@@ -2979,7 +3145,7 @@
         height: 0;
         overflow: visible;
         z-index: 58;
-        font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
       }
       .agy-npc-badge {
         position: absolute;
@@ -3235,7 +3401,7 @@
   }
 
   function syncShinobuNpc(stOverride, bubbleThemeOverride) {
-    const st = stOverride || getState();
+    const st = stOverride || getEffectiveState();
     const activeBubbleKey = st.bubbleName || st.themeName || DEFAULT_THEME_KEY;
     const bTheme = bubbleThemeOverride || THEMES[activeBubbleKey] || THEMES[DEFAULT_THEME_KEY] || {};
     if (st.inputStyle === 'minimal' || !bTheme.isChibiNpc) {
@@ -3259,7 +3425,7 @@
         hit.innerHTML = '<i aria-hidden="true"></i>';
         hit.addEventListener('click', (e) => {
           e.stopPropagation();
-          const curSt = getState();
+          const curSt = getEffectiveState();
           const curPersona = getActiveMasterPersona(curSt);
           const skillCharId = curPersona.skillId || 'yoriichi';
           const actSticker = (curSt.masterPersona && curSt.masterPersona !== 'yoriichi')
@@ -3316,10 +3482,14 @@
 
     if (!composer.dataset.agyNpcKeyBound) {
       composer.dataset.agyNpcKeyBound = '1';
+      const npcKeyOpts = window.__AGY_SCROLL_AC__
+        ? { capture: true, signal: window.__AGY_SCROLL_AC__.signal }
+        : true;
       composer.addEventListener('keydown', (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
         if (e.target && e.target.closest && e.target.closest('#agy-shinobu-npc-wrap')) return;
         const now = Date.now();
-        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+        if (e.key === 'Enter' && !e.shiftKey) {
           setTimeout(() => {
             if (!rt.npcCollapsed) {
               speakShinobuLine(pickRandomLine('sent', ''), false);
@@ -3332,7 +3502,7 @@
             speakShinobuLine(pickRandomLine('typing', ''), false);
           }
         }
-      }, true);
+      }, npcKeyOpts);
     }
 
     const compositeNpcKey = `${activeBubbleKey}::${st.masterPersona || 'yoriichi'}`;
@@ -3479,9 +3649,12 @@
       ['keydown', 'keyup', 'keypress'].forEach(evtName => {
         chatInput.addEventListener(evtName, (e) => {
           e.stopPropagation();
-          if (evtName === 'keydown' && e.key === 'Escape') {
-            rt.npcChatOpen = false;
-            syncChatVisibility(false);
+          if (evtName === 'keydown') {
+            if (e.isComposing || e.keyCode === 229) return;
+            if (e.key === 'Escape') {
+              rt.npcChatOpen = false;
+              syncChatVisibility(false);
+            }
           }
         });
       });
@@ -3537,35 +3710,84 @@
     }
   }
 
-  function syncTokenHud() {
+  function syncTokenHud(stOverride) {
+    const st = stOverride || getEffectiveState();
+    const mainTheme = THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    const activeKey = st.bubbleName || st.themeName || DEFAULT_THEME_KEY;
+    const bTheme = THEMES[activeKey] || mainTheme;
+    const persona = getActiveMasterPersona(st);
+    const personaOverrideActive = Boolean(st.masterPersona && st.masterPersona !== 'yoriichi');
+
+    const rawEffUserAvatar = st.userAvatar === 'none'
+      ? ''
+      : (st.userAvatar || (personaOverrideActive ? persona.userAvatar : (mainTheme.userAvatar || persona.userAvatar)) || '');
+    const effectiveUserAvatar = safeCssUrl(rawEffUserAvatar);
+    const userActionSticker = safeCssUrl(
+      (personaOverrideActive ? persona.actionSticker : (bTheme.userActionSticker || persona.actionSticker)) || ''
+    );
+    const personaSkillId = persona.skillId || 'yoriichi';
+    const personaLabel = persona.tagLabel || 'Khai Tổ Hỏa Thần (Anh)';
+
     const composer = document.querySelector('.surface-composer') || document.querySelector('[data-testid="composer"]');
-    if (!composer || !window.__AGY_TOKEN_HUD__ || typeof window.__AGY_TOKEN_HUD__.mountTokenHud !== 'function') {
+    if (composer && window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.mountTokenHud === 'function') {
+      try {
+        const hudThemeCfg = {
+          ...bTheme,
+          effectiveUserAvatar,
+          userAvatar: effectiveUserAvatar || bTheme.userAvatar || persona.userAvatar,
+          userActionSticker,
+          personaSkillId,
+          personaLabel,
+          personaRingColor: SEC.sanitizeCssValue(persona.ringColor, '#fde047'),
+          personaGlowColor: SEC.sanitizeCssValue(persona.glowColor, 'rgba(239, 68, 68, 0.52)')
+        };
+        window.__AGY_TOKEN_HUD__.mountTokenHud(composer, hudThemeCfg, activeKey);
+      } catch (_) {}
+    }
+
+    // Make user's Master Persona avatar beside chat bubbles clickable to unleash active Persona's Breathing Form!
+    if (st.userAvatar === 'none' || !effectiveUserAvatar) {
+      document.querySelectorAll('.agy-yoriichi-msg-hit').forEach((el) => el.remove());
       return;
     }
-    const st = getState();
-    const activeKey = st.bubbleName || st.themeName || DEFAULT_THEME_KEY;
-    const bTheme = THEMES[activeKey] || THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
-    try {
-      window.__AGY_TOKEN_HUD__.mountTokenHud(composer, bTheme, activeKey);
-    } catch (_) {}
 
-    // Make user's Yoriichi avatar beside chat bubbles clickable to unleash Primordial Sun Breathing!
+    const isDefaultYoriichi = personaSkillId === 'yoriichi' && (!personaOverrideActive || /Yoriichi|Hỏa Thần/i.test(personaLabel));
+    const hitTitle = isDefaultYoriichi
+      ? 'Khai Tổ Vũ Điệu Hỏa Thần — Nhấn để khai mở Nhật Chi Hô Hấp!'
+      : `${personaLabel} — Nhấn để khai mở tuyệt kỹ Hơi Thở!`;
+
     document.querySelectorAll('[data-testid="user-message"]').forEach((um) => {
-      if (um.querySelector(':scope > .agy-yoriichi-msg-hit')) return;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'agy-yoriichi-msg-hit';
-      btn.innerHTML = '<i aria-hidden="true"></i>';
-      btn.title = 'Khai Tổ Vũ Điệu Hỏa Thần — Nhấn để khai mở Nhật Chi Hô Hấp!';
-      btn.setAttribute('aria-label', btn.title);
-      btn.style.cssText = 'position:absolute;right:0;bottom:6px;width:34px;height:34px;border-radius:50%;background:transparent;border:none;cursor:pointer;z-index:5;padding:0;';
-      btn.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.castYoriichiSunBreathing === 'function') {
-          window.__AGY_TOKEN_HUD__.castYoriichiSunBreathing(btn);
-        }
-      });
-      um.appendChild(btn);
+      let btn = um.querySelector(':scope > .agy-yoriichi-msg-hit');
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'agy-yoriichi-msg-hit';
+        btn.innerHTML = '<i aria-hidden="true"></i>';
+        btn.style.cssText = 'position:absolute;right:0;bottom:6px;width:34px;height:34px;border-radius:50%;background:transparent;border:none;cursor:pointer;z-index:5;padding:0;';
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.castYoriichiSunBreathing === 'function') {
+            window.__AGY_TOKEN_HUD__.castYoriichiSunBreathing(btn);
+            return;
+          }
+          const curSt = getEffectiveState();
+          const curP = getActiveMasterPersona(curSt);
+          const sId = curP.skillId || 'yoriichi';
+          if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.castSkill === 'function') {
+            const rt = getShinobuRuntime();
+            rt.yoriMsgCombo = ((rt.yoriMsgCombo || 0) + 1) % 4;
+            window.__AGY_KNY_SKILLS__.castSkill(sId, rt.yoriMsgCombo, {
+              charId: sId,
+              originRect: btn.getBoundingClientRect(),
+              actionSticker: curP.actionSticker || '',
+              composerEl: null
+            });
+          }
+        });
+        um.appendChild(btn);
+      }
+      btn.title = hitTitle;
+      btn.setAttribute('aria-label', hitTitle);
     });
   }
 
@@ -3599,15 +3821,9 @@
   if (window.__AGY_SCROLL_AC__) {
     try { window.__AGY_SCROLL_AC__.abort(); } catch (e) {}
   }
-  window.__AGY_SCROLL_AC__ = new AbortController();
-  bindTransparentWorldListeners(window.__AGY_SCROLL_AC__.signal);
-  window.addEventListener('load', () => scheduleTitleBarSync(), { signal: window.__AGY_SCROLL_AC__.signal });
-  window.addEventListener('focus', () => syncTitleBarOverlay(), { signal: window.__AGY_SCROLL_AC__.signal });
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) syncTitleBarOverlay();
-  }, { signal: window.__AGY_SCROLL_AC__.signal });
   document.querySelectorAll('[data-agy-scroll-bound]').forEach(el => delete el.dataset.agyScrollBound);
   document.querySelectorAll('[data-agy-tbo-mounted]').forEach(el => delete el.dataset.agyTboMounted);
+  document.querySelectorAll('[data-agy-npc-key-bound]').forEach(el => delete el.dataset.agyNpcKeyBound);
   const staleBackdrop = document.getElementById('agy-custom-theme-modal-backdrop');
   if (staleBackdrop) staleBackdrop.remove();
   const staleSidebarBtn = document.getElementById('agy-custom-theme-sidebar-btn');
@@ -3620,10 +3836,22 @@
   try { if (window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.teardown === 'function') window.__AGY_TOKEN_HUD__.teardown(); } catch (e) {}
   try { if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.stopActiveSkill === 'function') window.__AGY_KNY_SKILLS__.stopActiveSkill(); } catch (e) {}
 
+  window.__AGY_SCROLL_AC__ = new AbortController();
+  bindTransparentWorldListeners(window.__AGY_SCROLL_AC__.signal);
+  if (!IS_MAC) {
+    window.addEventListener('load', () => scheduleTitleBarSync(), { signal: window.__AGY_SCROLL_AC__.signal });
+    window.addEventListener('focus', () => syncTitleBarOverlay(), { signal: window.__AGY_SCROLL_AC__.signal });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) syncTitleBarOverlay();
+    }, { signal: window.__AGY_SCROLL_AC__.signal });
+  }
+
   window.__AGY_HOLE_EL__ = null;
+  window.__AGY_SIDE_EL__ = null;
   if (window.__AGY_MODAL_OBSERVER__) {
     window.__AGY_MODAL_OBSERVER__.disconnect();
   }
+  applyTheme();
   window.__AGY_MODAL_OBSERVER__ = new MutationObserver(scheduleTick);
   window.__AGY_MODAL_OBSERVER__.observe(document.body, {
     childList: true,

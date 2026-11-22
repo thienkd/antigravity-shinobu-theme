@@ -160,7 +160,7 @@
         }
       }
     }
-    if (state.audioCtx && state.audioCtx.state === 'suspended') {
+    if (state.audioCtx && state.audioCtx.state !== 'running' && state.audioCtx.state !== 'closed') {
       try {
         state.audioCtx.resume().catch(() => {});
       } catch (_) {}
@@ -779,9 +779,10 @@
         border: 1px solid rgba(216, 180, 254, 0.34);
         box-shadow: 0 18px 42px rgba(0, 0, 0, 0.78), 0 0 22px rgba(192, 132, 252, 0.18);
         color: #f8fafc;
-        font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
         font-size: 12px;
         user-select: none;
+        -webkit-app-region: no-drag;
       }
       #${POPOVER_ID} .agy-ba-hdr {
         display: flex;
@@ -918,12 +919,13 @@
         border: 1px solid rgba(232, 121, 249, 0.36);
         box-shadow: 0 12px 28px rgba(0, 0, 0, 0.65);
         color: #f8fafc;
-        font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
         font-size: 12px;
         line-height: 1.45;
         display: flex;
         align-items: flex-start;
         gap: 9px;
+        -webkit-app-region: no-drag;
       }
       #${TOAST_ID} .agy-ba-toast-close {
         background: transparent;
@@ -1124,11 +1126,28 @@
 
   function updateHudButtonVisual() {
     if (typeof document === 'undefined') return;
+    const enabled = isEnabled();
+    const ambientOn = enabled && state.prefs.ambientMode !== 'off';
+
+    // Sync unified HUD trigger button (e.g. kaguraBtn in kny_token_hud.js)
+    const bar = document.getElementById(HUD_BAR_ID);
+    const extTrigger = bar ? bar.querySelector('[data-agy-bio-audio-trigger="1"]') : null;
+    if (extTrigger && extTrigger.id !== AUTO_HUD_BTN_ID) {
+      if (enabled) {
+        extTrigger.dataset.active = '1';
+        delete extTrigger.dataset.muted;
+      } else {
+        delete extTrigger.dataset.active;
+        extTrigger.dataset.muted = '1';
+      }
+      if (ambientOn) extTrigger.dataset.ambient = '1';
+      else delete extTrigger.dataset.ambient;
+    }
+
     const btn = document.getElementById(AUTO_HUD_BTN_ID);
     if (!btn) return;
-    const enabled = isEnabled();
     btn.dataset.muted = enabled ? '0' : '1';
-    btn.dataset.ambient = (enabled && state.prefs.ambientMode !== 'off') ? '1' : '0';
+    btn.dataset.ambient = ambientOn ? '1' : '0';
     const labelEl = btn.querySelector('.agy-ba-hud-lbl');
     if (labelEl) {
       if (!enabled) {
@@ -1483,6 +1502,7 @@
     };
 
     const onDocKeyDown = (ev) => {
+      if (ev.isComposing || ev.keyCode === 229) return;
       if (!state.userInteracted) {
         state.userInteracted = true;
         if (state.prefs.enabled && state.prefs.ambientMode !== 'off') {
@@ -1544,6 +1564,7 @@
     closePopover,
     onTelemetry,
     playNichirinSheathe,
+    playSheathe: playNichirinSheathe,
     playKaguraChime,
     playSwordDraw,
     setAmbientMode,

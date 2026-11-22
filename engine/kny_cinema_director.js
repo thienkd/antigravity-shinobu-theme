@@ -31,6 +31,10 @@
   const HUD_BAR_ID = 'agy-token-context-bar';
   const AUTO_HUD_BTN_ID = 'agy-cinema-hud-btn';
 
+  const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(String(navigator.platform || navigator.userAgent || ''));
+  const SHORTCUT_SHIELD = IS_MAC ? '⌥⇧P' : 'Alt+Shift+P';
+  const SHORTCUT_CINEMA = IS_MAC ? '⌥⇧C' : 'Alt+Shift+C';
+
   const SENSITIVE_TEXT_RE = /(?:localhost:\d{2,5}|127\.0\.0\.1:\d{2,5}|0\.0\.0\.0:\d{2,5}|[A-Za-z]:\\(?:Users|Projects|Workspaces|Repos)\\[A-Za-z0-9._-]+|\/Users\/[A-Za-z0-9._-]+|\/home\/[A-Za-z0-9._-]+|sk-[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{20,})/i;
 
   function loadDirectorPrefs() {
@@ -74,6 +78,7 @@
     showcaseStartMs: 0,
     showcaseTimers: [],
     showcaseProgressRaf: 0,
+    savedSnapshot: null,
     savedThemeName: '',
     savedBubbleName: '',
     savedShieldBeforeShowcase: false,
@@ -158,10 +163,10 @@
         filter: none !important;
       }
 
-      /* Top Privacy Shield Status Pill */
+      /* Top Privacy Shield Status Pill (top: 42px clears 38px macOS titlebar & Traffic Lights) */
       #${SHIELD_BADGE_ID} {
         position: fixed;
-        top: 10px;
+        top: 42px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 100040;
@@ -174,12 +179,13 @@
         border: 1px solid rgba(52, 211, 153, 0.62);
         box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55), 0 0 14px rgba(16, 185, 129, 0.28);
         color: #ecfdf5;
-        font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
         font-size: 11.5px;
         font-weight: 700;
         letter-spacing: 0.3px;
         cursor: pointer;
         user-select: none;
+        -webkit-app-region: no-drag;
       }
       #${SHIELD_BADGE_ID}:hover {
         border-color: #6ee7b7;
@@ -228,9 +234,10 @@
         border: 1px solid rgba(251, 146, 60, 0.42);
         box-shadow: 0 20px 48px rgba(0, 0, 0, 0.84), 0 0 26px rgba(234, 88, 12, 0.20);
         color: #f8fafc;
-        font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
         font-size: 12px;
         user-select: none;
+        -webkit-app-region: no-drag;
       }
       #${PANEL_ID} .agy-cd-hdr {
         display: flex;
@@ -354,7 +361,7 @@
       /* Cinematic Act Subtitle Ribbon during 15s Trailer */
       #${STAGE_BANNER_ID} {
         position: fixed;
-        top: 44px;
+        top: 76px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 100035;
@@ -364,7 +371,7 @@
         border: 1px solid rgba(250, 204, 21, 0.52);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), 0 0 18px rgba(250, 204, 21, 0.22);
         color: #fef9c3;
-        font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
         font-size: 12px;
         font-weight: 700;
         letter-spacing: 0.4px;
@@ -384,7 +391,7 @@
         border: 1.5px solid #fca5a5;
         box-shadow: 0 0 28px rgba(239, 68, 68, 0.78), inset 0 0 12px rgba(254, 202, 202, 0.45);
         color: #fef2f2;
-        font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
         font-size: 12.5px;
         font-weight: 800;
         letter-spacing: 0.8px;
@@ -426,7 +433,7 @@
         justify-content: center;
       }
       #${METSU_SEAL_ID} .agy-metsu-kanji {
-        font-family: 'Yu Mincho', 'MS Mincho', 'Hiragino Mincho ProN', Georgia, serif;
+        font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', 'Noto Serif JP', 'Source Han Serif JP', 'IPAPMincho', 'MS PMincho', 'Noto Serif', Georgia, serif;
         font-size: 96px;
         font-weight: 900;
         line-height: 1;
@@ -440,7 +447,7 @@
         background: rgba(24, 8, 12, 0.92);
         border: 1px solid rgba(252, 165, 165, 0.65);
         color: #fecaca;
-        font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
         font-size: 12.5px;
         font-weight: 800;
         letter-spacing: 2.2px;
@@ -488,7 +495,7 @@
       badge = document.createElement('div');
       badge.id = SHIELD_BADGE_ID;
       badge.setAttribute('role', 'status');
-      badge.title = 'Nhấn để tắt Khiên Che Mật hoặc bấm Alt+Shift+P';
+      badge.title = `Nhấn để tắt Khiên Che Mật hoặc bấm ${SHORTCUT_SHIELD}`;
       badge.addEventListener('click', (ev) => {
         ev.stopPropagation();
         togglePrivacyShield(false);
@@ -496,8 +503,8 @@
       document.body.appendChild(badge);
     }
     badge.textContent = state.prefs.strictRedact
-      ? '🛡️ KHIÊN CHE MẬT NGHIÊM NGẶT ĐANG BẬT (Alt+Shift+P)'
-      : '🛡️ KHIÊN CHE MẬT ĐANG BẬT (Alt+Shift+P)';
+      ? `🛡️ KHIÊN CHE MẬT NGHIÊM NGẶT ĐANG BẬT (${SHORTCUT_SHIELD})`
+      : `🛡️ KHIÊN CHE MẬT ĐANG BẬT (${SHORTCUT_SHIELD})`;
   }
 
   function syncShieldAttributes() {
@@ -538,6 +545,36 @@
    * 3. SEAMLESS THEME SWITCHER & 15-SECOND AUTO-SHOWCASE CHOREOGRAPHY
    * ========================================================================== */
 
+  function switchShowcaseThemeTransient(queryOrExactName) {
+    const core = ROOT.__AGY_THEME_CORE__;
+    if (core && typeof core.getThemeKeys === 'function' && typeof core.applyTransientTheme === 'function') {
+      try {
+        const keys = core.getThemeKeys();
+        const qLower = String(queryOrExactName || '').toLowerCase();
+        const matched = keys.find((k) => k === queryOrExactName) ||
+          keys.find((k) => String(k || '').toLowerCase().includes(qLower));
+        if (matched) {
+          return Boolean(core.applyTransientTheme(matched));
+        }
+      } catch (_) {}
+    }
+    return switchPresetSilently(queryOrExactName);
+  }
+
+  function restoreOriginalThemeSnapshot() {
+    const core = ROOT.__AGY_THEME_CORE__;
+    if (core && typeof core.restoreSnapshot === 'function' && state.savedSnapshot) {
+      try {
+        core.restoreSnapshot(state.savedSnapshot);
+        state.savedSnapshot = null;
+        return true;
+      } catch (_) {}
+    }
+    if (state.savedThemeName) {
+      return switchPresetSilently(state.savedThemeName, state.savedBubbleName || state.savedThemeName);
+    }
+    return false;
+  }
   function switchPresetSilently(queryOrExactName, optionalBubbleExact) {
     if (typeof document === 'undefined') return false;
 
@@ -627,6 +664,8 @@
     if (typeof document === 'undefined' || !document.body) return;
     const prev = document.getElementById(METSU_SEAL_ID);
     if (prev) prev.remove();
+    const otherSeal = document.getElementById('agy-metsu-victory-overlay');
+    if (otherSeal) otherSeal.remove();
 
     const wrap = document.createElement('div');
     wrap.id = METSU_SEAL_ID;
@@ -637,6 +676,7 @@
 
     const kanji = document.createElement('span');
     kanji.className = 'agy-metsu-kanji';
+    kanji.setAttribute('lang', 'ja');
     kanji.textContent = '滅';
     frame.appendChild(kanji);
 
@@ -670,7 +710,7 @@
     if (state.playBtnEl) {
       state.playBtnEl.textContent = state.showcaseRunning
         ? '⏹️ Dừng Trailer & Khôi Phục Ngay (Esc)'
-        : '▶️ Diễn Trailer 15s (Alt+Shift+C)';
+        : `▶️ Diễn Trailer 15s (${SHORTCUT_CINEMA})`;
     }
     if (!state.showcaseRunning) {
       if (state.progressFillEl) state.progressFillEl.style.width = '0%';
@@ -690,11 +730,12 @@
     if (ROOT.__AGY_SQUAD_RAID__ && typeof ROOT.__AGY_SQUAD_RAID__.stopSimulation === 'function') {
       try { ROOT.__AGY_SQUAD_RAID__.stopSimulation(); } catch (_) {}
     }
+    if (ROOT.__AGY_TOKEN_HUD__ && typeof ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
+      try { ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat(0); } catch (_) {}
+    }
 
     if (wasRunning && restoreOriginal) {
-      if (state.savedThemeName) {
-        switchPresetSilently(state.savedThemeName, state.savedBubbleName || state.savedThemeName);
-      }
+      restoreOriginalThemeSnapshot();
       if (!state.prefs.keepShieldAfter && !state.savedShieldBeforeShowcase) {
         togglePrivacyShield(false);
       }
@@ -730,8 +771,12 @@
     // Close control popover so the recorded viewport is clean and unobstructed
     closePanel();
 
-    state.savedThemeName = (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_THEME)) || '';
-    state.savedBubbleName = (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_BUBBLE)) || state.savedThemeName;
+    const core = ROOT.__AGY_THEME_CORE__;
+    state.savedSnapshot = (core && typeof core.getSnapshot === 'function') ? core.getSnapshot() : null;
+    state.savedThemeName = (state.savedSnapshot && state.savedSnapshot.themeName) ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_THEME)) || '';
+    state.savedBubbleName = (state.savedSnapshot && state.savedSnapshot.bubbleName) ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_BUBBLE)) || state.savedThemeName;
     state.savedShieldBeforeShowcase = state.shieldActive;
 
     if (state.prefs.autoShield) {
@@ -757,16 +802,16 @@
     // ACT I (0.0s – 4.0s): 4K Parallax Showcase across iconic Hashira realms
     scheduleStep(20, () => {
       showStageBanner('🎬 CẢNH I (0–4s) • CẢNH QUAN 4K ĐẠI TRỤ: TRÙNG TRỤ SHINOBU KOCHO');
-      switchPresetSilently('Shinobu Kocho');
+      switchShowcaseThemeTransient('Shinobu');
     });
 
     scheduleStep(1950, () => {
       showStageBanner('🎬 CẢNH I (0–4s) • CẢNH QUAN 4K ĐẠI TRỤ: THỦY TRỤ GIYU & VIÊM TRỤ RENGOKU');
-      switchPresetSilently('Giyu Tomioka');
+      switchShowcaseThemeTransient('Giyu');
     });
 
     scheduleStep(3050, () => {
-      switchPresetSilently('Kyojuro Rengoku');
+      switchShowcaseThemeTransient('Rengoku');
     });
 
     // ACT II (4.0s – 8.0s): 5-Hashira Swarm Raid + 100% Crimson Red Blade
@@ -777,11 +822,11 @@
       const squadApi = ROOT.__AGY_SQUAD_RAID__;
       if (squadApi) {
         const fiveHashiraSquad = [
-          { cid: 'showcase-h1', typeName: 'research', role: 'Trùng Trụ • Điệp Vũ Trinh Sát', lastTool: 'Giải độc & Phân tích Kiến trúc', stepCount: 4 },
-          { cid: 'showcase-h2', typeName: 'self', role: 'Thủy Trụ • Tĩnh Thủy Phòng Tuyến', lastTool: 'Bảo vệ Ranh giới Bảo mật CDP', stepCount: 5 },
-          { cid: 'showcase-h3', typeName: 'self', role: 'Viêm Trụ • Luyện Ngục Tiên Phong', lastTool: 'Nung đỏ Nhật Luân Hách Đao 100%', stepCount: 6 },
-          { cid: 'showcase-h4', typeName: 'browser', role: 'Âm Trụ • Phổ Nhạc Chiến Trường', lastTool: 'Đồng bộ Khung hình 60fps 4K', stepCount: 4 },
-          { cid: 'showcase-h5', typeName: 'image-generator', role: 'Hà Trụ • Mê Vụ Chế Tác', lastTool: 'Rèn Đa Vũ Trụ OKLCH .agytheme', stepCount: 5 }
+          { cid: 'showcase-h1', isSim: true, typeName: 'research', role: 'Trùng Trụ • Điệp Vũ Trinh Sát', lastTool: 'Giải độc & Phân tích Kiến trúc', stepCount: 4 },
+          { cid: 'showcase-h2', isSim: true, typeName: 'self', role: 'Thủy Trụ • Tĩnh Thủy Phòng Tuyến', lastTool: 'Bảo vệ Ranh giới Bảo mật CDP', stepCount: 5 },
+          { cid: 'showcase-h3', isSim: true, typeName: 'self', role: 'Viêm Trụ • Luyện Ngục Tiên Phong', lastTool: 'Nung đỏ Nhật Luân Hách Đao 100%', stepCount: 6 },
+          { cid: 'showcase-h4', isSim: true, typeName: 'browser', role: 'Âm Trụ • Phổ Nhạc Chiến Trường', lastTool: 'Đồng bộ Khung hình 60fps 4K', stepCount: 4 },
+          { cid: 'showcase-h5', isSim: true, typeName: 'image-generator', role: 'Hà Trụ • Mê Vụ Chế Tác', lastTool: 'Rèn Đa Vũ Trụ OKLCH .agytheme', stepCount: 5 }
         ];
         if (typeof squadApi.simulateRaid === 'function') {
           squadApi.simulateRaid({ durationMs: 3900, subagents: fiveHashiraSquad });
@@ -790,6 +835,9 @@
         }
       }
 
+      if (ROOT.__AGY_TOKEN_HUD__ && typeof ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
+        try { ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat(100); } catch (_) {}
+      }
       const redBladeApi = ROOT.__AGY_RED_BLADE__ || ROOT.__AGY_NICHIRIN_FORGE__;
       if (redBladeApi) {
         if (typeof redBladeApi.setHeat === 'function') redBladeApi.setHeat(100);
@@ -798,56 +846,38 @@
       }
     });
 
-    // ACT III (8.0s – 13.0s): First Swordsman Yoriichi — Hinokami Kagura Thirteenth Form
+    // ACT III (8.0s – 13.0s): First Swordsman Yoriichi — Single Clean Thirteenth Form Unleash
     scheduleStep(8000, () => {
       showRedBladeCrest(false);
       showStageBanner('☀️ CẢNH III (8–13s) • KIẾM SĨ ĐẦU TIÊN YORIICHI — VŨ ĐIỆU HỎA THẦN THẬP TAM THỨC');
 
-      if (ROOT.__AGY_BIO_AUDIO__ && typeof ROOT.__AGY_BIO_AUDIO__.playSwordDraw === 'function') {
-        ROOT.__AGY_BIO_AUDIO__.playSwordDraw({ force: true });
-      }
-
       const skillsApi = ROOT.__AGY_BREATHING_SKILLS__ || ROOT.__AGY_KNY_SKILLS__;
       if (skillsApi && typeof skillsApi.castSkill === 'function') {
-        skillsApi.castSkill('yoriichi', 2, { charId: 'yoriichi', durationMs: 2450 });
+        skillsApi.castSkill('yoriichi', 3, { charId: 'yoriichi', durationMs: 3150 });
       } else if (ROOT.__AGY_TOKEN_HUD__ && typeof ROOT.__AGY_TOKEN_HUD__.castYoriichiSunBreathing === 'function') {
         ROOT.__AGY_TOKEN_HUD__.castYoriichiSunBreathing();
       }
     });
 
-    scheduleStep(10450, () => {
-      if (typeof ROOT.__AGY_TRIGGER_FINISHER__ === 'function') {
-        ROOT.__AGY_TRIGGER_FINISHER__('yoriichi');
-      }
-      const skillsApi = ROOT.__AGY_BREATHING_SKILLS__ || ROOT.__AGY_KNY_SKILLS__;
-      if (skillsApi && typeof skillsApi.castSkill === 'function') {
-        skillsApi.castSkill('yoriichi', 3, { charId: 'yoriichi', durationMs: 2550 });
-      }
-    });
-
-    // ACT IV (13.0s – 15.0s): Crimson 「滅」 Stamp + Nichirin "Kachin!" + Seamless Theme Restore
+    // ACT IV (13.0s – 15.0s): Single Crisp Crimson 「滅」 Stamp + Nichirin "Kachin!" + Seamless Theme Restore
     scheduleStep(13000, () => {
       showStageBanner('🏮 CẢNH IV (13–15s) • ÁC QUỶ DIỆT SÁT 「滅」 & TRA KIẾM NHẬT LUÂN');
       stampMetsuSeal();
-      if (ROOT.__AGY_SQUAD_RAID__ && typeof ROOT.__AGY_SQUAD_RAID__.triggerVictoryStamp === 'function') {
-        try {
-          ROOT.__AGY_SQUAD_RAID__.triggerVictoryStamp({ reason: 'Vũ Điệu Hỏa Thần Thập Tam Thức • Toàn diệt Ác Quỷ!' });
-        } catch (_) {}
-      }
       if (ROOT.__AGY_BIO_AUDIO__ && typeof ROOT.__AGY_BIO_AUDIO__.playNichirinSheathe === 'function') {
         ROOT.__AGY_BIO_AUDIO__.playNichirinSheathe({ force: true });
       }
     });
 
     scheduleStep(14550, () => {
-      if (state.savedThemeName) {
-        switchPresetSilently(state.savedThemeName, state.savedBubbleName || state.savedThemeName);
-      }
+      restoreOriginalThemeSnapshot();
     });
 
     scheduleStep(15000, () => {
       state.showcaseRunning = false;
       clearShowcaseArtifacts();
+      if (ROOT.__AGY_TOKEN_HUD__ && typeof ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat === 'function') {
+        try { ROOT.__AGY_TOKEN_HUD__.setBladeBonusHeat(0); } catch (_) {}
+      }
       if (!state.prefs.keepShieldAfter && !state.savedShieldBeforeShowcase) {
         togglePrivacyShield(false);
       }
@@ -863,6 +893,16 @@
 
   function updateHudButtonVisual() {
     if (typeof document === 'undefined') return;
+    const bar = document.getElementById(HUD_BAR_ID);
+    const extTrigger = bar ? bar.querySelector('[data-agy-cinema-trigger="1"]') : null;
+    if (extTrigger && extTrigger.id !== AUTO_HUD_BTN_ID) {
+      if (state.shieldActive || state.showcaseRunning) {
+        extTrigger.dataset.active = '1';
+      } else {
+        delete extTrigger.dataset.active;
+      }
+    }
+
     const btn = document.getElementById(AUTO_HUD_BTN_ID);
     if (!btn) return;
     btn.dataset.shield = state.shieldActive ? '1' : '0';
@@ -969,7 +1009,7 @@
     playBtn.className = 'agy-cd-hero-btn';
     playBtn.textContent = state.showcaseRunning
       ? '⏹️ Dừng Trailer & Khôi Phục Ngay (Esc)'
-      : '▶️ Diễn Trailer 15s (Alt+Shift+C)';
+      : `▶️ Diễn Trailer 15s (${SHORTCUT_CINEMA})`;
     playBtn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       startShowcase();
@@ -1003,7 +1043,7 @@
 
     // Privacy Shield Toggle
     const shieldRow = buildToggleRow(
-      '🛡️ Khiên Che Mật (Alt+Shift+P)',
+      `🛡️ Khiên Che Mật (${SHORTCUT_SHIELD})`,
       'Làm mờ cây thư mục, tên dự án & lịch sử chat',
       state.shieldActive,
       (val) => togglePrivacyShield(val)
@@ -1074,7 +1114,7 @@
     btn.type = 'button';
     btn.id = AUTO_HUD_BTN_ID;
     btn.dataset.agyCinemaTrigger = '1';
-    btn.title = 'Đạo diễn Quay phim Trailer 15s (Alt+Shift+C) & Khiên Che Mật Dự Án (Alt+Shift+P)';
+    btn.title = `Đạo diễn Quay phim Trailer 15s (${SHORTCUT_CINEMA}) & Khiên Che Mật Dự Án (${SHORTCUT_SHIELD})`;
     btn.setAttribute('aria-label', btn.title);
     btn.textContent = '🎬 Showcase';
     btn.addEventListener('click', (ev) => {
@@ -1098,20 +1138,36 @@
     setTimeout(ensureHudTriggerMounted, 280);
 
     const onKeyDown = (ev) => {
+      if (ev.isComposing || ev.keyCode === 229) return;
       if (state.destroyed) return;
       const code = String(ev.code || '');
       const keyUpper = String(ev.key || '').toUpperCase();
 
-      // Alt + Shift + P -> Toggle 1-Click Privacy Shield
-      if (ev.altKey && ev.shiftKey && !ev.ctrlKey && !ev.metaKey && (code === 'KeyP' || keyUpper === 'P')) {
+      const t = ev.target;
+      const inEditable = Boolean(
+        t && (
+          t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.isContentEditable ||
+          (typeof t.closest === 'function' && t.closest('input, textarea, [contenteditable="true"], .monaco-editor, .xterm'))
+        )
+      );
+
+      const isAltShiftOnly = ev.altKey && ev.shiftKey && !ev.ctrlKey && !ev.metaKey;
+      const isCtrlAltShift = ev.ctrlKey && ev.altKey && ev.shiftKey && !ev.metaKey;
+      // On macOS, Option+Shift+P/C inside text editors types ∏ / Ç, so only intercept Alt+Shift outside editable fields (Ctrl+Alt+Shift works everywhere)
+      const allowShortcut = isCtrlAltShift || (isAltShiftOnly && !(IS_MAC && inEditable));
+
+      // Alt + Shift + P (or Ctrl + Alt + Shift + P) -> Toggle 1-Click Privacy Shield
+      if (allowShortcut && (code === 'KeyP' || keyUpper === 'P')) {
         ev.preventDefault();
         ev.stopPropagation();
         togglePrivacyShield();
         return;
       }
 
-      // Alt + Shift + C -> Start / Stop 15s Auto-Showcase Trailer
-      if (ev.altKey && ev.shiftKey && !ev.ctrlKey && !ev.metaKey && (code === 'KeyC' || keyUpper === 'C')) {
+      // Alt + Shift + C (or Ctrl + Alt + Shift + C) -> Start / Stop 15s Auto-Showcase Trailer
+      if (allowShortcut && (code === 'KeyC' || keyUpper === 'C')) {
         ev.preventDefault();
         ev.stopPropagation();
         startShowcase();
@@ -1171,11 +1227,16 @@
     }
   }
 
+  function isPrivacyShieldActive() {
+    return state.shieldActive;
+  }
+
   initDomLifecycle();
 
   const API = Object.freeze({
     togglePrivacyShield,
-    isPrivacyShieldActive: () => state.shieldActive,
+    isPrivacyShieldActive,
+    isPrivacyActive: isPrivacyShieldActive,
     startShowcase,
     runShowcase: startShowcase,
     playTrailer: startShowcase,

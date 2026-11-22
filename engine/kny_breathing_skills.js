@@ -9,9 +9,20 @@
    */
 
   const ROOT_SCOPE = typeof window !== 'undefined' ? window : globalThis;
+  if (ROOT_SCOPE && ROOT_SCOPE.__AGY_KNY_SKILLS__) {
+    try {
+      if (typeof ROOT_SCOPE.__AGY_KNY_SKILLS__.destroy === 'function') {
+        ROOT_SCOPE.__AGY_KNY_SKILLS__.destroy();
+      } else if (typeof ROOT_SCOPE.__AGY_KNY_SKILLS__.stopActiveSkill === 'function') {
+        ROOT_SCOPE.__AGY_KNY_SKILLS__.stopActiveSkill();
+      }
+    } catch (_) {}
+  }
+
   const TWO_PI = Math.PI * 2;
   const HALF_PI = Math.PI * 0.5;
   const STORAGE_SFX_MUTED = 'agy_kny_sfx_muted';
+  const STYLE_ID = 'antigravity-kny-skills-style';
 
   /* ==========================================================================
    * 1. CHARACTER ALIAS & FXMODE RESOLUTION
@@ -1126,6 +1137,8 @@
 
   let sharedAudioCtx = null;
   let sharedNoiseBuf = null;
+  let sfxSuspendTimer = 0;
+  let sfxActiveUntil = 0;
 
   function safeReadStorage(key) {
     try {
@@ -1145,12 +1158,22 @@
   }
 
   function isSoundMuted() {
-    return safeReadStorage(STORAGE_SFX_MUTED) === 'true';
+    const raw = safeReadStorage(STORAGE_SFX_MUTED);
+    if (raw === '1' || raw === 'true') return true;
+    if (ROOT_SCOPE && ROOT_SCOPE.__AGY_BIO_AUDIO__) {
+      const bio = ROOT_SCOPE.__AGY_BIO_AUDIO__;
+      if (typeof bio.isEnabled === 'function' && !bio.isEnabled()) return true;
+      if (typeof bio.getPrefs === 'function') {
+        const prefs = bio.getPrefs();
+        if (prefs && prefs.swordSfxEnabled === false) return true;
+      }
+    }
+    return false;
   }
 
   function setSoundMuted(muted) {
     const flag = Boolean(muted);
-    safeWriteStorage(STORAGE_SFX_MUTED, flag ? 'true' : 'false');
+    safeWriteStorage(STORAGE_SFX_MUTED, flag ? '1' : '0');
     return flag;
   }
 
@@ -1158,6 +1181,26 @@
     const next = !isSoundMuted();
     setSoundMuted(next);
     return next;
+  }
+
+  function scheduleSfxAutoSuspend(durationSec) {
+    const waitMs = Math.max(2500, Math.ceil((Number(durationSec) || 2.2) * 1000) + 250);
+    const until = Date.now() + waitMs;
+    if (until > sfxActiveUntil) sfxActiveUntil = until;
+    clearTimeout(sfxSuspendTimer);
+    sfxSuspendTimer = setTimeout(() => {
+      sfxSuspendTimer = 0;
+      if (!sharedAudioCtx) return;
+      if (Date.now() < sfxActiveUntil) {
+        scheduleSfxAutoSuspend((sfxActiveUntil - Date.now()) / 1000);
+        return;
+      }
+      if (sharedAudioCtx.state === 'running' && typeof sharedAudioCtx.suspend === 'function') {
+        try {
+          sharedAudioCtx.suspend().catch(() => {});
+        } catch (_) {}
+      }
+    }, waitMs);
   }
 
   function getAudioContext() {
@@ -1233,15 +1276,16 @@
 
   function playSkillSfx(skillOrElement, options) {
     const opts = options || {};
-    if (opts.soundEnabled === false || isSoundMuted()) return false;
+    if (opts.soundEnabled === false || opts.muted === true || opts.sound === false || isSoundMuted()) return false;
 
     const actx = getAudioContext();
     if (!actx) return false;
 
     try {
-      if (actx.state === 'suspended' && typeof actx.resume === 'function') {
+      if (actx.state !== 'running' && actx.state !== 'closed' && typeof actx.resume === 'function') {
         actx.resume().catch(() => {});
       }
+      scheduleSfxAutoSuspend(2.5);
       const now = actx.currentTime + 0.01;
       const elem = typeof skillOrElement === 'string'
         ? skillOrElement
@@ -2725,12 +2769,19 @@
       ) {
         return trimmed;
       }
-      const base = (ROOT_SCOPE && ROOT_SCOPE.__AGY_ASSET_BASE__) || './themes/';
-      return String(base).replace(/\/?$/, '/') + trimmed.replace(/^\/+/, '');
+      if (typeof __AGY_SEC__ !== 'undefined' && __AGY_SEC__ && typeof __AGY_SEC__.resolveAssetUrl === 'function') {
+        const viaSec = __AGY_SEC__.resolveAssetUrl(trimmed);
+        if (viaSec) return viaSec;
+      }
+      return './themes/' + trimmed.replace(/^(?:\.\/)?(?:themes\/)?/, '').replace(/^\/+/, '');
     }
     const safeId = resolveCharacterId(charId) || 'shinobu';
-    const base = (ROOT_SCOPE && ROOT_SCOPE.__AGY_ASSET_BASE__) || './themes/';
-    return String(base).replace(/\/?$/, '/') + `assets/${safeId}_action.png?v=act2`;
+    const relAsset = `assets/${safeId}_action.png?v=act2`;
+    if (typeof __AGY_SEC__ !== 'undefined' && __AGY_SEC__ && typeof __AGY_SEC__.resolveAssetUrl === 'function') {
+      const viaSec = __AGY_SEC__.resolveAssetUrl(relAsset);
+      if (viaSec) return viaSec;
+    }
+    return `./themes/${relAsset}`;
   }
 
   function preloadActionSprite(charId, explicitUrl) {
@@ -2750,7 +2801,9 @@
       failed: false
     };
     entry.img.decoding = 'async';
-    entry.img.crossOrigin = 'anonymous';
+    if (/^https?:\/\//i.test(url)) {
+      entry.img.crossOrigin = 'anonymous';
+    }
     entry.img.onload = () => {
       entry.loaded = true;
       entry.loading = false;
@@ -3346,6 +3399,7 @@
     overlayHost.innerHTML = '';
 
     const styleEl = document.createElement('style');
+    styleEl.id = STYLE_ID;
     styleEl.textContent = `
       agy-skill-vfx .agy-kny-vfx-canvas {
         position: absolute !important;
@@ -3370,6 +3424,7 @@
         border-bottom: 1px solid var(--kny-skill-accent, #e0f2fe);
         box-shadow: 0 14px 44px rgba(0,0,0,0.55), 0 0 32px var(--kny-skill-glow, rgba(56,189,248,0.28));
         transition: transform 0.42s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.38s ease;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
         pointer-events: none !important;
         overflow: hidden;
       }
@@ -3386,7 +3441,7 @@
         left: 50%;
         top: 50%;
         transform: translate(-50%, -50%);
-        font-family: "Yu Mincho", "Hiragino Mincho ProN", "MS PMincho", Georgia, serif;
+        font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', 'Noto Serif JP', 'Source Han Serif JP', 'IPAPMincho', 'MS PMincho', 'Noto Serif', Georgia, serif;
         font-size: clamp(46px, 6.5vw, 76px);
         font-weight: 800;
         letter-spacing: 0.16em;
@@ -3408,7 +3463,7 @@
       }
       agy-skill-vfx .agy-kny-title {
         position: relative;
-        font-family: "Cinzel", "Noto Serif", "Palatino Linotype", Georgia, serif;
+        font-family: 'Noto Serif', 'Liberation Serif', 'DejaVu Serif', 'Palatino Linotype', Georgia, serif;
         font-size: clamp(20px, 2.6vw, 30px);
         font-weight: 800;
         letter-spacing: 0.04em;
@@ -3437,6 +3492,7 @@
 
     kanjiBgEl = document.createElement('div');
     kanjiBgEl.className = 'agy-kny-kanji-bg';
+    kanjiBgEl.setAttribute('lang', 'ja');
 
     subLabelEl = document.createElement('div');
     subLabelEl.className = 'agy-kny-sub';
@@ -3568,9 +3624,9 @@
       }, 2350);
     }
 
-    const vw = Math.max(320, Number(ROOT_SCOPE.innerWidth) || 1440);
-    const vh = Math.max(240, Number(ROOT_SCOPE.innerHeight) || 900);
-    const dpr = clamp(Number(ROOT_SCOPE.devicePixelRatio) || 1, 1, 2);
+    let vw = Math.max(320, Number(ROOT_SCOPE.innerWidth) || 1440);
+    let vh = Math.max(240, Number(ROOT_SCOPE.innerHeight) || 900);
+    let dpr = clamp(Number(ROOT_SCOPE.devicePixelRatio) || 1, 1, 2);
     canvasEl.width = Math.floor(vw * dpr);
     canvasEl.height = Math.floor(vh * dpr);
 
@@ -3674,6 +3730,17 @@
         shakeY = Math.cos(elapsed * 0.23) * mag * 0.7;
       }
 
+      const curVw = Math.max(320, Number(ROOT_SCOPE.innerWidth) || vw);
+      const curVh = Math.max(240, Number(ROOT_SCOPE.innerHeight) || vh);
+      const curDpr = clamp(Number(ROOT_SCOPE.devicePixelRatio) || 1, 1, 2);
+      if (curVw !== vw || curVh !== vh || curDpr !== dpr) {
+        vw = curVw;
+        vh = curVh;
+        dpr = curDpr;
+        canvasEl.width = Math.floor(vw * dpr);
+        canvasEl.height = Math.floor(vh * dpr);
+      }
+
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, shakeX * dpr, shakeY * dpr);
       ctx.clearRect(-16, -16, vw + 32, vh + 32);
@@ -3686,6 +3753,31 @@
 
     activeRafId = requestFrame(tick);
     return { ok: true, charId: skill.charId, skill: skill, durationMs: duration };
+  }
+
+  function destroy() {
+    stopActiveSkill();
+    clearTimeout(sfxSuspendTimer);
+    sfxSuspendTimer = 0;
+    sfxActiveUntil = 0;
+    if (sharedAudioCtx) {
+      try {
+        const p = sharedAudioCtx.close();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (_) {}
+      sharedAudioCtx = null;
+    }
+    sharedNoiseBuf = null;
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll(`agy-skill-vfx, #${STYLE_ID}`).forEach((el) => el.remove());
+    }
+    overlayHost = null;
+    canvasEl = null;
+    bannerEl = null;
+    subLabelEl = null;
+    kanjiBgEl = null;
+    titleEl = null;
+    voiceEl = null;
   }
 
   /* ==========================================================================
@@ -3704,7 +3796,9 @@
     playSkillSfx,
     isSoundMuted,
     setSoundMuted,
-    toggleSoundMute
+    toggleSoundMute,
+    destroy,
+    teardown: destroy
   };
 
   ROOT_SCOPE.__AGY_KNY_SKILLS__ = API;

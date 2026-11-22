@@ -26,7 +26,7 @@ Because **Antigravity Custom Theme Engine** integrates with the desktop IDE via 
 ### 3. Strict CDP Target Verification
 - Before injecting theme scripts or registering `Runtime.addBinding`, the daemon validates the target URL protocol/origin and verifies via DOM probe that the page is a genuine Antigravity Workbench/Launchpad frame — never an untrusted web app opened inside the Split Browser (`http://127.0.0.1:3000`, etc.).
 
-### 4. Renderer XSS, CSS &Indirect-Prompt-Injection Prevention
+### 4. Renderer XSS, CSS & Indirect-Prompt-Injection Prevention
 - **Untrusted Telemetry Isolation**: Conversation titles, user echoes, and subagent `Role` / `toolSummary` fields parsed from `transcript.jsonl` are rendered strictly via `.textContent` (never `.innerHTML`), neutralizing indirect prompt injection payloads.
 - **Theme & `.agytheme` Sanitizer**: Imported JSON/`.agytheme` packages block prototype-pollution keys (`__proto__`, `constructor`, `prototype`), enforce strict CSS URL/value allowlists, and strip executable elements/handlers (`<script>`, `<foreignObject>`, `on*=`, `javascript:`) from custom SVGs both at build time and import time.
 

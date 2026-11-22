@@ -1,6 +1,10 @@
 (() => {
   'use strict';
 
+  if (typeof window !== 'undefined' && window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.teardown === 'function') {
+    try { window.__AGY_TOKEN_HUD__.teardown(); } catch (_) {}
+  }
+
   /**
    * Antigravity Live Streaming Telemetry HUD, Bright Red Nichirin Forge (赫刀),
    * Crisis-to-Slash Battlefield Reflex & First Swordsman (Yoriichi) Command Echo.
@@ -19,8 +23,11 @@
 
   const state = {
     composer: null,
+    composerRo: null,
     themeCfg: null,
     themeKeyHint: '',
+    personaSkillId: 'yoriichi',
+    personaLabel: '',
     barEl: null,
     yoriichiBtnEl: null,
     yoriichiComboIdx: 0,
@@ -49,6 +56,7 @@
     popoverOpen: false,
 
     echoEl: null,
+    echoHdrLabelEl: null,
     echoTextEl: null,
     echoAvatarEl: null,
     echoTimer: 0,
@@ -159,6 +167,10 @@
   }
 
   function resolveYoriichiAvatarUrl(themeCfg) {
+    if (themeCfg && typeof themeCfg.effectiveUserAvatar === 'string' && themeCfg.effectiveUserAvatar) {
+      const cleanedEff = sanitizeCssAssetUrl(themeCfg.effectiveUserAvatar);
+      if (cleanedEff) return cleanedEff;
+    }
     if (themeCfg && typeof themeCfg.userAvatar === 'string' && themeCfg.userAvatar) {
       const cleaned = sanitizeCssAssetUrl(themeCfg.userAvatar);
       if (cleaned) return cleaned;
@@ -171,7 +183,24 @@
       const cleaned = sanitizeCssAssetUrl(themeCfg.userActionSticker);
       if (cleaned) return cleaned;
     }
+    if (themeCfg && typeof themeCfg.actionSticker === 'string' && themeCfg.actionSticker && themeCfg.personaSkillId && themeCfg.personaSkillId !== 'yoriichi') {
+      const cleanedAct = sanitizeCssAssetUrl(themeCfg.actionSticker);
+      if (cleanedAct) return cleanedAct;
+    }
     return sanitizeCssAssetUrl('assets/yoriichi_action.png');
+  }
+
+  function isSfxMutedNow() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem('agy_kny_sfx_muted');
+        if (raw === '1' || raw === 'true') return true;
+      }
+      if (typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__ && typeof window.__AGY_BIO_AUDIO__.isEnabled === 'function') {
+        if (!window.__AGY_BIO_AUDIO__.isEnabled()) return true;
+      }
+    } catch (_) {}
+    return false;
   }
 
   function formatCompactTokens(n) {
@@ -213,9 +242,46 @@
         align-items: center;
         gap: 4.5px;
         pointer-events: auto;
-        font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
         font-variant-numeric: tabular-nums;
         user-select: none;
+        -webkit-app-region: no-drag;
+      }
+
+      /* Split-View Container Responsive Tiers (observed via ResizeObserver on composer.clientWidth) */
+      #${HUD_BAR_ID}[data-compact="1"] .agy-tok-ctx-prefix,
+      #${HUD_BAR_ID}[data-compact="1"] .agy-tok-turn-prefix,
+      #${HUD_BAR_ID}[data-compact="1"] .agy-blade-tier-txt,
+      #${HUD_BAR_ID}[data-compact="2"] .agy-tok-ctx-prefix,
+      #${HUD_BAR_ID}[data-compact="2"] .agy-tok-turn-prefix,
+      #${HUD_BAR_ID}[data-compact="2"] .agy-blade-tier-txt,
+      #${HUD_BAR_ID}[data-compact="2"] .agy-tok-draft-tag {
+        display: none !important;
+      }
+      #${HUD_BAR_ID}[data-compact="1"] {
+        gap: 3.5px;
+      }
+      #${HUD_BAR_ID}[data-compact="1"] .agy-tok-pill {
+        padding: 3px 6.5px;
+        font-size: 10.5px;
+      }
+      #${HUD_BAR_ID}[data-compact="2"] {
+        bottom: calc(100% + 33px);
+        left: 4px;
+        gap: 3px;
+        max-width: calc(100% - 98px);
+        flex-wrap: wrap;
+      }
+      #${HUD_BAR_ID}[data-compact="2"] .agy-tok-pill {
+        padding: 2.5px 5.5px;
+        font-size: 10px;
+      }
+      #${HUD_BAR_ID}[data-compact="2"] .agy-nichirin-svg {
+        width: 30px;
+        height: 11px;
+      }
+      #${HUD_BAR_ID}[data-compact="2"] .agy-tok-popover {
+        width: min(296px, calc(100vw - 20px));
       }
 
       @media (max-width: 960px) {
@@ -623,7 +689,8 @@
         box-shadow: 0 10px 28px rgba(0, 0, 0, 0.62), 0 0 18px rgba(239, 68, 68, 0.34);
         color: #fefce8;
         pointer-events: auto;
-        font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
+        -webkit-app-region: no-drag;
       }
       #${ECHO_BAR_ID}[data-visible="1"] {
         display: flex;
@@ -782,6 +849,7 @@
       state.bladeLabelEl.textContent = '';
       if (tier === 'red') {
         const kj = document.createElement('span');
+        kj.setAttribute('lang', 'ja');
         kj.textContent = '赫刀 ';
         const pct = document.createElement('span');
         pct.className = 'agy-blade-tier-txt';
@@ -850,8 +918,8 @@
     if (typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__) {
       const bio = window.__AGY_BIO_AUDIO__;
       try {
-        if (typeof bio.playSheathe === 'function') bio.playSheathe();
-        else if (typeof bio.playKachin === 'function') bio.playKachin();
+        if (typeof bio.playNichirinSheathe === 'function') bio.playNichirinSheathe();
+        else if (typeof bio.playSheathe === 'function') bio.playSheathe();
       } catch (_) {}
     }
   }
@@ -870,6 +938,7 @@
         delete state.kaguraBtnEl.dataset.muted;
       } else {
         delete state.kaguraBtnEl.dataset.active;
+        state.kaguraBtnEl.dataset.muted = '1';
       }
     }
 
@@ -877,7 +946,9 @@
       const dir = typeof window !== 'undefined' ? window.__AGY_CINEMA_DIRECTOR__ : null;
       const shieldOn =
         (document.documentElement && document.documentElement.dataset.agyPrivacyShield === '1') ||
-        Boolean(dir && typeof dir.isPrivacyActive === 'function' && dir.isPrivacyActive());
+        Boolean(dir && typeof dir.isPrivacyShieldActive === 'function' && dir.isPrivacyShieldActive()) ||
+        Boolean(dir && typeof dir.isPrivacyActive === 'function' && dir.isPrivacyActive()) ||
+        Boolean(dir && typeof dir.isShowcaseRunning === 'function' && dir.isShowcaseRunning());
       if (shieldOn) state.cinemaBtnEl.dataset.active = '1';
       else delete state.cinemaBtnEl.dataset.active;
     }
@@ -1488,6 +1559,7 @@
     const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
     if (!ext || typeof ext.castSkill !== 'function') return;
 
+    const targetSkillId = state.personaSkillId || 'yoriichi';
     const idx = state.yoriichiComboIdx % 4;
     state.yoriichiComboIdx = (idx + 1) % 4;
 
@@ -1503,11 +1575,13 @@
       }, 360);
     }
 
-    ext.castSkill('yoriichi', idx, {
-      charId: 'yoriichi',
+    const muted = isSfxMutedNow();
+    ext.castSkill(targetSkillId, idx, {
+      charId: targetSkillId,
       originRect,
       actionSticker: resolveYoriichiActionUrl(state.themeCfg),
-      composerEl: null
+      composerEl: null,
+      soundEnabled: !muted
     });
   }
 
@@ -1554,12 +1628,39 @@
     bar.style.setProperty('--tok-glow', cfg.glow || 'rgba(56, 189, 248, 0.28)');
     bar.style.setProperty('--tok-surface', cfg.modalBg || 'rgba(15, 11, 30, 0.95)');
 
+    const nextSkillId = typeof cfg.personaSkillId === 'string' && cfg.personaSkillId.trim()
+      ? cfg.personaSkillId.trim()
+      : 'yoriichi';
+    const nextPersonaLabel = typeof cfg.personaLabel === 'string' ? cfg.personaLabel.trim() : '';
+    if (nextSkillId !== state.personaSkillId) {
+      state.yoriichiComboIdx = 0;
+    }
+    state.personaSkillId = nextSkillId;
+    state.personaLabel = nextPersonaLabel;
+
+    const isDefaultYoriichi = nextSkillId === 'yoriichi' && (!nextPersonaLabel || /Yoriichi|Hỏa Thần/i.test(nextPersonaLabel));
     const safeYoriAv = resolveYoriichiAvatarUrl(cfg);
     if (state.yoriichiBtnEl) {
       state.yoriichiBtnEl.style.backgroundImage = safeYoriAv ? `url("${safeYoriAv}")` : 'none';
+      if (cfg.personaRingColor) {
+        state.yoriichiBtnEl.style.borderColor = cfg.personaRingColor;
+      }
+      const crestTitle = isDefaultYoriichi
+        ? 'Khai Tổ Vũ Điệu Hỏa Thần (Tsugikuni Yoriichi) — Nhấn để khai mở Nhật Chi Hô Hấp!'
+        : `${nextPersonaLabel || 'Bản Ngã Chủ Nhân'} — Nhấn để khai mở tuyệt kỹ Hơi Thở!`;
+      state.yoriichiBtnEl.title = crestTitle;
+      state.yoriichiBtnEl.setAttribute('aria-label', crestTitle);
     }
     if (state.echoAvatarEl) {
       state.echoAvatarEl.style.backgroundImage = safeYoriAv ? `url("${safeYoriAv}")` : 'none';
+      if (cfg.personaRingColor) {
+        state.echoAvatarEl.style.borderColor = cfg.personaRingColor;
+      }
+    }
+    if (state.echoHdrLabelEl) {
+      state.echoHdrLabelEl.textContent = isDefaultYoriichi
+        ? 'Khai Tổ Hỏa Thần vừa truyền lệnh'
+        : `${nextPersonaLabel || 'Chủ Nhân'} vừa truyền lệnh`;
     }
 
     const safeYoriAction = resolveYoriichiActionUrl(cfg);
@@ -1570,7 +1671,7 @@
       typeof window.__AGY_KNY_SKILLS__.preloadActionSprite === 'function'
     ) {
       try {
-        window.__AGY_KNY_SKILLS__.preloadActionSprite('yoriichi', safeYoriAction);
+        window.__AGY_KNY_SKILLS__.preloadActionSprite(nextSkillId, safeYoriAction);
       } catch (_) {}
     }
 
@@ -1683,11 +1784,12 @@
     bladeBtn.appendChild(katanaParts.svg);
     bladeBtn.appendChild(bladeLbl);
 
-    // 4. Kagura Wind-Chime Bell Quick Toggle Button
+    // 4. Kagura Wind-Chime Bell Button (Click -> Popover; Shift+Click / Right-Click -> Quick Toggle)
     const kaguraBtn = document.createElement('button');
     kaguraBtn.type = 'button';
     kaguraBtn.className = 'agy-hud-util-btn agy-kagura-bell-btn';
-    kaguraBtn.title = 'Chuông gió Kagura — Bật/Tắt Âm cảnh & Chuông báo hoàn thành lượt khi Alt+Tab';
+    kaguraBtn.dataset.agyBioAudioTrigger = '1';
+    kaguraBtn.title = 'Chuông gió Kagura — Nhấn mở Âm cảnh Điệp Phủ • Shift+Click hoặc Chuột phải để Bật/Tắt nhanh';
     kaguraBtn.setAttribute('aria-label', kaguraBtn.title);
     kaguraBtn.innerHTML = ic ? ic.getFuncSvg('kagura_bell', 13) : '🔔';
 
@@ -1695,9 +1797,16 @@
     const cinemaBtn = document.createElement('button');
     cinemaBtn.type = 'button';
     cinemaBtn.className = 'agy-hud-util-btn agy-cinema-mask-btn';
+    cinemaBtn.dataset.agyCinemaTrigger = '1';
     cinemaBtn.title = 'Mặt nạ Cáo Urokodaki — Mở Khiên Che Mật & Đạo Diễn Cinema';
     cinemaBtn.setAttribute('aria-label', cinemaBtn.title);
     cinemaBtn.innerHTML = ic ? ic.getFuncSvg('cinema_mask', 13) : '🦊';
+
+    // Remove any auto-mounted duplicate long buttons if they were mounted before HUD
+    ['agy-bio-audio-hud-btn', 'agy-cinema-hud-btn'].forEach((dupId) => {
+      const dup = document.getElementById(dupId);
+      if (dup) dup.remove();
+    });
 
     // 6. Detailed Breakdown Popover with semantic icons per row
     const pop = document.createElement('div');
@@ -1761,7 +1870,10 @@
     echoBody.className = 'agy-echo-body';
     const echoHdr = document.createElement('div');
     echoHdr.className = 'agy-echo-hdr';
-    echoHdr.innerHTML = `${ic ? ic.getFuncSvg('yoriichi_sun', 12) : ''}<span>Khai Tổ Hỏa Thần vừa truyền lệnh</span>`;
+    echoHdr.innerHTML = `${ic ? ic.getFuncSvg('yoriichi_sun', 12) : ''}`;
+    const echoHdrLbl = document.createElement('span');
+    echoHdrLbl.textContent = 'Khai Tổ Hỏa Thần vừa truyền lệnh';
+    echoHdr.appendChild(echoHdrLbl);
     const echoTxt = document.createElement('div');
     echoTxt.className = 'agy-echo-text';
     echoBody.appendChild(echoHdr);
@@ -1800,6 +1912,7 @@
 
     state.popoverEl = pop;
     state.echoEl = echo;
+    state.echoHdrLabelEl = echoHdrLbl;
     state.echoTextEl = echoTxt;
     state.echoAvatarEl = echoAv;
 
@@ -1821,6 +1934,24 @@
     applyThemeColors(bar, themeCfg, themeName);
     computeAndApplyBladeHeat();
 
+    // Observe composer.clientWidth directly for Split-View narrow columns (MacBook 13" 2-pane / 3-pane)
+    const syncCompactTier = () => {
+      if (!bar || !composer) return;
+      const cw = Math.round(composer.clientWidth || (composer.getBoundingClientRect && composer.getBoundingClientRect().width) || 800);
+      if (cw > 0 && cw < 440) {
+        bar.dataset.compact = '2';
+      } else if (cw > 0 && cw < 620) {
+        bar.dataset.compact = '1';
+      } else {
+        delete bar.dataset.compact;
+      }
+    };
+    syncCompactTier();
+    if (typeof ResizeObserver !== 'undefined') {
+      state.composerRo = new ResizeObserver(syncCompactTier);
+      state.composerRo.observe(composer);
+    }
+
     // Mount Hashira Squad anchor alongside composer
     if (typeof window !== 'undefined' && window.__AGY_SQUAD_RAID__ && typeof window.__AGY_SQUAD_RAID__.mount === 'function') {
       try { window.__AGY_SQUAD_RAID__.mount(composer); } catch (_) {}
@@ -1841,20 +1972,39 @@
     turnBtn.addEventListener('click', onTogglePopover);
     bladeBtn.addEventListener('click', onTogglePopover);
 
-    kaguraBtn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
+    const quickToggleBioAudio = () => {
       const bio = typeof window !== 'undefined' ? window.__AGY_BIO_AUDIO__ : null;
       if (bio && typeof bio.toggle === 'function') {
         try {
-          const next = bio.toggle();
-          if (typeof next === 'boolean') {
-            if (next) kaguraBtn.dataset.active = '1';
-            else delete kaguraBtn.dataset.active;
-          } else {
-            refreshUtilityButtonStates();
-          }
+          bio.toggle();
+          refreshUtilityButtonStates();
         } catch (_) {}
       }
+    };
+
+    kaguraBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (ev.shiftKey) {
+        quickToggleBioAudio();
+        return;
+      }
+      const bio = typeof window !== 'undefined' ? window.__AGY_BIO_AUDIO__ : null;
+      if (bio) {
+        try {
+          if (typeof bio.openPopover === 'function') {
+            bio.openPopover(kaguraBtn);
+          } else if (typeof bio.toggle === 'function') {
+            bio.toggle();
+          }
+          setTimeout(refreshUtilityButtonStates, 30);
+        } catch (_) {}
+      }
+    });
+
+    kaguraBtn.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      quickToggleBioAudio();
     });
 
     cinemaBtn.addEventListener('click', (ev) => {
@@ -1862,9 +2012,9 @@
       const dir = typeof window !== 'undefined' ? window.__AGY_CINEMA_DIRECTOR__ : null;
       if (dir) {
         try {
-          if (typeof dir.openPanel === 'function') dir.openPanel();
-          else if (typeof dir.togglePanel === 'function') dir.togglePanel();
-          else if (typeof dir.open === 'function') dir.open();
+          if (typeof dir.openPanel === 'function') dir.openPanel(cinemaBtn);
+          else if (typeof dir.togglePanel === 'function') dir.togglePanel(cinemaBtn);
+          else if (typeof dir.open === 'function') dir.open(cinemaBtn);
         } catch (_) {}
         setTimeout(refreshUtilityButtonStates, 50);
       }
@@ -1872,7 +2022,8 @@
 
     // Capture Enter key & Send button click BEFORE React clears the editor so user's message always shows!
     const onCaptureKeyDown = (ev) => {
-      if (ev.key !== 'Enter' || ev.shiftKey || ev.altKey || ev.ctrlKey || ev.metaKey || ev.isComposing) return;
+      if (ev.isComposing || ev.keyCode === 229) return;
+      if (ev.key !== 'Enter' || ev.shiftKey || ev.altKey || ev.ctrlKey || ev.metaKey) return;
       const target = ev.target;
       if (!target || (target.closest && target.closest('#agy-shinobu-npc-wrap'))) return;
       const hasMenu = document.querySelector('[role="listbox"], [data-radix-popper-content-wrapper]');
@@ -1914,6 +2065,7 @@
       }
     };
     const onKey = (ev) => {
+      if (ev.isComposing || ev.keyCode === 229) return;
       if (ev.key === 'Escape') {
         if (state.popoverOpen) setPopoverOpen(false);
         hideUserMessageEcho();
@@ -1992,6 +2144,10 @@
 
   function teardown() {
     abortActiveStream();
+    if (state.composerRo) {
+      try { state.composerRo.disconnect(); } catch (_) {}
+      state.composerRo = null;
+    }
     if (state.rafId) {
       cancelAnimationFrame(state.rafId);
       state.rafId = 0;
@@ -2011,6 +2167,8 @@
     }
     if (typeof document !== 'undefined') {
       document.querySelectorAll(`#${HUD_BAR_ID}, #${ECHO_BAR_ID}`).forEach((el) => el.remove());
+      const st = document.getElementById(STYLE_ID);
+      if (st) st.remove();
       if (document.documentElement) {
         delete document.documentElement.dataset.agyRedBlade;
       }
@@ -2021,6 +2179,7 @@
     state.composer = null;
     state.barEl = null;
     state.echoEl = null;
+    state.echoHdrLabelEl = null;
     state.kaguraBtnEl = null;
     state.cinemaBtnEl = null;
     state.bladeBtnEl = null;

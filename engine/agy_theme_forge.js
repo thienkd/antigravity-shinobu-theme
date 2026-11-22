@@ -539,6 +539,8 @@
       userCornerSvg: persona.userCornerSvg,
       sticker: persona.userSticker,
       userSticker: persona.userSticker,
+      actionSticker: persona.actionSticker || '',
+      userActionSticker: persona.actionSticker || '',
       stickerW: 140,
       stickerH: 64,
       stickerTop: -56,
@@ -652,7 +654,7 @@
     return safeRasterDataUrl(dataUrl);
   }
 
-  function forgeFromWallpaperFile(file) {
+  function forgeFromWallpaperFile(file, forgeOpts) {
     return new Promise((resolve, reject) => {
       if (!file || typeof file.size !== 'number' || file.size <= 0 || file.size > MAX_UPLOAD_BYTES) {
         reject(new Error('Ảnh vượt quá giới hạn 15MB hoặc trống.'));
@@ -662,6 +664,16 @@
         reject(new Error('Chỉ hỗ trợ ảnh PNG, JPEG, WebP hoặc GIF.'));
         return;
       }
+      let activePersonaId = (forgeOpts && typeof forgeOpts.personaId === 'string' && forgeOpts.personaId.trim())
+        ? forgeOpts.personaId.trim()
+        : '';
+      if (!activePersonaId && typeof localStorage !== 'undefined') {
+        try {
+          activePersonaId = String(localStorage.getItem('agy_master_persona_v1') || '').trim();
+        } catch (_) {}
+      }
+      if (!activePersonaId) activePersonaId = 'yoriichi';
+
       const reader = new FileReader();
       reader.onerror = () => reject(new Error('Không thể đọc file ảnh.'));
       reader.onload = () => {
@@ -686,12 +698,14 @@
               c2: stats.c2,
               defaultDimming,
               fxMode: suggestedFx,
+              personaId: activePersonaId,
               wallpaper: wpDataUrl,
               concept: `OKLCH 64×64 Forged • WCAG AA ${stats.avgL > 0.5 ? 'Bright-Balanced' : 'Deep-Focus'}`
             });
             resolve({
               suggestedName: `⚒️ ${baseName}`,
               fxMode: suggestedFx,
+              personaId: activePersonaId,
               stats,
               theme: themeDef
             });

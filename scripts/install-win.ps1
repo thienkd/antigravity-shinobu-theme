@@ -12,32 +12,31 @@ $BuildPy = Join-Path $RepoRoot 'scripts\build_payload.py'
 $BuildNode = Join-Path $RepoRoot 'scripts\build_payload.js'
 $PidFile = Join-Path $RepoRoot 'daemon.pid'
 $VbsPath = Join-Path $RepoRoot 'silent-start.vbs'
+$AppDataDir = if ($env:APPDATA) { $env:APPDATA } else { Join-Path $HOME 'AppData\Roaming' }
 
 $NodeCmd = Get-Command node -ErrorAction SilentlyContinue
 if (-not $NodeCmd) {
     Write-Error "Node.js not found in PATH. Install Node.js >= 22 first."
 }
 $NodeExe = $NodeCmd.Source
-$NodeMajor = [int]((& $NodeExe -p "process.versions.node.split('.')[0]").Trim())
+$NodeVersionFull = (& $NodeExe -p "process.versions.node").Trim()
+$NodeMajor = [int](($NodeVersionFull -split '\.')[0])
 if ($NodeMajor -lt 22) {
-    Write-Error "Node.js >= 22 is required (found v$NodeMajor at $NodeExe)."
+    Write-Error "Node.js >= 22 is required (found v$NodeVersionFull at $NodeExe). Please upgrade Node.js to >= 22."
 }
 
 if (-not (Test-Path -LiteralPath $PayloadJs)) {
-    $PyCmd = Get-Command python -ErrorAction SilentlyContinue
-    if (-not $PyCmd) {
-        $PyCmd = Get-Command python3 -ErrorAction SilentlyContinue
-    }
-    if ($PyCmd) {
-        Write-Host "[install-win] Building dist/theme_payload.js via Python..."
-        & $PyCmd.Source $BuildPy
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "[install-win] Python build failed, falling back to Node builder..."
-            & $NodeExe $BuildNode
+    Write-Host "[install-win] Building dist/theme_payload.js via Node.js..."
+    & $NodeExe $BuildNode
+    if (($LASTEXITCODE -ne 0) -or (-not (Test-Path -LiteralPath $PayloadJs))) {
+        $PyCmd = Get-Command python -ErrorAction SilentlyContinue | Where-Object { $_.Source -notmatch 'WindowsApps' } | Select-Object -First 1
+        if (-not $PyCmd) {
+            $PyCmd = Get-Command python3 -ErrorAction SilentlyContinue | Where-Object { $_.Source -notmatch 'WindowsApps' } | Select-Object -First 1
         }
-    } else {
-        Write-Host "[install-win] Building dist/theme_payload.js via Node.js..."
-        & $NodeExe $BuildNode
+        if ($PyCmd) {
+            Write-Host "[install-win] Node build failed, falling back to Python builder..."
+            & $PyCmd.Source $BuildPy
+        }
     }
     if (-not (Test-Path -LiteralPath $PayloadJs)) {
         Write-Error "Failed to build dist/theme_payload.js."
@@ -49,7 +48,7 @@ if (Test-Path -LiteralPath $PidFile) {
     $OldPid = 0
     if ([int]::TryParse(($OldPidText -as [string]), [ref]$OldPid) -and $OldPid -gt 0) {
         $ExistingProc = Get-Process -Id $OldPid -ErrorAction SilentlyContinue
-        if ($ExistingProc -and $ExistingProc.ProcessName -eq 'node') {
+        if ($ExistingProc -and $ExistingProc.ProcessName -imatch '^node(?:js|\d+)?$') {
             $IsDaemonCmd = $true
             try {
                 $CimProc = Get-CimInstance Win32_Process -Filter "ProcessId = $OldPid" -ErrorAction Stop
@@ -88,7 +87,7 @@ $ShortcutSearchDirs = @(
     [Environment]::GetFolderPath('DesktopDirectory'),
     [Environment]::GetFolderPath('Programs'),
     [Environment]::GetFolderPath('Startup'),
-    (Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar')
+    (Join-Path $AppDataDir 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar')
 ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
 
 foreach ($SearchDir in $ShortcutSearchDirs) {
@@ -147,8 +146,9 @@ for ($i = 0; $i -lt 15; $i++) {
         if ([int]::TryParse(($NewPidText -as [string]), [ref]$NewPid) -and $NewPid -gt 0) {
             if (Get-Process -Id $NewPid -ErrorAction SilentlyContinue) {
                 Write-Host "[install-win] Daemon running silently (PID $NewPid)."
-                $PortFile = Join-Path $env:APPDATA 'Antigravity\DevToolsActivePort'
-                if (-not (Test-Path -LiteralPath $PortFile)) {
+                $PortFileUpper = Join-Path $AppDataDir 'Antigravity\DevToolsActivePort'
+                $PortFileLower = Join-Path $AppDataDir 'antigravity\DevToolsActivePort'
+                if ((-not (Test-Path -LiteralPath $PortFileUpper)) -and (-not (Test-Path -LiteralPath $PortFileLower))) {
                     Write-Host "[install-win] Note: DevToolsActivePort not found yet. Quit Antigravity completely (System Tray -> Quit) and reopen it from Start Menu (if using a Taskbar pin, unpin and re-pin from Start Menu)."
                 }
                 exit 0

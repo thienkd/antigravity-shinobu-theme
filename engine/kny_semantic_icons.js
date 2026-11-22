@@ -111,7 +111,7 @@
     } else {
       // Crisp project monogram crest
       innerGlyph = `
-        <text x="12" y="15.6" text-anchor="middle" fill="#ffffff" font-size="10.8" font-weight="800" font-family="Segoe UI, Inter, sans-serif">${escapeXml(info.initial)}</text>
+        <text x="12" y="15.6" text-anchor="middle" fill="#ffffff" font-size="10.8" font-weight="800" font-family="-apple-system, BlinkMacSystemFont, Inter, Segoe UI, system-ui, Noto Sans, Ubuntu, Cantarell, Noto Sans CJK JP, sans-serif">${escapeXml(info.initial)}</text>
       `;
     }
 

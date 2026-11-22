@@ -19,7 +19,7 @@ Hệ thống tùy biến giao diện **Live Wallpaper 4K 60/120fps**, **Quân Đ
 - **Sukitōru Sekai (Transparent World) & Multi-Window GPU Arbiter**: Pre-baked offscreen canvas glass (`Zero Live Blur`) with automatic `0% GPU` throttling on unfocused/background windows.
 - **Crimson Red Blade (`赫刀`) & Demon-Slaying Counter-Slash**: Dynamic blade heat gauge and full-screen **60 Breathing Forms** + automatic **「滅」** victory finisher upon resolving build/test errors.
 - **0 KB Bio-Acoustic Kagura & Circadian Retinal Guard**: Pure mathematical Web Audio synthesis (Japanese Koto + Furin completion chimes, *"Kachin!"* blade sheathe, 0.12Hz Alpha rain/hearth soundscapes, and automatic night/dawn eye care).
-- **1-Click Privacy Shield (`Alt+Shift+P`) & 15s Auto-Showcase Director (`Alt+Shift+C`)**: Instant non-destructive redaction of workspace names, file trees, and chat history for safe screen recording, paired with an automated trailer choreographer.
+- **1-Click Privacy Shield (`Alt+Shift+P` / `Option ⌥+Shift+P`) & 15s Auto-Showcase Director (`Alt+Shift+C` / `Option ⌥+Shift+C`)**: Instant non-destructive redaction of workspace names, file trees, and chat history for safe screen recording, paired with an automated trailer choreographer.
 - **AI Theme Forge (`OKLCH` & `.agytheme`)**: Perceptual `64×64` OKLCH palette extraction, WCAG AA contrast solver, and portable `agytheme/2.0` theme packages.
 - **Enterprise Defense-in-Depth**: Zero `node_modules`, `127.0.0.1` Host Pinning, **256-bit Ephemeral Closure Token** (`X-Agy-Token`), Strict CDP Target Verification, and PII-redacted logs. See [`SECURITY.md`](SECURITY.md).
 
@@ -56,8 +56,8 @@ Hệ thống tùy biến giao diện **Live Wallpaper 4K 60/120fps**, **Quân Đ
 - **Nhịp Sinh Học Bảo Vệ Mắt (`Bio-Circadian Guard`)**: Tự động phủ bộ lọc ấm giảm ánh sáng xanh (`01:30–05:29`) hoặc ánh nắng cam vàng **Bình Minh Khởi Nguyên Yoriichi** (`05:55–06:30`) **chỉ trên lớp nền `<agy-live-fx>`**, giữ nguyên 100% độ chuẩn màu cú pháp code, kèm lời dặn giữ sức khỏe ấm áp từ Điệp Phủ.
 
 ### 6. 🎬 Đạo Diễn Quay Phim 1 Chạm & Khiên Che Mật (`engine/kny_cinema_director.js`)
-- **🛡️ Khiên Che Mật Tức Thời (`Alt+Shift+P`)**: Chỉ 1 chạm làm mờ kính không phá hủy (`non-destructive blur`) toàn bộ cây thư mục dự án, thanh đường dẫn breadcrumb, tên lịch sử hội thoại cũ và địa chỉ `localhost`/port (kèm chế độ **Strict Redact** che cả code & nội dung chat), trong khi vẫn giữ **cảnh nền 4K, Chibi, Quân Đoàn Cửu Trụ & hiệu ứng xuất chiêu sắc nét 100%** để quay màn hình / livestream an toàn tuyệt đối.
-- **▶️ Tự Diễn Trailer 15 Giây (`Alt+Shift+C`)**: Tự động bật Khiên Che Mật, lướt qua các cảnh quan Đại Trụ 4K (0–4s) → triệu hồi Đội Hình 5 Đại Trụ & nung đỏ Hách Đao 100% (4–8s) → Yoriichi xuất chiêu Vũ Điệu Hỏa Thần Thập Tam Thức (8–13s) → đóng ấn **「滅」** kèm tiếng tra kiếm *"Kachin!"* và khôi phục nguyên trạng chủ đề đang dùng (13–15s).
+- **🛡️ Khiên Che Mật Tức Thời (`Alt+Shift+P` / macOS `Option ⌥+Shift+P`)**: Chỉ 1 chạm làm mờ kính không phá hủy (`non-destructive blur`) toàn bộ cây thư mục dự án, thanh đường dẫn breadcrumb, tên lịch sử hội thoại cũ và địa chỉ `localhost`/port (kèm chế độ **Strict Redact** che cả code & nội dung chat), trong khi vẫn giữ **cảnh nền 4K, Chibi, Quân Đoàn Cửu Trụ & hiệu ứng xuất chiêu sắc nét 100%** để quay màn hình / livestream an toàn tuyệt đối.
+- **▶️ Tự Diễn Trailer 15 Giây (`Alt+Shift+C` / macOS `Option ⌥+Shift+C`)**: Tự động bật Khiên Che Mật, lướt qua các cảnh quan Đại Trụ 4K (0–4s) → triệu hồi Đội Hình 5 Đại Trụ & nung đỏ Hách Đao 100% (4–8s) → Yoriichi xuất chiêu Vũ Điệu Hỏa Thần Thập Tam Thức (8–13s) → đóng ấn **「滅」** kèm tiếng tra kiếm *"Kachin!"* và khôi phục nguyên trạng chủ đề đang dùng (13–15s).
 
 ### 7. ⚒️ Lò Rèn Đa Vũ Trụ `AI Theme Forge` (`OKLCH` & `.agytheme`)
 - Kéo thả bất kỳ ảnh nền cá nhân nào để tự động phân tích không gian màu cảm nhận **`OKLCH 64×64`**, giải bài toán độ tương phản chữ đạt chuẩn **`WCAG AA`**, ghép đôi cùng **18 Master Personas** và đóng gói xuất/nhập định dạng chuẩn **`.agytheme` (`agytheme/2.0`)** đã qua kiểm duyệt bảo mật SVG/CSS.
@@ -99,21 +99,22 @@ git clone https://github.com/thienkd/antigravity-shinobu-theme.git "$HOME/.gemin
 bash "$HOME/.gemini/config/skills/antigravity-custom-theme/scripts/install-unix.sh"
 ```
 
-- Trình cài đặt tự biên dịch payload, đăng ký dịch vụ `~/Library/LaunchAgents/io.antigravity.custom-theme.plist` và đặt quyền `0600` cho `daemon.log`.
-- Khởi động Antigravity kèm cổng CDP cục bộ:
+- Trình cài đặt tự biên dịch payload bằng Node.js (không cần Xcode Command Line Tools), đăng ký dịch vụ `~/Library/LaunchAgents/io.antigravity.custom-theme.plist` (`chmod 644`) và đặt quyền riêng tư `0600` cho `daemon.log`.
+- **Lưu ý quan trọng:** Nhấn **`Cmd + Q`** trên thanh Dock (hoặc chạy `osascript -e 'quit app "Antigravity"'`) để thoát hẳn Antigravity trước, sau đó mở lại kèm cổng CDP cục bộ:
   ```bash
+  osascript -e 'quit app "Antigravity"'
   open -a Antigravity --args --remote-debugging-port=0
   ```
 
-### 🐧 Linux (`systemd --user` service)
+### 🐧 Linux (`systemd --user` service & XDG Desktop tự động)
 
 ```bash
 git clone https://github.com/thienkd/antigravity-shinobu-theme.git "$HOME/.gemini/config/skills/antigravity-custom-theme"
 bash "$HOME/.gemini/config/skills/antigravity-custom-theme/scripts/install-unix.sh"
 ```
 
-- Trình cài đặt tự kích hoạt dịch vụ `~/.config/systemd/user/antigravity-custom-theme.service` (`systemctl --user status antigravity-custom-theme.service`).
-- Thêm cờ `--remote-debugging-port=0` vào dòng `Exec=` trong file `.desktop` của Antigravity rồi mở lại ứng dụng.
+- Trình cài đặt tự kích hoạt dịch vụ `~/.config/systemd/user/antigravity-custom-theme.service` (`systemctl --user status antigravity-custom-theme.service`, tự fallback sang `nohup` trên WSL2/Alpine không có systemd).
+- **Không cần `sudo`:** `install-unix.sh` tự động sao chép và cấu hình cờ `--remote-debugging-port=0` vào `~/.local/share/applications/antigravity*.desktop` (chuẩn XDG, hỗ trợ cả đường dẫn DevTools của bản cài `.deb`/`.rpm`, Snap và Flatpak). Chỉ cần đóng hẳn Antigravity rồi mở lại từ trình khởi chạy ứng dụng!
 
 ---
 
@@ -144,8 +145,8 @@ npm run build
 
 | Tổ hợp phím / Thao tác | Tác dụng |
 | :--- | :--- |
-| **`Alt + Shift + P`** | Bật / Tắt tức thời **🛡️ Khiên Che Mật Dự Án** trước khi quay màn hình hoặc chia sẻ màn hình. |
-| **`Alt + Shift + C`** | Chạy / Dừng **🎬 Kịch Bản Tự Diễn Trailer 15 Giây** (tự khôi phục lại đúng chủ đề ban đầu khi kết thúc). |
+| **`Alt + Shift + P`** *(macOS: **`Option ⌥ + Shift + P`**)* | Bật / Tắt tức thời **🛡️ Khiên Che Mật Dự Án** trước khi quay màn hình hoặc chia sẻ màn hình. |
+| **`Alt + Shift + C`** *(macOS: **`Option ⌥ + Shift + C`**)* | Chạy / Dừng **🎬 Kịch Bản Tự Diễn Trailer 15 Giây** (tự khôi phục lại đúng chủ đề ban đầu khi kết thúc). |
 | **`Esc`** | Đóng nhanh các bảng điều khiển nổi, ẩn thanh Echo tin nhắn hoặc dừng ngay Trailer đang diễn. |
 | **Nhấn Gia huy / Avatar Yoriichi** | Khai mở **Nhật Chi Hô Hấp — Vũ Điệu Hỏa Thần** của Kiếm Sĩ Đầu Tiên Yoriichi. |
 | **Nhấn Chibi góc phải khung chat** | Nhân vật Chibi Đại Trụ nhảy ra giữa màn hình tung liên hoàn **4 Thức Hơi Thở** đặc trưng. |

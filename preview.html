@@ -14,7 +14,7 @@
       overflow: hidden;
       background: #08081c;
       color: #f8fafc;
-      font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
       font-size: 13.5px;
     }
     button, input, textarea { font-family: inherit; }
@@ -660,6 +660,7 @@
 
       sendBtn.addEventListener('click', sendDemoPrompt);
       promptInput.addEventListener('keydown', (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           sendDemoPrompt();

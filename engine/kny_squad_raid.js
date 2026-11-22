@@ -1,6 +1,10 @@
 (() => {
   'use strict';
 
+  if (typeof window !== 'undefined' && window.__AGY_SQUAD_RAID__ && typeof window.__AGY_SQUAD_RAID__.teardown === 'function') {
+    try { window.__AGY_SQUAD_RAID__.teardown(); } catch (_) {}
+  }
+
   /**
    * Kimetsu no Yaiba — Live Hashira Swarm Squad & Kasugai Battlefield Victory Engine
    * Exposes window.__AGY_SQUAD_RAID__:
@@ -281,6 +285,7 @@
 
     return {
       id: rawId,
+      isSim: Boolean(raw.isSim || /^sim-|^showcase-/i.test(rawId)),
       typeName,
       role,
       lastTool,
@@ -305,8 +310,9 @@
         align-items: center;
         gap: 6px;
         pointer-events: none;
-        font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
         user-select: none;
+        -webkit-app-region: no-drag;
       }
       ${SQUAD_TAG}[data-active="1"] {
         display: inline-flex;
@@ -474,6 +480,7 @@
         border-radius: 999px;
         background: linear-gradient(135deg, #fde047 0%, #f59e0b 100%);
         color: #1c0a00;
+        font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', 'Noto Serif JP', 'Source Han Serif JP', 'IPAPMincho', 'MS PMincho', 'Noto Serif', Georgia, serif;
         font-size: 9.5px;
         font-weight: 900;
         letter-spacing: 0.3px;
@@ -597,7 +604,7 @@
        * ====================================================================== */
       #${VICTORY_HOST_ID} {
         position: fixed;
-        top: 18px;
+        top: 42px;
         right: 24px;
         z-index: 9998;
         pointer-events: none;
@@ -605,7 +612,7 @@
         align-items: center;
         gap: 12px;
         user-select: none;
-        font-family: 'Segoe UI', Inter, system-ui, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', 'Ubuntu', 'Cantarell', 'Noto Sans CJK JP', sans-serif;
       }
       .agy-metsu-stamp-card {
         display: inline-flex;
@@ -636,6 +643,7 @@
         align-items: center;
         justify-content: center;
         color: #fef9c3;
+        font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', 'Noto Serif JP', 'Source Han Serif JP', 'IPAPMincho', 'MS PMincho', 'Noto Serif', Georgia, serif;
         font-size: 21px;
         font-weight: 900;
         line-height: 1;
@@ -757,6 +765,45 @@
     }
   }
 
+  function isSfxMutedNow() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem('agy_kny_sfx_muted');
+        if (raw === '1' || raw === 'true') return true;
+      }
+      if (typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__ && typeof window.__AGY_BIO_AUDIO__.isEnabled === 'function') {
+        if (!window.__AGY_BIO_AUDIO__.isEnabled()) return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  function clampKasugaiIntelPosition(wrapEl, intelEl) {
+    if (!wrapEl || !intelEl || typeof wrapEl.getBoundingClientRect !== 'function') return;
+    intelEl.style.left = '0px';
+    intelEl.style.right = 'auto';
+    const wrapRect = wrapEl.getBoundingClientRect();
+    const vw = (typeof window !== 'undefined' && window.innerWidth) || 1280;
+    const comp = state.composer || resolveComposer();
+    const boundRect = comp && typeof comp.getBoundingClientRect === 'function'
+      ? comp.getBoundingClientRect()
+      : { left: 8, right: vw - 8 };
+    const availW = Math.max(196, Math.round((boundRect.right - boundRect.left) - 12));
+    const cardW = Math.min(256, availW);
+    intelEl.style.width = `${cardW}px`;
+
+    const maxRight = Math.min(boundRect.right - 4, vw - 8);
+    const minLeft = Math.max(8, boundRect.left + 2);
+    let desiredLeft = wrapRect.left;
+    if (desiredLeft + cardW > maxRight) {
+      desiredLeft = maxRight - cardW;
+    }
+    if (desiredLeft < minLeft) {
+      desiredLeft = minLeft;
+    }
+    intelEl.style.left = `${Math.round(desiredLeft - wrapRect.left)}px`;
+  }
+
   function castUnitBreathingSkill(unit) {
     if (!unit || !unit.meta) return;
     const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
@@ -769,12 +816,14 @@
     const rect = unit.btnEl && typeof unit.btnEl.getBoundingClientRect === 'function'
       ? unit.btnEl.getBoundingClientRect()
       : null;
+    const muted = isSfxMutedNow();
 
     ext.castSkill(hero, idx, {
       charId: hero,
       originRect: rect,
       actionSticker: unit.actionUrl || '',
-      composerEl: null
+      composerEl: null,
+      soundEnabled: !muted
     });
   }
 
@@ -831,6 +880,7 @@
 
     const kanSeal = document.createElement('span');
     kanSeal.className = 'agy-squad-kan-seal';
+    kanSeal.setAttribute('lang', 'ja');
     kanSeal.textContent = '「完」';
 
     const slashArc = document.createElement('span');
@@ -893,12 +943,14 @@
 
     const unitRecord = {
       id: sub.id,
+      isSim: Boolean(sub.isSim || state.simActive || /^sim-|^showcase-/i.test(String(sub.id))),
       hero: meta.hero,
       meta,
       actionUrl,
       lifecycle: 'working',
       wrapEl: wrap,
       btnEl: btn,
+      intelEl: intel,
       stepTagEl: stepTag,
       intelBadgeEl: intelBadge,
       roleValEl: roleRow.valEl,
@@ -908,6 +960,9 @@
       retreatTimer: 0,
       removeTimer: 0
     };
+
+    wrap.addEventListener('mouseenter', () => clampKasugaiIntelPosition(wrap, intel));
+    btn.addEventListener('focus', () => clampKasugaiIntelPosition(wrap, intel));
 
     btn.addEventListener('click', (ev) => {
       ev.stopPropagation();
@@ -1081,6 +1136,7 @@
 
     const seal = document.createElement('div');
     seal.className = 'agy-metsu-seal-circle';
+    seal.setAttribute('lang', 'ja');
     seal.textContent = '滅';
 
     const col = document.createElement('div');
@@ -1142,19 +1198,38 @@
     state.simActive = false;
   }
 
-  function simulateRaid(rawOpts) {
+  function stopSimulation() {
     clearSimulationTimers();
+    const toRemove = [];
+    state.unitsById.forEach((u, id) => {
+      if (u && (u.isSim || /^sim-|^showcase-/i.test(String(id)))) {
+        clearTimeout(u.enterTimer);
+        clearTimeout(u.retreatTimer);
+        clearTimeout(u.removeTimer);
+        if (u.wrapEl && u.wrapEl.parentElement) {
+          u.wrapEl.remove();
+        }
+        toRemove.push(id);
+      }
+    });
+    toRemove.forEach((id) => state.unitsById.delete(id));
+    refreshSquadVisibility();
+  }
+
+  function simulateRaid(rawOpts) {
+    stopSimulation();
     state.simActive = true;
     ensureMounted();
 
     const opts = rawOpts && typeof rawOpts === 'object' ? rawOpts : {};
     const durationMs = Math.max(2600, Math.min(18000, Number(opts.durationMs) || 6200));
 
-    const demoSquad = Array.isArray(opts.subagents) && opts.subagents.length > 0
+    const baseSquad = Array.isArray(opts.subagents) && opts.subagents.length > 0
       ? opts.subagents
       : [
           {
             cid: 'sim-sec-audit-01',
+            isSim: true,
             typeName: 'research',
             role: 'Kiểm toán Bảo mật & Lá chắn CWE-79',
             lastTool: 'Rà soát ranh giới bảo mật Enterprise',
@@ -1162,6 +1237,7 @@
           },
           {
             cid: 'sim-ui-forge-02',
+            isSim: true,
             typeName: 'image-generator',
             role: 'Chế tác Giao diện Đa Vũ Trụ .agytheme',
             lastTool: 'Đồng bộ bảng màu Nhật Luân & SVG',
@@ -1169,6 +1245,7 @@
           },
           {
             cid: 'sim-cdp-verify-03',
+            isSim: true,
             typeName: 'browser',
             role: 'Trinh sát Trình duyệt & Kiểm định 60fps',
             lastTool: 'Đo khung hình Canvas không giật lag',
@@ -1176,12 +1253,14 @@
           },
           {
             cid: 'sim-core-daemon-04',
+            isSim: true,
             typeName: 'self',
             role: 'Khai mở Luồng SSE Byte-Tailer < 30ms',
             lastTool: 'Truyền phát sự kiện thời gian thực',
             stepCount: 5
           }
         ];
+    const demoSquad = baseSquad.map((s) => ({ ...s, isSim: true }));
 
     // Staggered Shunshin landing
     demoSquad.forEach((_, idx) => {
@@ -1260,7 +1339,7 @@
     mount: ensureMounted,
     sync,
     simulateRaid,
-    stopSimulation: clearSimulationTimers,
+    stopSimulation,
     triggerVictoryStamp,
     teardown,
     destroy: teardown

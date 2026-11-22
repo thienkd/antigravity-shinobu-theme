@@ -53,7 +53,7 @@
 | `fxMode` | `string` | Optional | Scene ID in `engine/kny_fx_modes.js` (`wisteria_royal`, `wisteria`, `water`, `flame`, `sound`, `mist`, `love`, `serpent`, `wind`, `stone`, `sun_water`, `blood_blossom`, `thunder`, `beast`, `sun`) |
 | `arcColor1`, `arcColor2`, `accentParticleColor` | `css color` | Optional | Elemental aura & particle colors for Chibi aura and canvas VFX |
 | `isOrnament` | `boolean` | Optional | Enables decorative SVG corner filigrees & top stickers |
-| `isChibiNpc` | `boolean` | Optional | Mounts interactive 2-way Chibi NPC dialog & Breathing Skill bar on `.surface-composer` |
+| `isChibiNpc` | `boolean` | Optional | Mounts interactive 2-way Chibi NPC dialog & 1-click Chibi Breathing Form trigger on `.surface-composer` |
 | `cornerSvg` | `string` | Optional | Corner emblem (`"assets/<name>_corner.svg"`) on composer & AI frames |
 | `userCornerSvg` | `string` | Optional | Dedicated corner emblem on `.agy-user-bubble-frame::after` (e.g., Yoriichi Hanafuda/Sun filigree; falls back to `cornerSvg`) |
 | `sticker` | `string` | Optional | Resting Chibi / ornament perched atop `.surface-composer` |
@@ -71,7 +71,7 @@
 ## 2. Reproducible Build & Secure Hybrid Asset Server
 
 ### `scripts/build_payload.js` (Zero-Dependency Compiler)
-- **UTF-8 BOM Stripping & Build-Time SVG Guard**: Strips leading `\uFEFF` BOM bytes and rejects any `.svg` containing `<script`, `<foreignObject`, `<iframe`, `on*=`, or `javascript:`.
+- **UTF-8 BOM Stripping & Build-Time SVG Guard**: Strips leading `\uFEFF` BOM bytes, normalizes CRLF to LF, and rejects any `.svg` containing `<script`, `<foreignObject`, `<iframe`, `<object`, `<embed`, `on*=`, or `javascript:`.
 - **Hybrid Asset Resolution (Default)**:
   - Lightweight vector/avatar candidates (`cornerSvg`, `userCornerSvg`, `userAvatar`, `sticker`, `userSticker`) smaller than `12 KB` are inlined directly as `data:` URIs for zero-latency first paint.
   - High-resolution wallpapers, large Chibi sprites, `actionSticker`, `userActionSticker`, and `agentAvatar` stay as clean relative paths with **reproducible 8-character SHA-256 content hashes**: `"assets/shinobu_bg.jpg?v=a1b2c3d4"` (no machine-specific `mtime` timestamps).

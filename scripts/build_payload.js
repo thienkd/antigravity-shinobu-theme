@@ -2,9 +2,9 @@
 'use strict';
 
 /**
- * Zero-dependency Node.js payload compiler (matches scripts/build_payload.py).
- * - Strips UTF-8 BOM across JSON, JS, and SVG sources
- * - Enforces build-time SVG security sanitization check (blocks active scripts/handlers)
+ * Zero-dependency Node.js payload compiler (exact byte match with scripts/build_payload.py).
+ * - Strips UTF-8 BOM and normalizes CRLF -> LF across JSON, JS, and SVG sources
+ * - Enforces build-time SVG security sanitization check (blocks active scripts/embeds/handlers)
  * - Uses reproducible 8-char SHA-256 content hashes (?v=<hash8>) instead of local mtime timestamps
  * - Wraps output inside Master IIFE Closure receiving lexical __AGY_BOOT__
  */
@@ -41,7 +41,7 @@ const EXTRA_MODULES = [
   'kny_cinema_director.js'
 ];
 
-const UNSAFE_SVG_PATTERN = /<script|<foreignobject|<iframe|\bon[a-z]+\s*=|javascript:/i;
+const UNSAFE_SVG_PATTERN = /<script|<foreignobject|<iframe|<object|<embed|\bon[a-z]+\s*=|javascript:/i;
 
 const MIME_BY_EXT = {
   '.webp': 'image/webp',
@@ -53,7 +53,7 @@ const MIME_BY_EXT = {
 };
 
 function readUtf8NoBom(filePath) {
-  return fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '');
+  return fs.readFileSync(filePath, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
 }
 
 function assertSafeSvgContent(svgText, assetPath) {
@@ -62,26 +62,41 @@ function assertSafeSvgContent(svgText, assetPath) {
   }
 }
 
+function encodeStrictSvgDataUri(svgText) {
+  const encoded = encodeURIComponent(svgText).replace(
+    /[!'()*~]/g,
+    (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase()
+  );
+  return 'data:image/svg+xml,' + encoded;
+}
+
 function encodeFileAsDataUri(assetPath) {
   const ext = path.extname(assetPath).toLowerCase();
   if (ext === '.svg') {
     const svgText = readUtf8NoBom(assetPath);
     assertSafeSvgContent(svgText, assetPath);
-    return 'data:image/svg+xml,' + encodeURIComponent(svgText);
+    return encodeStrictSvgDataUri(svgText);
   }
   const raw = fs.readFileSync(assetPath);
   const mime = MIME_BY_EXT[ext] || 'image/png';
   return `data:${mime};base64,${raw.toString('base64')}`;
 }
 
+function normalizeDriveCaseWin(absPath) {
+  if (process.platform === 'win32') {
+    return absPath.replace(/^[a-z]:/, (d) => d.toUpperCase());
+  }
+  return absPath;
+}
+
 function toPosixRelativeIfInside(assetPath, themesDir) {
-  const resolvedThemes = path.resolve(themesDir);
-  const resolvedAsset = path.resolve(assetPath);
-  const safePrefix = resolvedThemes.endsWith(path.sep) ? resolvedThemes : resolvedThemes + path.sep;
-  if (!resolvedAsset.startsWith(safePrefix)) {
+  const resolvedThemes = normalizeDriveCaseWin(path.resolve(themesDir));
+  const resolvedAsset = normalizeDriveCaseWin(path.resolve(assetPath));
+  const rel = path.relative(resolvedThemes, resolvedAsset);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
     return null;
   }
-  return path.relative(resolvedThemes, resolvedAsset).split(path.sep).join('/');
+  return rel.split(path.sep).join('/');
 }
 
 function resolveAssetValue(key, value, themesDir, inlineAll) {
@@ -96,22 +111,25 @@ function resolveAssetValue(key, value, themesDir, inlineAll) {
     throw new Error(`Theme asset not found: ${trimmed} (resolved: ${assetPath})`);
   }
 
-  if (path.extname(assetPath).toLowerCase() === '.svg') {
-    assertSafeSvgContent(readUtf8NoBom(assetPath), assetPath);
+  const ext = path.extname(assetPath).toLowerCase();
+  let normalizedSvgText = null;
+  if (ext === '.svg') {
+    normalizedSvgText = readUtf8NoBom(assetPath);
+    assertSafeSvgContent(normalizedSvgText, assetPath);
   }
 
   if (inlineAll) {
-    return encodeFileAsDataUri(assetPath);
+    return normalizedSvgText !== null ? encodeStrictSvgDataUri(normalizedSvgText) : encodeFileAsDataUri(assetPath);
   }
 
   const relPosix = toPosixRelativeIfInside(assetPath, themesDir);
   if (!relPosix) {
-    return encodeFileAsDataUri(assetPath);
+    return normalizedSvgText !== null ? encodeStrictSvgDataUri(normalizedSvgText) : encodeFileAsDataUri(assetPath);
   }
 
-  const rawBytes = fs.readFileSync(assetPath);
+  const rawBytes = normalizedSvgText !== null ? Buffer.from(normalizedSvgText, 'utf8') : fs.readFileSync(assetPath);
   if (HYBRID_INLINE_CANDIDATES.has(key) && rawBytes.length < HYBRID_INLINE_MAX_BYTES) {
-    return encodeFileAsDataUri(assetPath);
+    return normalizedSvgText !== null ? encodeStrictSvgDataUri(normalizedSvgText) : encodeFileAsDataUri(assetPath);
   }
 
   const hash8 = crypto.createHash('sha256').update(rawBytes).digest('hex').slice(0, 8);
@@ -160,8 +178,9 @@ function main() {
   }
 
   const engineSrc = readUtf8NoBom(enginePath);
-  if (!engineSrc.includes(PLACEHOLDER)) {
-    throw new Error(`Placeholder ${PLACEHOLDER} not found in ${enginePath}`);
+  const placeholderCount = engineSrc.split(PLACEHOLDER).length - 1;
+  if (placeholderCount !== 1) {
+    throw new Error(`Expected exactly 1 '${PLACEHOLDER}' placeholder in ${enginePath}, found ${placeholderCount}.`);
   }
 
   let compiled = engineSrc.replace(PLACEHOLDER, () => JSON.stringify(resolved));
@@ -170,9 +189,10 @@ function main() {
   const engineDir = path.dirname(enginePath);
   for (const modName of EXTRA_MODULES) {
     const modPath = path.join(engineDir, modName);
-    if (fs.existsSync(modPath)) {
-      prepends.push(readUtf8NoBom(modPath));
+    if (!fs.existsSync(modPath) || !fs.statSync(modPath).isFile()) {
+      throw new Error(`Required engine module missing: ${modPath}`);
     }
+    prepends.push(readUtf8NoBom(modPath));
   }
   if (prepends.length > 0) {
     compiled = `${prepends.join('\n')}\n${compiled}`;

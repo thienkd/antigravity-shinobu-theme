@@ -1,6 +1,10 @@
 (() => {
   'use strict';
 
+  if (typeof window !== 'undefined' && window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.teardown === 'function') {
+    try { window.__AGY_KNY_CHIBI_AURA__.teardown(); } catch (_) {}
+  }
+
   /**
    * Kimetsu no Yaiba — Direct Chibi Breathing Aura & Interactive Skill Trigger UI
    * Exposes window.__AGY_KNY_CHIBI_AURA__ for Antigravity Custom Theme Engine.
@@ -438,16 +442,20 @@
    * ========================================================================== */
 
   function isSfxMuted() {
-    const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
     try {
-      if (ext) {
-        if (typeof ext.isSoundMuted === 'function') return Boolean(ext.isSoundMuted());
-        if (typeof ext.isMuted === 'function') return Boolean(ext.isMuted());
-        if (typeof ext.isSoundEnabled === 'function') return !ext.isSoundEnabled();
-        if (typeof ext.muted === 'boolean') return ext.muted;
-        if (typeof ext.soundEnabled === 'boolean') return !ext.soundEnabled;
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SFX_MUTE_STORAGE_KEY) : null;
+      if (raw === '1' || raw === 'true') return true;
+      if (typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__) {
+        const bio = window.__AGY_BIO_AUDIO__;
+        if (typeof bio.isEnabled === 'function' && !bio.isEnabled()) return true;
+        if (typeof bio.getPrefs === 'function') {
+          const prefs = bio.getPrefs();
+          if (prefs && prefs.swordSfxEnabled === false) return true;
+        }
       }
-      return localStorage.getItem(SFX_MUTE_STORAGE_KEY) === '1';
+      const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
+      if (ext && typeof ext.isSoundMuted === 'function') return Boolean(ext.isSoundMuted());
+      return false;
     } catch (_) {
       return false;
     }
@@ -464,11 +472,6 @@
         if (typeof ext.setSoundMuted === 'function') ext.setSoundMuted(next);
         else if (typeof ext.setMuted === 'function') ext.setMuted(next);
         else if (typeof ext.setSoundEnabled === 'function') ext.setSoundEnabled(!next);
-        else if (typeof ext.toggleSoundMute === 'function' && typeof ext.isSoundMuted === 'function' && Boolean(ext.isSoundMuted()) !== next) {
-          ext.toggleSoundMute();
-        } else if (typeof ext.toggleMute === 'function' && typeof ext.isMuted === 'function' && Boolean(ext.isMuted()) !== next) {
-          ext.toggleMute();
-        }
         if ('muted' in ext) ext.muted = next;
         if ('soundEnabled' in ext) ext.soundEnabled = !next;
       } catch (_) {}
@@ -477,13 +480,16 @@
   }
 
   let fallbackAudioCtx = null;
+  let fallbackSuspendTimer = 0;
   function playFallbackKatanaWhoosh() {
     if (isSfxMuted() || typeof window === 'undefined') return;
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtor) return;
     try {
       if (!fallbackAudioCtx) fallbackAudioCtx = new AudioCtor();
-      if (fallbackAudioCtx.state === 'suspended') fallbackAudioCtx.resume();
+      if (fallbackAudioCtx.state !== 'running' && fallbackAudioCtx.state !== 'closed' && typeof fallbackAudioCtx.resume === 'function') {
+        fallbackAudioCtx.resume().catch(() => {});
+      }
       const now = fallbackAudioCtx.currentTime;
 
       const osc = fallbackAudioCtx.createOscillator();
@@ -499,6 +505,14 @@
       gain.connect(fallbackAudioCtx.destination);
       osc.start(now);
       osc.stop(now + 0.31);
+
+      clearTimeout(fallbackSuspendTimer);
+      fallbackSuspendTimer = setTimeout(() => {
+        fallbackSuspendTimer = 0;
+        if (fallbackAudioCtx && fallbackAudioCtx.state === 'running' && typeof fallbackAudioCtx.suspend === 'function') {
+          try { fallbackAudioCtx.suspend().catch(() => {}); } catch (_) {}
+        }
+      }, 2500);
     } catch (_) {}
   }
 
@@ -1340,102 +1354,7 @@
         }
       }
 
-      /* Keep NPC popover cleanly stacked above #agy-chibi-skill-bar when both are visible */
-      .surface-composer[data-agy-skillbar="1"] #agy-shinobu-npc-wrap .agy-npc-popover {
-        bottom: 36px !important;
-      }
-      @media (max-width: 700px) {
-        .surface-composer[data-agy-skillbar="1"] #agy-shinobu-npc-wrap .agy-npc-popover {
-          bottom: 66px !important;
-        }
-      }
-
-      /* Floating Breathing Skill Bar right next to Chibi on top edge of Composer */
-      #${SKILL_BAR_ID} {
-        position: absolute;
-        bottom: calc(100% + 5px);
-        right: calc(116px + var(--agy-npc-badge-shift, 0px));
-        z-index: 59;
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        pointer-events: auto;
-        font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
-        transition: right 0.18s cubic-bezier(0.22, 1, 0.36, 1);
-      }
-      @media (max-width: 560px) {
-        #${SKILL_BAR_ID} {
-          right: auto;
-          left: 8px;
-        }
-      }
-
-      .agy-skill-pill-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 4.5px;
-        padding: 3.5px 9.5px;
-        border-radius: 9999px;
-        background: var(--skill-surface, rgba(16, 12, 34, 0.94));
-        border: 1px solid var(--skill-border, rgba(192, 132, 252, 0.60));
-        color: #f8fafc;
-        font-size: 11px;
-        font-weight: 600;
-        line-height: 1.25;
-        white-space: nowrap;
-        cursor: pointer;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.48), 0 0 10px var(--skill-glow, rgba(192, 132, 252, 0.25));
-        transition: transform 0.14s ease, border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
-      }
-      .agy-skill-pill-btn:hover,
-      .agy-skill-pill-btn[aria-expanded="true"] {
-        transform: translateY(-1px);
-        border-color: var(--skill-primary, #c084fc);
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.58), 0 0 14px var(--skill-glow, rgba(192, 132, 252, 0.44));
-      }
-      .agy-skill-pill-btn.agy-quick-cast-btn {
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.10) 0%, var(--skill-surface, rgba(16, 12, 34, 0.95)) 100%);
-        border-color: var(--skill-secondary, #5eead4);
-        color: #ffffff;
-      }
-      .agy-skill-pill-btn.agy-quick-cast-btn[data-flash="1"] {
-        transform: scale(0.95);
-        box-shadow: 0 0 18px var(--skill-primary, #facc15);
-      }
-
-      /* Floating 4-Form Selector Popover */
-      .agy-skill-dropdown {
-        position: absolute;
-        bottom: calc(100% + 7px);
-        right: 0;
-        width: 282px;
-        display: none;
-        flex-direction: column;
-        gap: 6px;
-        padding: 9px 10px 10px 10px;
-        border-radius: 12px;
-        background: var(--skill-surface, rgba(16, 12, 34, 0.97));
-        border: 1px solid var(--skill-border, rgba(192, 132, 252, 0.68));
-        box-shadow: 0 14px 34px rgba(3, 4, 14, 0.82), 0 0 20px var(--skill-glow, rgba(192, 132, 252, 0.30)), inset 0 1px 0 rgba(255, 255, 255, 0.10);
-        color: #f8fafc;
-        z-index: 82;
-      }
-      @media (max-width: 560px) {
-        .agy-skill-dropdown {
-          right: auto;
-          left: 0;
-          width: 262px;
-        }
-      }
-      .agy-skill-dropdown[data-open="1"] {
-        display: flex;
-        animation: agySkillMenuIn 0.18s cubic-bezier(0.22, 1, 0.36, 1);
-      }
-      @keyframes agySkillMenuIn {
-        from { opacity: 0; transform: translateY(5px) scale(0.97); }
-        to { opacity: 1; transform: translateY(0) scale(1); }
-      }
-
+      /* Integrated 4-Form Drawer Header & Items inside #agy-shinobu-npc-wrap */
       .agy-skill-menu-hdr {
         display: flex;
         align-items: center;
@@ -1532,6 +1451,7 @@
         white-space: nowrap;
       }
       .agy-skill-kanji {
+        font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', 'Noto Serif JP', 'Source Han Serif JP', 'IPAPMincho', 'MS PMincho', 'Noto Serif', Georgia, serif;
         font-size: 9.8px;
         color: rgba(226, 232, 240, 0.74);
         line-height: 1.2;
@@ -1577,6 +1497,7 @@
     auraHost: null,
     auraCanvas: null,
     auraCtx: null,
+    auraDpr: 1,
     auraMode: '',
     auraCharId: '',
     auraMeta: null,
@@ -1647,8 +1568,20 @@
     });
   }
 
+  function syncAuraCanvasDpr() {
+    if (!state.auraCanvas || !state.auraCtx || typeof window === 'undefined') return;
+    const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (Math.abs(nextDpr - (state.auraDpr || 1)) > 0.01) {
+      state.auraDpr = nextDpr;
+      state.auraCanvas.width = Math.round(AURA_W * nextDpr);
+      state.auraCanvas.height = Math.round(AURA_H * nextDpr);
+      state.auraCtx.setTransform(nextDpr, 0, 0, nextDpr, 0, 0);
+    }
+  }
+
   function drawStaticAuraFrame() {
     if (!state.auraCtx || !state.auraScene) return;
+    syncAuraCanvasDpr();
     state.auraScene.render(state.auraCtx, 1800, 1, 1, 0, true);
   }
 
@@ -1657,6 +1590,7 @@
       state.auraRaf = 0;
       return;
     }
+    syncAuraCanvasDpr();
     if (isMotionPaused()) {
       state.auraRaf = 0;
       drawStaticAuraFrame();
@@ -1800,14 +1734,23 @@
     state.auraHost = host;
     state.auraCanvas = canvas;
     state.auraCtx = ctx;
+    state.auraDpr = dpr;
     state.auraMode = meta.auraMode;
     state.auraCharId = meta.charId;
     state.auraMeta = meta;
     state.auraScene = createChibiAuraScene(meta.auraMode, meta);
 
     const onVis = () => resumeOrPauseAura();
+    const onResizeDpr = () => {
+      syncAuraCanvasDpr();
+      if (isMotionPaused()) drawStaticAuraFrame();
+    };
     document.addEventListener('visibilitychange', onVis);
     state.auraCleanups.push(() => document.removeEventListener('visibilitychange', onVis));
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', onResizeDpr, { passive: true });
+      state.auraCleanups.push(() => window.removeEventListener('resize', onResizeDpr));
+    }
 
     const reducedMq = typeof window !== 'undefined' && window.matchMedia
       ? window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -1891,20 +1834,8 @@
   }
 
   /* ==========================================================================
-   * 2. mountSkillTriggerUi (FLOATING BAR + INTEGRATED NPC DRAWER)
+   * 2. mountSkillTriggerUi (INTEGRATED NPC DRAWER)
    * ========================================================================== */
-
-  function syncBadgeShift() {
-    const bar = typeof document !== 'undefined' ? document.getElementById(SKILL_BAR_ID) : null;
-    if (!bar) return;
-    const wrap = state.uiNpcWrap || document.getElementById('agy-shinobu-npc-wrap');
-    const badge = wrap ? wrap.querySelector('.agy-npc-badge') : null;
-    if (badge && badge.style.display !== 'none' && badge.offsetWidth > 0) {
-      bar.style.setProperty('--agy-npc-badge-shift', `${badge.offsetWidth + 7}px`);
-    } else {
-      bar.style.setProperty('--agy-npc-badge-shift', '0px');
-    }
-  }
 
   function iconMarkup(kind, size, elemHint) {
     const ic = typeof window !== 'undefined' ? window.__AGY_KNY_ICONS__ : null;
@@ -1931,21 +1862,6 @@
       btn.setAttribute('aria-label', title);
       btn.setAttribute('aria-pressed', muted ? 'true' : 'false');
     });
-  }
-
-  function setFloatingDropdownOpen(open) {
-    state.dropdownOpen = Boolean(open);
-    const bar = typeof document !== 'undefined' ? document.getElementById(SKILL_BAR_ID) : null;
-    if (!bar) return;
-    const menu = bar.querySelector('.agy-skill-dropdown');
-    const toggleBtn = bar.querySelector('[data-skill-act="toggle-menu"]');
-    if (menu) {
-      if (state.dropdownOpen) menu.dataset.open = '1';
-      else delete menu.dataset.open;
-    }
-    if (toggleBtn) {
-      toggleBtn.setAttribute('aria-expanded', state.dropdownOpen ? 'true' : 'false');
-    }
   }
 
   function setNpcSkillsDrawerOpen(open) {
@@ -1988,7 +1904,6 @@
       delete textEl.dataset.typing;
       textEl.textContent = line;
     }
-    syncBadgeShift();
   }
 
   function executeSkillCast(skillIdx, castOpts) {
@@ -2031,6 +1946,7 @@
           themeCfg: state.uiThemeCfg,
           actionSticker: safeResolveAsset(state.uiThemeCfg && state.uiThemeCfg.actionSticker),
           composerEl: composer,
+          soundEnabled: !muted,
           muted,
           sound: !muted,
           sfx: !muted
@@ -2052,8 +1968,6 @@
       speakFallbackIntoNpc(skill.quote);
     }
 
-    setFloatingDropdownOpen(false);
-    setTimeout(syncBadgeShift, 20);
     return skill;
   }
 
@@ -2089,6 +2003,7 @@
 
       const kj = document.createElement('span');
       kj.className = 'agy-skill-kanji';
+      kj.setAttribute('lang', 'ja');
       kj.textContent = sk.kanji;
 
       names.appendChild(vi);
@@ -2296,6 +2211,7 @@
       }
       const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
       if (ext && typeof ext.castSkill === 'function') {
+        const muted = isSfxMuted();
         const fIdx = typeof opts.skillIndex === 'number' ? ((opts.skillIndex % 4) + 4) % 4 : 3;
         const crestBtn = typeof document !== 'undefined' ? document.querySelector('.agy-yoriichi-crest-btn') : null;
         const originNode = opts.originEl || crestBtn || null;
@@ -2306,7 +2222,8 @@
           charId: 'yoriichi',
           originRect,
           actionSticker: safeResolveAsset('assets/yoriichi_action.png'),
-          composerEl: null
+          composerEl: null,
+          soundEnabled: !muted
         });
         return { ok: true, charId: 'yoriichi', skillIndex: fIdx };
       }
@@ -2317,6 +2234,7 @@
     if (requestedHero && requestedHero !== hostHero) {
       const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
       if (ext && typeof ext.castSkill === 'function') {
+        const muted = isSfxMuted();
         const fIdx = typeof opts.skillIndex === 'number' ? ((opts.skillIndex % 4) + 4) % 4 : 3;
         const originRect = opts.originEl && typeof opts.originEl.getBoundingClientRect === 'function'
           ? opts.originEl.getBoundingClientRect()
@@ -2325,7 +2243,8 @@
           charId: requestedHero,
           originRect,
           actionSticker: safeResolveAsset(`assets/${requestedHero.replace(/[^a-z0-9_]/g, '')}_action.png`),
-          composerEl: null
+          composerEl: null,
+          soundEnabled: !muted
         });
         return { ok: true, charId: requestedHero, skillIndex: fIdx };
       }
@@ -2342,6 +2261,15 @@
   function teardown() {
     teardownAura();
     teardownSkillUi();
+    clearTimeout(fallbackSuspendTimer);
+    fallbackSuspendTimer = 0;
+    if (fallbackAudioCtx) {
+      try {
+        const p = fallbackAudioCtx.close();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (_) {}
+      fallbackAudioCtx = null;
+    }
     if (typeof document !== 'undefined') {
       const st = document.getElementById(STYLE_ID);
       if (st) st.remove();
@@ -2353,6 +2281,7 @@
     playChibiAttackMotion,
     mountSkillTriggerUi,
     teardown,
+    destroy: teardown,
     teardownAura,
     teardownSkillUi,
     castNextComboSkill,

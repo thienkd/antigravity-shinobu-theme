@@ -13,7 +13,7 @@ const os = require('os');
 const path = require('path');
 
 if (typeof globalThis.WebSocket !== 'function') {
-    console.error('[verify-cdp] Node.js >= 22 is required.');
+    console.error(`[verify-cdp] Node.js >= 22 is required (found ${process.version} at ${process.execPath}).`);
     process.exit(1);
 }
 
@@ -38,7 +38,22 @@ function resolvePortFile() {
         candidates = [
             path.join(xdg, 'antigravity', 'DevToolsActivePort'),
             path.join(xdg, 'Antigravity', 'DevToolsActivePort'),
+            path.join(home, 'snap', 'antigravity', 'current', '.config', 'Antigravity', 'DevToolsActivePort'),
+            path.join(home, 'snap', 'antigravity', 'current', '.config', 'antigravity', 'DevToolsActivePort'),
         ];
+        const flatpakBase = path.join(home, '.var', 'app');
+        try {
+            if (fs.existsSync(flatpakBase)) {
+                for (const entry of fs.readdirSync(flatpakBase)) {
+                    if (/antigravity/i.test(entry)) {
+                        candidates.push(
+                            path.join(flatpakBase, entry, 'config', 'Antigravity', 'DevToolsActivePort'),
+                            path.join(flatpakBase, entry, 'config', 'antigravity', 'DevToolsActivePort')
+                        );
+                    }
+                }
+            }
+        } catch (_) {}
     }
     return candidates.find((p) => fs.existsSync(p)) || candidates[0];
 }

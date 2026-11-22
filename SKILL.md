@@ -17,7 +17,7 @@ Creates, compiles, and applies high-frame-rate (`60/120fps` Zero-Live-Blur) glas
   3. `engine/kny_bio_audio.js` — `0 KB` Mathematical Web Audio synthesizer (Japanese Koto + Furin completion chimes, *"Kachin!"* blade sheathe, `0.12Hz` Alpha rain/hearth soundscapes, `0%` idle CPU suspend) & Bio-Circadian Retinal Guard (`window.__AGY_BIO_AUDIO__`).
   4. `engine/kny_fx_modes.js` — 60fps multi-layer parallax canvas drawers, *Sukitōru Sekai* (Transparent World), and Multi-Window `0% GPU` background arbiter (`window.__AGY_KNY_FX_DRAWERS__`).
   5. `engine/kny_breathing_skills.js` — 60 full-screen Ufotable-inspired Breathing Forms (`15 characters × 4 forms`) with Hit-Stop camera choreography and full-body leaping Chibi sprites (`window.__AGY_KNY_SKILLS__`).
-  6. `engine/kny_chibi_aura.js` — Elemental Chibi aura canvas, skill trigger strip, **Crimson Red Blade (`赫刀`)** heat gauge, and automatic Demon-Slaying counter-slash (`window.__AGY_KNY_CHIBI_AURA__`).
+  6. `engine/kny_chibi_aura.js` — Elemental Chibi aura canvas, 1-click Chibi Breathing Form casting, **Crimson Red Blade (`赫刀`)** heat gauge, and automatic Demon-Slaying counter-slash (`window.__AGY_KNY_CHIBI_AURA__`).
   7. `engine/kny_squad_raid.js` — **Live Hashira Swarm Squad** synchronized with active subagents via `< 30ms` SSE and **「滅」** victory stamp + Kasugai crow flyby (`window.__AGY_SQUAD_RAID__`).
   8. `engine/kny_token_hud.js` — Live Context Window & Elemental Turn Token odometer, First Swordsman Yoriichi crest, and Instant Enter Command Echo (`window.__AGY_TOKEN_HUD__`).
   9. `engine/agy_theme_forge.js` — **Multiverse AI Theme Forge**: perceptual `64×64` OKLCH palette extraction, WCAG AA contrast solver, 18 Master Personas, and `.agytheme` (`agytheme/2.0`) import/export (`window.__AGY_THEME_FORGE__`).
@@ -75,4 +75,4 @@ Creates, compiles, and applies high-frame-rate (`60/120fps` Zero-Live-Blur) glas
 Antigravity v2.33.0+ requires `--remote-debugging-port=0` to expose `DevToolsActivePort` on `127.0.0.1`, and auto-updates may reset desktop shortcuts:
 
 - **Windows:** Re-run `powershell -ExecutionPolicy Bypass -File scripts/install-win.ps1`, quit Antigravity completely from the **System Tray (`Quit`)**, and relaunch from **Start Menu** (re-pin Taskbar icons from Start Menu if needed).
-- **macOS / Linux:** Launch with `open -a Antigravity --args --remote-debugging-port=0` (macOS) or append `--remote-debugging-port=0` to `Exec=` in your Linux `.desktop` launcher.
+- **macOS / Linux:** On macOS, quit Antigravity completely first (`Cmd + Q` or `osascript -e 'quit app "Antigravity"'`) and relaunch with `open -a Antigravity --args --remote-debugging-port=0`. On Linux, re-run `bash scripts/install-unix.sh` to auto-patch `~/.local/share/applications/antigravity*.desktop` without `sudo`, then restart Antigravity.

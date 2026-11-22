@@ -4,8 +4,8 @@
 /**
  * Cleanly uninstalls Antigravity Custom Theme across Windows, macOS, and Linux:
  * 1. Removes OS auto-start registration (Startup .lnk / LaunchAgent / systemd unit) using safe execFileSync arrays.
- * 2. Verifies process command line before stopping theme_daemon.js, then deletes daemon.pid, daemon.log, daemon.lock, silent-start.vbs.
- * 3. Supports --purge to also remove theme_config.json, dist/, and ~/.gemini/antigravity/custom_theme_backup.json.
+ * 2. Verifies process command line before stopping theme_daemon.js, waits up to 800ms for graceful exit, then deletes daemon.pid, daemon.log, daemon.lock, silent-start.vbs.
+ * 3. Supports --purge to also remove theme_config.json, dist/, ~/.gemini/antigravity/custom_theme_backup.json, and Linux XDG .desktop CDP flags.
  * 4. Calls window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__() strictly on verified Antigravity CDP pages (never Split Browser tabs).
  */
 
@@ -25,6 +25,22 @@ const DIST_DIR = path.join(ROOT_DIR, 'dist');
 const BACKUP_CONFIG_FILE = path.join(os.homedir(), '.gemini', 'antigravity', 'custom_theme_backup.json');
 
 const PURGE = process.argv.slice(2).includes('--purge');
+
+const NODE_PROC_RE = /\bnode(?:js|\d+)?(?:\.exe)?\b/i;
+const DAEMON_SCRIPT_RE = /theme_daemon\.js/;
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isPidAlive(pid) {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
 
 function resolvePortFile() {
     if (process.env.AGY_PORT_FILE) return process.env.AGY_PORT_FILE;
@@ -47,18 +63,28 @@ function resolvePortFile() {
         candidates = [
             path.join(xdg, 'antigravity', 'DevToolsActivePort'),
             path.join(xdg, 'Antigravity', 'DevToolsActivePort'),
+            path.join(home, 'snap', 'antigravity', 'current', '.config', 'Antigravity', 'DevToolsActivePort'),
+            path.join(home, 'snap', 'antigravity', 'current', '.config', 'antigravity', 'DevToolsActivePort'),
         ];
+        const flatpakBase = path.join(home, '.var', 'app');
+        try {
+            if (fs.existsSync(flatpakBase)) {
+                for (const entry of fs.readdirSync(flatpakBase)) {
+                    if (/antigravity/i.test(entry)) {
+                        candidates.push(
+                            path.join(flatpakBase, entry, 'config', 'Antigravity', 'DevToolsActivePort'),
+                            path.join(flatpakBase, entry, 'config', 'antigravity', 'DevToolsActivePort')
+                        );
+                    }
+                }
+            }
+        } catch (_) {}
     }
     return candidates.find((p) => fs.existsSync(p)) || candidates[0];
 }
 
 function isVerifiedDaemonProcess(pid) {
-    if (!Number.isInteger(pid) || pid <= 0) return false;
-    try {
-        process.kill(pid, 0);
-    } catch (_) {
-        return false;
-    }
+    if (!Number.isInteger(pid) || pid <= 0 || !isPidAlive(pid)) return false;
 
     if (process.platform === 'win32') {
         try {
@@ -73,21 +99,60 @@ function isVerifiedDaemonProcess(pid) {
                 { encoding: 'utf8', windowsHide: true, timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
             ).trim();
             if (!out) return false;
-            return /^node(?:\.exe)?\|/i.test(out) && /theme_daemon\.js/i.test(out);
+            return NODE_PROC_RE.test(out) && DAEMON_SCRIPT_RE.test(out);
         } catch (_) {
-            return false;
+            try {
+                const tl = execFileSync('tasklist.exe', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], {
+                    encoding: 'utf8',
+                    windowsHide: true,
+                    timeout: 4000,
+                    stdio: ['ignore', 'pipe', 'ignore'],
+                }).trim();
+                return NODE_PROC_RE.test(tl);
+            } catch (__) {
+                return false;
+            }
         }
     }
 
+    if (process.platform === 'linux') {
+        try {
+            const rawCmd = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0+/g, ' ').trim();
+            if (rawCmd) {
+                return NODE_PROC_RE.test(rawCmd) && DAEMON_SCRIPT_RE.test(rawCmd);
+            }
+        } catch (_) {}
+    }
+
     try {
-        const cmdline = execFileSync('ps', ['-p', String(pid), '-o', 'command='], {
+        const cmdline = execFileSync('ps', ['-ww', '-p', String(pid), '-o', 'command='], {
             encoding: 'utf8',
             timeout: 3000,
             stdio: ['ignore', 'pipe', 'ignore'],
         }).trim();
-        return /\bnode\b/i.test(cmdline) && /theme_daemon\.js/.test(cmdline);
+        return NODE_PROC_RE.test(cmdline) && DAEMON_SCRIPT_RE.test(cmdline);
     } catch (_) {
         return false;
+    }
+}
+
+function readRecordedPid() {
+    if (!fs.existsSync(PID_FILE)) return 0;
+    try {
+        const rawPid = fs.readFileSync(PID_FILE, 'utf8').replace(/^\uFEFF/, '').trim();
+        const pid = parseInt(rawPid, 10);
+        return Number.isInteger(pid) && pid > 0 ? pid : 0;
+    } catch (_) {
+        return 0;
+    }
+}
+
+async function waitForPidExit(pid, maxWaitMs = 800, pollMs = 80) {
+    if (!Number.isInteger(pid) || pid <= 0) return;
+    let waited = 0;
+    while (waited < maxWaitMs && isPidAlive(pid)) {
+        await sleep(pollMs);
+        waited += pollMs;
     }
 }
 
@@ -100,24 +165,73 @@ function safeUnlink(targetPath, label) {
     } catch (_) {}
 }
 
-function stopDaemonAndCleanRuntimeFiles() {
-    if (fs.existsSync(PID_FILE)) {
-        const rawPid = fs.readFileSync(PID_FILE, 'utf8').replace(/^\uFEFF/, '').trim();
-        const pid = parseInt(rawPid, 10);
-        if (pid > 0) {
-            if (isVerifiedDaemonProcess(pid)) {
-                try {
-                    process.kill(pid, 'SIGTERM');
-                    console.log(`[uninstall] Stopped verified daemon PID ${pid}.`);
-                } catch (_) {
-                    console.log(`[uninstall] Daemon PID ${pid} already exited.`);
+function unpatchLinuxDesktopLaunchers() {
+    if (process.platform !== 'linux') return;
+    const xdgData = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
+    const appsDir = path.join(xdgData, 'applications');
+    if (!fs.existsSync(appsDir)) return;
+
+    let updatedAny = false;
+    try {
+        for (const entry of fs.readdirSync(appsDir)) {
+            if (!/^antigravity.*\.desktop$/i.test(entry)) continue;
+            const desktopPath = path.join(appsDir, entry);
+            try {
+                const st = fs.statSync(desktopPath);
+                if (!st.isFile()) continue;
+                const src = fs.readFileSync(desktopPath, 'utf8');
+                let changed = false;
+                const cleaned = src.replace(/^Exec=(.*)$/gm, (full, cmd) => {
+                    if (!/--remote-debugging-port(?:=\S+)?/.test(cmd)) return full;
+                    changed = true;
+                    const stripped = cmd
+                        .replace(/\s*--remote-debugging-port(?:=\S+)?/g, '')
+                        .replace(/\s{2,}/g, ' ')
+                        .trim();
+                    return `Exec=${stripped}`;
+                });
+                if (changed) {
+                    fs.writeFileSync(desktopPath, cleaned, 'utf8');
+                    console.log(`[uninstall] Removed CDP flag from Linux desktop launcher: ${desktopPath}`);
+                    updatedAny = true;
                 }
-            } else {
-                console.log(`[uninstall] Skipped PID ${pid} (not an active theme_daemon.js process).`);
+            } catch (_) {}
+        }
+    } catch (_) {}
+
+    if (updatedAny) {
+        try {
+            execFileSync('update-desktop-database', [appsDir], { stdio: 'ignore', timeout: 3000 });
+        } catch (_) {}
+    }
+}
+
+async function stopDaemonAndCleanRuntimeFiles(prePid, preVerified) {
+    const currentPid = readRecordedPid();
+    const pid = currentPid || prePid;
+    let waitPid = 0;
+
+    if (pid > 0) {
+        if (isVerifiedDaemonProcess(pid)) {
+            waitPid = pid;
+            try {
+                process.kill(pid, 'SIGTERM');
+                console.log(`[uninstall] Sent SIGTERM to verified daemon PID ${pid}.`);
+            } catch (_) {
+                console.log(`[uninstall] Daemon PID ${pid} already exited.`);
             }
+        } else if (pid === prePid && preVerified) {
+            waitPid = pid;
+            console.log(`[uninstall] Verified daemon PID ${pid} stopped via service manager.`);
+        } else {
+            console.log(`[uninstall] Skipped PID ${pid} (not an active theme_daemon.js process).`);
         }
     } else {
         console.log('[uninstall] No active daemon.pid found.');
+    }
+
+    if (waitPid > 0) {
+        await waitForPidExit(waitPid, 800, 80);
     }
 
     safeUnlink(PID_FILE, 'daemon PID file');
@@ -133,6 +247,7 @@ function stopDaemonAndCleanRuntimeFiles() {
                 console.log(`[uninstall] Purged build directory: ${DIST_DIR}`);
             }
         } catch (_) {}
+        unpatchLinuxDesktopLaunchers();
     }
 }
 
@@ -287,6 +402,13 @@ function cleanupPage(wsUrl) {
 }
 
 async function clearOpenPages() {
+    if (typeof globalThis.WebSocket !== 'function') {
+        console.warn(
+            `[uninstall] Warning: Node.js < 22 detected (found ${process.version}, built-in WebSocket unavailable); skipped live CDP DOM cleanup. Please reload open Antigravity windows with Cmd/Ctrl + R.`
+        );
+        return;
+    }
+
     const portFile = resolvePortFile();
     if (!fs.existsSync(portFile)) {
         console.log('[uninstall] Antigravity is not running (no DevToolsActivePort).');
@@ -312,8 +434,10 @@ async function clearOpenPages() {
 }
 
 async function main() {
+    const prePid = readRecordedPid();
+    const preVerified = prePid > 0 ? isVerifiedDaemonProcess(prePid) : false;
     removeAutoStart();
-    stopDaemonAndCleanRuntimeFiles();
+    await stopDaemonAndCleanRuntimeFiles(prePid, preVerified);
     await clearOpenPages();
     console.log(`[uninstall] Done. Antigravity theme removed${PURGE ? ' (purged config & dist)' : ''}.`);
 }

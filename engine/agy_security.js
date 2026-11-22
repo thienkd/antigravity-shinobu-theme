@@ -58,7 +58,7 @@ const __AGY_SEC__ = (() => {
 
         if (trimmed.startsWith('data:')) {
             // Allow only raster/SVG data URIs (optional ;charset=utf-8 and/or ;base64 header) without script/event payloads
-            if (!/^data:image\/(?:png|jpeg|jpg|webp|gif|svg\+xml)(?:;charset=[A-Za-z0-9_-]+)?(?:;base64)?,[A-Za-z0-9+/=%.,_-]+$/i.test(trimmed)) {
+            if (!/^data:image\/(?:png|jpeg|jpg|webp|gif|svg\+xml)(?:;charset=[A-Za-z0-9_-]+)?(?:;base64)?,[A-Za-z0-9+/=%.,_~-]+$/i.test(trimmed)) {
                 return '';
             }
             if (/^data:image\/svg\+xml/i.test(trimmed)) {
@@ -85,7 +85,7 @@ const __AGY_SEC__ = (() => {
             return trimmed;
         }
 
-        if (/^(?:\.\/|\.\.\/)?(?:themes\/)?assets\/[A-Za-z0-9._/-]+(?:\?v=[A-Za-z0-9_-]+)?$/.test(trimmed)) {
+        if (/^(?:\.\/|\.\.\/)?(?:themes\/)?assets\/[A-Za-z0-9._~/-]+(?:\?v=[A-Za-z0-9_~-]+)?$/.test(trimmed)) {
             if (trimmed.slice(trimmed.indexOf('assets/')).includes('..')) return '';
             return trimmed;
         }
@@ -214,6 +214,8 @@ const __AGY_SEC__ = (() => {
         if (_assetBase && /^(?:themes\/)?assets\//.test(trimmed)) {
             const relAsset = trimmed.replace(/^themes\//, '');
             candidate = _assetBase.replace(/\/?$/, '/') + relAsset;
+        } else if (!_assetBase && /^assets\//.test(trimmed)) {
+            candidate = './themes/' + trimmed;
         }
         return sanitizeCssUrl(candidate);
     }
