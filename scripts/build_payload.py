@@ -299,6 +299,16 @@ def build_payload(
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     repo_root = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(
         description="Compile themes.json + engine/core.js -> dist/theme_payload.js"

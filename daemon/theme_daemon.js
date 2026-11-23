@@ -127,13 +127,33 @@ function buildPathRedactionRegexes(rawPath) {
     if (typeof rawPath !== 'string') return [];
     const trimmed = rawPath.replace(/[/\\]+$/, '');
     if (trimmed.length <= 1 || /^[A-Za-z]:$/.test(trimmed)) return [];
-    const baseForms = new Set([trimmed]);
+    const seedPaths = new Set([trimmed]);
     try {
-        baseForms.add(trimmed.normalize('NFC'));
+        const rp = fs.realpathSync(trimmed).replace(/[/\\]+$/, '');
+        if (rp && rp.length > 1) seedPaths.add(rp);
     } catch (_) {}
-    try {
-        baseForms.add(trimmed.normalize('NFD'));
-    } catch (_) {}
+    for (const sp of Array.from(seedPaths)) {
+        if (sp.startsWith('/private/var/') || sp === '/private/var') {
+            seedPaths.add(sp.slice('/private'.length));
+        } else if (sp.startsWith('/var/')) {
+            seedPaths.add('/private' + sp);
+        } else if (sp.startsWith('/private/tmp/') || sp === '/private/tmp') {
+            seedPaths.add(sp.slice('/private'.length));
+        } else if (sp.startsWith('/tmp/')) {
+            seedPaths.add('/private' + sp);
+        }
+    }
+
+    const baseForms = new Set();
+    for (const sp of seedPaths) {
+        baseForms.add(sp);
+        try {
+            baseForms.add(sp.normalize('NFC'));
+        } catch (_) {}
+        try {
+            baseForms.add(sp.normalize('NFD'));
+        } catch (_) {}
+    }
 
     const variants = new Set();
     for (const form of baseForms) {
@@ -159,14 +179,13 @@ function redactLog(msg) {
     text = text.replace(/file%3A%2F%2F[^\s&)"']*/gi, 'file://[redacted-path]');
 
     const home = os.homedir();
-    if (home && home.length > 1) {
-        for (const re of buildPathRedactionRegexes(home)) {
-            text = text.replace(re, '~');
-        }
-    }
-    if (ROOT_DIR && ROOT_DIR.length > 1) {
-        for (const re of buildPathRedactionRegexes(ROOT_DIR)) {
-            text = text.replace(re, '[repo-root]');
+    const redactTargets = [];
+    if (home && home.length > 1) redactTargets.push({ raw: home, token: '~' });
+    if (ROOT_DIR && ROOT_DIR.length > 1) redactTargets.push({ raw: ROOT_DIR, token: '[repo-root]' });
+    redactTargets.sort((a, b) => b.raw.length - a.raw.length);
+    for (const item of redactTargets) {
+        for (const re of buildPathRedactionRegexes(item.raw)) {
+            text = text.replace(re, item.token);
         }
     }
 

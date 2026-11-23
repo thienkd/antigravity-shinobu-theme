@@ -700,6 +700,7 @@ async function stopDaemonAndCleanRuntimeFiles(prePid, preVerified) {
     safeUnlink(PID_FILE, 'daemon PID file');
     safeUnlink(LOG_FILE, 'daemon log file');
     safeUnlink(LOCK_FILE, 'daemon lock file');
+    safeUnlink(VBS_FILE, 'VBScript launcher');
 
     if (PURGE) {
         safeUnlink(CONFIG_FILE, 'theme config');
