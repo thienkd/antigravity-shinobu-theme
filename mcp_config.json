@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "controller": {
+      "command": "node",
+      "args": [
+        "${PLUGIN_ROOT}/daemon/mcp_theme_server.js"
+      ]
+    }
+  }
+}

@@ -23,6 +23,7 @@ function readNorm(relPath) {
 }
 
 const SECURITY_SRC = readNorm('engine/agy_security.js');
+const I18N_SRC = readNorm('engine/agy_i18n.js');
 const FORGE_SRC = readNorm('engine/agy_theme_forge.js');
 const CORE_SRC_TEMPLATE = readNorm('engine/core.js');
 const THEMES_JSON = JSON.parse(readNorm('themes/themes.json'));
@@ -41,6 +42,7 @@ const FULL_CORE_BUNDLE_SCRIPT = new vm.Script(`
   (function(__AGY_BOOT__) {
     let __AGY_PRECLEANED__ = false;
     ${SECURITY_SRC}
+    ${I18N_SRC}
     ${FORGE_SRC}
     ${CORE_WITH_THEMES_SRC}
     return { sec: __AGY_SEC__ };
@@ -2172,6 +2174,50 @@ describe('F06 — NPC 2 Chiều, Theme Studio Modal, Teardown & Vòng Đời (`e
 
       const cardsWithHack = body.querySelectorAll('[onclick], [onmouseover], [onfocus], [data-xss]');
       assert.equal(cardsWithHack.length, 0, 'Theme Studio Modal tuyệt đối không được sinh thuộc tính event/XSS do breakout dấu nháy kép trong style="..."');
+    });
+
+    it('[F06-T1-10] Gói 3B: Chuyển đổi ngôn ngữ trực tiếp trên Header Studio (VI / EN / 日本語) & Hồ sơ theo Workspace', () => {
+      const env = createTestEnv({ loadCore: true });
+      env.window.__ANTIGRAVITY_OPEN_THEME_MODAL__('forge');
+      const backdrop = env.document.getElementById('agy-custom-theme-modal-backdrop');
+      const titleEl = backdrop.querySelector('#agy-custom-theme-modal-title');
+      assert.equal(titleEl.textContent, 'Xưởng Giao Diện Tùy Biến');
+
+      // Đổi sang Tiếng Anh qua nút EN trên Header
+      const enBtn = backdrop.querySelector('.agy-lang-btn[data-lang="en"]');
+      assert.ok(enBtn, 'Phải có nút chuyển ngôn ngữ EN trên Header');
+      enBtn.click();
+      assert.equal(titleEl.textContent, 'Theme Customizer Studio');
+      assert.equal(backdrop.querySelector('#agy-tab-themes span').textContent, 'Gallery');
+
+      // Đổi sang Tiếng Nhật qua nút 日本語
+      const jaBtn = backdrop.querySelector('.agy-lang-btn[data-lang="ja"]');
+      jaBtn.click();
+      assert.equal(titleEl.textContent, 'カスタムテーマ工房');
+      assert.equal(backdrop.querySelector('#agy-tab-forge span').textContent, '鍛冶場・設定');
+
+      // Gắn Hồ sơ dự án ngay trong Tab 5
+      env.core.applyTheme({ themeName: '🌊 Thủy Trụ — Giyu Tomioka', masterPersona: 'giyu' });
+      const body = backdrop.querySelector('#agy-theme-modal-body');
+      const wsInput = body.querySelector('#agy-ws-key-input');
+      const wsBindBtn = body.querySelector('#agy-ws-bind-btn');
+      wsInput.value = 'file:///workspace/Payments_Service';
+      wsBindBtn.click();
+
+      assert.equal(env.core.getSnapshot().activeWorkspace, 'payments_service');
+      assert.equal(env.core.getSnapshot().workspaceProfiles.payments_service.themeName, '🌊 Thủy Trụ — Giyu Tomioka');
+
+      // Đổi sang theme khác rồi bấm Áp dụng lại hồ sơ dự án
+      env.core.applyTheme({ themeName: '🦋 Trùng Trụ — Shinobu Kocho', masterPersona: 'shinobu' });
+      backdrop.querySelector('#agy-theme-modal-body .agy-ws-apply-btn[data-ws="payments_service"]').click();
+      assert.equal(env.core.getSnapshot().themeName, '🌊 Thủy Trụ — Giyu Tomioka');
+      assert.equal(env.core.getSnapshot().masterPersona, 'giyu');
+
+      // Xóa hồ sơ dự án và quay về Tiếng Việt
+      backdrop.querySelector('#agy-theme-modal-body .agy-ws-remove-btn[data-ws="payments_service"]').click();
+      assert.equal(env.core.getSnapshot().workspaceProfiles.payments_service, undefined);
+      backdrop.querySelector('.agy-lang-btn[data-lang="vi"]').click();
+      assert.equal(titleEl.textContent, 'Xưởng Giao Diện Tùy Biến');
     });
 
     it('[F06-T2-02] Tuân thủ nhãn giao diện UI Studio 100% Tiếng Việt (không sót chuỗi Tiếng Anh thô)', () => {

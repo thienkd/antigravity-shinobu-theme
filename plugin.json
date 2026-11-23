@@ -1,0 +1,21 @@
+{
+  "name": "antigravity-shinobu-theme",
+  "displayName": "Antigravity Shinobu & Multiverse Theme Studio",
+  "version": "3.0.0",
+  "description": "Enterprise-hardened 120fps Live Wallpaper, 3D Breathing VFX, Hashira Subagent Swarm HUD, OKLCH Theme Forge & Zero-Dep MCP Controller for Google Antigravity IDE.",
+  "logo": "assets/logo.svg",
+  "author": {
+    "name": "thienkd",
+    "url": "https://github.com/thienkd"
+  },
+  "homepage": "https://github.com/thienkd/antigravity-shinobu-theme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thienkd/antigravity-shinobu-theme.git"
+  },
+  "suggestedPrompts": [
+    "Đổi giao diện sang Nham Trụ Gyomei và bật chế độ Tập trung sâu",
+    "Mở bảng điều khiển giao diện ở khung bên phải và chẩn đoán kết nối CDP",
+    "Gắn chủ đề Thủy Trụ Giyu làm hồ sơ riêng cho thư mục dự án hiện tại"
+  ]
+}

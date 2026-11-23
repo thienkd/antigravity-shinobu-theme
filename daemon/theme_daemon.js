@@ -2702,6 +2702,7 @@ function saveConfig(incoming) {
 
         fs.writeFileSync(CONFIG_FILE, serialized, { encoding: 'utf8', mode: 0o600 });
         ensurePrivateFileMode(CONFIG_FILE);
+        lastKnownConfigHash = crypto.createHash('sha256').update(serialized, 'utf8').digest('hex');
         try {
             fs.mkdirSync(path.dirname(SURVIVAL_BACKUP_FILE), { recursive: true, mode: 0o700 });
             fs.writeFileSync(SURVIVAL_BACKUP_FILE, serialized, { encoding: 'utf8', mode: 0o600 });
@@ -3002,6 +3003,55 @@ let lastPort = null;
 let reloadTimer = null;
 let configBroadcastTimer = null;
 let pendingBroadcastSourceId = null;
+let lastKnownConfigHash = '';
+let configWatcher = null;
+let externalConfigTimer = null;
+
+function computeCurrentDiskConfigHash() {
+    try {
+        if (!fs.existsSync(CONFIG_FILE)) return '';
+        const normalized = JSON.stringify(sortKeysDeep(readConfig()), null, 2);
+        return crypto.createHash('sha256').update(normalized, 'utf8').digest('hex');
+    } catch (_) {
+        return '';
+    }
+}
+
+function checkExternalConfigUpdate() {
+    const curHash = computeCurrentDiskConfigHash();
+    if (!curHash) return;
+    if (!lastKnownConfigHash) {
+        lastKnownConfigHash = curHash;
+        return;
+    }
+    if (curHash !== lastKnownConfigHash) {
+        lastKnownConfigHash = curHash;
+        log('Detected external theme_config.json update (MCP / Hook); syncing live delta.');
+        scheduleCrossWindowConfigSync(null);
+    }
+}
+
+function watchExternalConfig() {
+    lastKnownConfigHash = computeCurrentDiskConfigHash();
+    try {
+        const cfgDir = path.dirname(CONFIG_FILE);
+        const cfgBase = path.basename(CONFIG_FILE);
+        if (!fs.existsSync(cfgDir)) {
+            fs.mkdirSync(cfgDir, { recursive: true });
+        }
+        configWatcher = fs.watch(cfgDir, (_evt, filename) => {
+            if (filename && filename !== cfgBase) return;
+            clearTimeout(externalConfigTimer);
+            externalConfigTimer = setTimeout(checkExternalConfigUpdate, 60);
+        });
+        configWatcher.on('error', () => {
+            if (configWatcher) {
+                try { configWatcher.close(); } catch (_) {}
+                configWatcher = null;
+            }
+        });
+    } catch (_) {}
+}
 
 function scheduleCrossWindowConfigSync(sourceTargetId) {
     pendingBroadcastSourceId = sourceTargetId;
@@ -3434,6 +3484,13 @@ function shutdown(signal) {
     clearTimeout(reloadTimer);
     clearTimeout(configBroadcastTimer);
     clearTimeout(payloadWatchRetryTimer);
+    clearTimeout(externalConfigTimer);
+    if (configWatcher) {
+        try {
+            configWatcher.close();
+        } catch (_) {}
+        configWatcher = null;
+    }
     if (payloadWatcher) {
         try {
             payloadWatcher.close();
@@ -3476,6 +3533,10 @@ checkAntigravityUpdateAndHeal();
 setInterval(checkAntigravityUpdateAndHeal, 120000);
 startAssetServer().then(() => {
     watchPayload();
+    watchExternalConfig();
     scanPages();
-    setInterval(scanPages, 1500);
+    setInterval(() => {
+        checkExternalConfigUpdate();
+        scanPages();
+    }, 1500);
 });

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="agyBg" x1="16" y1="16" x2="112" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1e1538"/>
+      <stop offset="0.55" stop-color="#141026"/>
+      <stop offset="1" stop-color="#0b1220"/>
+    </linearGradient>
+    <linearGradient id="agyWingL" x1="26" y1="30" x2="64" y2="86" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e879f9"/>
+      <stop offset="0.55" stop-color="#a855f7"/>
+      <stop offset="1" stop-color="#2dd4bf"/>
+    </linearGradient>
+    <linearGradient id="agyWingR" x1="102" y1="30" x2="64" y2="86" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#facc15"/>
+      <stop offset="0.5" stop-color="#e879f9"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  <rect x="14" y="14" width="100" height="100" rx="26" fill="url(#agyBg)" stroke="#c084fc" stroke-width="2.5"/>
+  <rect x="20" y="20" width="88" height="88" rx="21" stroke="#fde047" stroke-opacity="0.32" stroke-width="1"/>
+  <path d="M62 62C54 40 34 32 28 45C23 56 35 68 56 67C39 73 33 88 43 95C52 101 61 88 63 72Z" fill="url(#agyWingL)" fill-opacity="0.92"/>
+  <path d="M66 62C74 40 94 32 100 45C105 56 93 68 72 67C89 73 95 88 85 95C76 101 67 88 65 72Z" fill="url(#agyWingR)" fill-opacity="0.92"/>
+  <path d="M64 31L66.8 43.2L79 46L66.8 48.8L64 61L61.2 48.8L49 46L61.2 43.2L64 31Z" fill="#fef08a"/>
+  <rect x="62.2" y="48" width="3.6" height="44" rx="1.8" fill="#f8fafc"/>
+  <circle cx="41" cy="51" r="3" fill="#fef9c3"/>
+  <circle cx="87" cy="51" r="3" fill="#fef9c3"/>
+</svg>

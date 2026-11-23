@@ -1,7 +1,7 @@
 {
   "name": "antigravity-shinobu-theme",
-  "version": "2.0.0",
-  "description": "Enterprise-hardened Live Wallpaper, Hashira Subagent Swarm HUD, Bio-Acoustic WebAudio & Multiverse Theme Engine for Google Antigravity IDE",
+  "version": "3.0.0",
+  "description": "Enterprise-hardened Live Wallpaper, 3D Breathing VFX, Hashira Subagent Swarm HUD, Bio-Acoustic WebAudio, Multiverse Theme Forge & Zero-Dep MCP Plugin for Google Antigravity IDE",
   "license": "MIT",
   "private": false,
   "repository": {
@@ -16,6 +16,8 @@
     "test": "node tests/run_all.js",
     "verify": "node scripts/verify_cdp.js",
     "start": "node daemon/theme_daemon.js",
+    "mcp": "node daemon/mcp_theme_server.js",
+    "export:clean": "node scripts/export_clean_edition.js",
     "uninstall": "node scripts/uninstall.js",
     "uninstall:purge": "node scripts/uninstall.js --purge"
   },

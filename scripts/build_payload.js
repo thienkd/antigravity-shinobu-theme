@@ -30,6 +30,7 @@ const PLACEHOLDER = '/*__THEMES_PLACEHOLDER__*/{}';
 
 const EXTRA_MODULES = [
   'agy_security.js',
+  'agy_i18n.js',
   'kny_semantic_icons.js',
   'kny_bio_audio.js',
   'kny_fx_modes.js',

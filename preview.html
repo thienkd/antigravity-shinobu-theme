@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Antigravity Custom Theme v2.0 — Kimetsu no Yaiba &amp; Multiverse Live Preview</title>
+  <title>Antigravity Custom Theme v3.0 — Kimetsu no Yaiba 3D VFX &amp; Multiverse Interactive Showcase</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body {
@@ -456,16 +456,22 @@
           <button type="button" class="nav-icon-btn">←</button>
           <button type="button" class="nav-icon-btn">→</button>
           <button type="button" class="nav-icon-btn">🔍</button>
-          <span data-testid="breadcrumb-segment" id="top-breadcrumb" style="margin-left:8px; font-weight:500;">Antigravity Custom Theme v2.0 — Xem trước trực tiếp</span>
+          <span data-testid="breadcrumb-segment" id="top-breadcrumb" style="margin-left:8px; font-weight:500;">Antigravity Custom Theme v3.0 — Interactive Showcase</span>
         </div>
         <div class="toolbar-right">
           <button type="button" class="mode-switch-pill active" id="btn-view-welcome">1. Màn hình chào</button>
           <button type="button" class="mode-switch-pill" id="btn-view-chat">2. Hội thoại &amp; SVG</button>
           <span class="toolbar-sep" aria-hidden="true"></span>
-          <button type="button" class="quick-v2-pill" id="btn-demo-squad" title="Triệu tập 5 Đại Trụ hiệp chiến &amp; Nung đỏ Hách Đao">⚔️ Thử Quân Đoàn Cửu Trụ</button>
+          <button type="button" class="quick-v2-pill" id="btn-demo-breathing" title="Thi triển tuyệt kỹ Hơi Thở 3D Micro-WebGL2">🌊 Chiêu Thức 3D</button>
+          <button type="button" class="quick-v2-pill" id="btn-demo-squad" title="Triệu tập Quân Đoàn Cửu Trụ (Subagent + Native Swarm + Workflow)">⚔️ Quân Đoàn Cửu Trụ</button>
           <button type="button" class="quick-v2-pill" id="btn-demo-trailer" title="Diễn tự động Trailer điện ảnh 15s (Alt+Shift+C)">🎬 Trailer 15s</button>
           <button type="button" class="quick-v2-pill" id="btn-demo-shield" title="Bật/Tắt Khiên Che Mật dự án (Alt+Shift+P)">🛡️ Khiên Che Mật</button>
           <button type="button" class="mode-switch-pill" id="btn-open-studio">🎨 Xưởng Giao Diện</button>
+          <div id="preview-lang-switch" role="group" aria-label="Language" style="display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:999px;background:rgba(15,23,42,0.65);border:1px solid rgba(255,255,255,0.16);">
+            <button type="button" class="preview-lang-btn" data-lang="vi" style="border:none;background:rgba(255,255,255,0.16);color:#fff;font-size:11px;font-weight:700;padding:2px 7px;border-radius:999px;cursor:pointer;">VI</button>
+            <button type="button" class="preview-lang-btn" data-lang="en" style="border:none;background:transparent;color:#cbd5e1;font-size:11px;font-weight:600;padding:2px 7px;border-radius:999px;cursor:pointer;">EN</button>
+            <button type="button" class="preview-lang-btn" data-lang="ja" style="border:none;background:transparent;color:#cbd5e1;font-size:11px;font-weight:600;padding:2px 7px;border-radius:999px;cursor:pointer;">日本語</button>
+          </div>
         </div>
       </div>
     </div>
@@ -633,6 +639,7 @@
       const btnWelcome = document.getElementById('btn-view-welcome');
       const btnChat = document.getElementById('btn-view-chat');
       const btnStudio = document.getElementById('btn-open-studio');
+      const btnBreathing = document.getElementById('btn-demo-breathing');
       const btnSquad = document.getElementById('btn-demo-squad');
       const btnTrailer = document.getElementById('btn-demo-trailer');
       const btnShield = document.getElementById('btn-demo-shield');
@@ -1043,8 +1050,79 @@
       let demoPendingRespEl = null;
       let demoTurnSeq = 1;
       let demoSlashSeq = 0;
+      let demoFormCursor = 0;
       let demoStepIdx = 2;
       let demoCtxTokens = 14800;
+
+      if (btnBreathing) {
+        btnBreathing.addEventListener('click', () => {
+          const skills = window.__AGY_KNY_SKILLS__;
+          const core = window.__AGY_THEME_CORE__;
+          const snap = (core && typeof core.getSnapshot === 'function') ? core.getSnapshot() : null;
+          const charId = (snap && snap.masterPersona) || 'yoriichi';
+          const formIdx = demoFormCursor % 4;
+          demoFormCursor += 1;
+          if (skills && typeof skills.castSkill === 'function') {
+            skills.castSkill(charId, formIdx);
+          } else if (skills && typeof skills.castNextForm === 'function') {
+            skills.castNextForm(charId);
+          }
+        });
+      }
+
+      const welcomeHeading = document.getElementById('welcome-heading');
+      const previewLangDict = {
+        vi: {
+          welcome: '1. Màn hình chào',
+          chat: '2. Hội thoại & SVG',
+          breath: '🌊 Chiêu Thức 3D',
+          squad: '⚔️ Quân Đoàn Cửu Trụ',
+          studio: '🎨 Xưởng Giao Diện',
+          hero: 'Chào mừng trở lại! Hôm nay chúng ta triển khai gì nào?'
+        },
+        en: {
+          welcome: 'Home View',
+          chat: 'Chat & SVG',
+          breath: '🌊 3D Breathing VFX',
+          squad: '⚔️ Hashira Swarm',
+          studio: '🎨 Theme Studio',
+          hero: 'Ready to build — what shall we ship today?'
+        },
+        ja: {
+          welcome: '1. ホーム画面',
+          chat: '2. チャット＆SVG',
+          breath: '🌊 3D呼吸エフェクト',
+          squad: '⚔️ 柱合会議レイド',
+          studio: '🎨 テーマ工房',
+          hero: 'おかえりなさい！今日は何を構築しましょうか？'
+        }
+      };
+
+      function applyPreviewShowcaseLang(lang) {
+        const l = previewLangDict[lang] ? lang : 'vi';
+        const d = previewLangDict[l];
+        if (btnWelcome) btnWelcome.textContent = d.welcome;
+        if (btnChat) btnChat.textContent = d.chat;
+        if (btnBreathing) btnBreathing.textContent = d.breath;
+        if (btnSquad) btnSquad.textContent = d.squad;
+        if (btnStudio) btnStudio.textContent = d.studio;
+        if (welcomeHeading) welcomeHeading.textContent = d.hero;
+        document.querySelectorAll('.preview-lang-btn').forEach((b) => {
+          const on = b.getAttribute('data-lang') === l;
+          b.style.background = on ? 'rgba(255,255,255,0.16)' : 'transparent';
+          b.style.color = on ? '#fff' : '#cbd5e1';
+          b.style.fontWeight = on ? '700' : '600';
+        });
+        if (window.__AGY_THEME_CORE__ && typeof window.__AGY_THEME_CORE__.setLanguage === 'function') {
+          window.__AGY_THEME_CORE__.setLanguage(l);
+        }
+      }
+
+      document.querySelectorAll('.preview-lang-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          applyPreviewShowcaseLang(btn.getAttribute('data-lang') || 'vi');
+        });
+      });
 
       if (btnSquad) {
         btnSquad.addEventListener('click', () => {

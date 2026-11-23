@@ -163,7 +163,7 @@ function collectFilesRecursive(absDir, relPrefix) {
 
 describe('F16 (R2) — Kiểm thử tĩnh, Build Parity, SVG XSS Guard & Tài sản', () => {
     describe('Tier 1 — Phủ Tính Năng R2 & Cấu trúc Tài sản', () => {
-        it('F16-T1-01: Kiểm tra cú pháp node --check cho 16 tệp lõi (daemon/, engine/, scripts/) và toàn bộ tests/**/*.js', () => {
+        it('F16-T1-01: Kiểm tra cú pháp node --check cho 20 tệp lõi (daemon/, engine/, scripts/) và toàn bộ tests/**/*.js', () => {
             const targetDirs = ['daemon', 'engine', 'scripts'];
             const coreJsFiles = [];
             for (const dir of targetDirs) {
@@ -176,8 +176,8 @@ describe('F16 (R2) — Kiểm thử tĩnh, Build Parity, SVG XSS Guard & Tài s�
             }
             assert.equal(
                 coreJsFiles.length,
-                16,
-                `Kỳ vọng đúng 16 tệp .js lõi nhưng tìm thấy ${coreJsFiles.length}: ${coreJsFiles.join(', ')}`
+                20,
+                `Kỳ vọng đúng 20 tệp .js lõi nhưng tìm thấy ${coreJsFiles.length}: ${coreJsFiles.join(', ')}`
             );
 
             const testJsFiles = collectFilesRecursive(path.join(REPO_ROOT, 'tests'), 'tests').filter((rel) =>
@@ -274,7 +274,9 @@ describe('F16 (R2) — Kiểm thử tĩnh, Build Parity, SVG XSS Guard & Tài s�
             const expectedExecScripts = [
                 'scripts/build_payload.js',
                 'scripts/build_payload.py',
+                'scripts/export_clean_edition.js',
                 'scripts/install-unix.sh',
+                'scripts/session_start_hook.js',
                 'scripts/uninstall.js',
                 'scripts/verify_cdp.js',
             ];

@@ -42,6 +42,7 @@ WEBP_QUALITY = 88
 
 EXTRA_MODULES = [
     "agy_security.js",
+    "agy_i18n.js",
     "kny_semantic_icons.js",
     "kny_bio_audio.js",
     "kny_fx_modes.js",

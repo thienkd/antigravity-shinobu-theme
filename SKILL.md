@@ -1,78 +1,53 @@
 ---
 name: antigravity-custom-theme
-description: Use when the user wants to design, customize, forge (.agytheme), install, update, or troubleshoot an Antigravity IDE or Manager visual theme from a wallpaper image, color palette, aesthetic mood, or preset.
+description: Use when the user wants to design, customize, forge (.agytheme), install, update, or troubleshoot an Antigravity IDE or Manager visual theme from a wallpaper image, color palette, aesthetic mood, workspace profile, or natural-language chat command.
 ---
 
-# Antigravity Custom Theme Skill (v2.0 Enterprise Architecture)
+# Antigravity Custom Theme Engine & Native Plugin (v3.0)
 
-Creates, compiles, and applies high-frame-rate (`60/120fps` Zero-Live-Blur) glassmorphic themes, live canvas landscapes, real-time Subagent Hashira HUDs, `0 KB` WebAudio soundscapes, and `.agytheme` packages to Google Antigravity 2.x without modifying application binaries.
+Creates, compiles, and applies high-frame-rate (`60/120fps` Zero-Live-Blur) glassmorphic themes, 3D Micro-WebGL2 Breathing VFX, real-time Subagent/Swarm/Workflow Hashira HUDs, `0 KB` WebAudio soundscapes, Workspace-Aware Profiles, multilingual Studio UI (`vi` / `en` / `ja`), and `.agytheme` packages to Google Antigravity 2.x without modifying application binaries.
 
-## Repository Layout & 11-Module Engine Architecture
+## Repository Layout & 13-Module Engine Architecture
 
-- `themes/themes.json` — Theme presets (OKLCH/hex tokens, wallpaper & Chibi paths, action sprites, glass alpha/dimming defaults, NPC dialog trees).
-- `themes/assets/` — High-res wallpapers (`.webp`/`.jpg`/`.png`), resting/action Chibi sprites, avatars, and sanitized SVG corner/composer ornaments.
-- `engine/` — **11 Modular Renderer Subsystems** bundled inside a single isolated Master Closure (`__AGY_BOOT__`):
-  1. `engine/agy_security.js` — Enterprise Closure Vault (`__AGY_SEC__`): stores the 256-bit ephemeral token outside `window`, strips `__proto__`/`constructor`/`prototype`, and sanitizes CSS values, asset URLs, and raw SVG markup.
-  2. `engine/kny_semantic_icons.js` — Crisp vector semantic iconography (`window.__AGY_KNY_ICONS__`).
-  3. `engine/kny_bio_audio.js` — `0 KB` Mathematical Web Audio synthesizer (Japanese Koto + Furin completion chimes, *"Kachin!"* blade sheathe, `0.12Hz` Alpha rain/hearth soundscapes, `0%` idle CPU suspend) & Bio-Circadian Retinal Guard (`window.__AGY_BIO_AUDIO__`).
-  4. `engine/kny_fx_modes.js` — 60fps multi-layer parallax canvas drawers, *Sukitōru Sekai* (Transparent World), and Multi-Window `0% GPU` background arbiter (`window.__AGY_KNY_FX_DRAWERS__`).
-  5. `engine/kny_breathing_skills.js` — 60 full-screen Ufotable-inspired Breathing Forms (`15 characters × 4 forms`) with Hit-Stop camera choreography and full-body leaping Chibi sprites (`window.__AGY_KNY_SKILLS__`).
-  6. `engine/kny_chibi_aura.js` — Elemental Chibi aura canvas, 1-click Chibi Breathing Form casting, **Crimson Red Blade (`赫刀`)** heat gauge, and automatic Demon-Slaying counter-slash (`window.__AGY_KNY_CHIBI_AURA__`).
-  7. `engine/kny_squad_raid.js` — **Live Hashira Swarm Squad** synchronized with active subagents via `< 30ms` SSE and **「滅」** victory stamp + Kasugai crow flyby (`window.__AGY_SQUAD_RAID__`).
-  8. `engine/kny_token_hud.js` — Live Context Window & Elemental Turn Token odometer, First Swordsman Yoriichi crest, and Instant Enter Command Echo (`window.__AGY_TOKEN_HUD__`).
-  9. `engine/agy_theme_forge.js` — **Multiverse AI Theme Forge**: perceptual `64×64` OKLCH palette extraction, WCAG AA contrast solver, 18 Master Personas, and `.agytheme` (`agytheme/2.0`) import/export (`window.__AGY_THEME_FORGE__`).
-  10. `engine/kny_cinema_director.js` — **1-Click Privacy Shield (`Alt+Shift+P`)** non-destructive IDE redaction & **15-Second Auto-Showcase Trailer Director (`Alt+Shift+C`)** (`window.__AGY_CINEMA_DIRECTOR__`).
-  11. `engine/core.js` — Core Zero-Live-Blur stylesheet engine, offscreen pre-baked L-glass (`syncPrebakedGlass`), Split-Browser `evenodd` hole cutout, interactive Chibi NPC popover, and Custom Theme Studio modal.
-- `scripts/build_payload.js` *(primary, zero-dependency Node.js)* & `scripts/build_payload.py` — Strips UTF-8 BOM, enforces build-time SVG security assertions, resolves Hybrid Asset URLs with reproducible 8-char SHA-256 content hashes (`?v=<hash8>`), and compiles all 11 modules into `dist/theme_payload.js`.
-- `daemon/theme_daemon.js` — Hardened Node.js (`>= 22.0.0`) loopback daemon: `127.0.0.1` Host Pinning, 256-bit `X-Agy-Token` authentication, `fs.realpath` static asset serving, incremental SSE Byte-Tailer (`/__events`), and strict Antigravity CDP target verification.
-- `scripts/install-win.ps1`, `scripts/install-unix.sh`, `scripts/uninstall.js`, `scripts/verify_cdp.js` — Cross-platform setup, clean `--purge` teardown, and live CDP diagnostics.
-- `references/theme-schema.md` — Complete `themes.json` & `.agytheme` schema, asset keys, and Antigravity 2.0 DOM invariants.
+- `plugin.json`, `hooks.json`, `mcp_config.json`, `assets/logo.svg` — Native Antigravity 2.x Plugin bundle (`SessionStart` lifecycle hook auto-wakes the daemon and applies per-workspace theme profiles; Zero-Dep Stdio MCP Server + Side-Pane MCP App).
+- `themes/themes.json` & `themes/assets/` — 16 built-in themes with WebP-optimized 2K wallpapers, Chibi sprites, avatars, and sanitized SVG ornaments.
+- `engine/` — **13 Modular Renderer Subsystems** bundled inside a single isolated Master Closure (`__AGY_BOOT__`):
+  1. `engine/agy_security.js` — Closure Vault (`__AGY_SEC__`): 256-bit ephemeral token, prototype-pollution stripping, CSS/URL/SVG sanitizers.
+  2. `engine/agy_i18n.js` — Ultra-lightweight (`< 8 KB`) multilingual dictionary (`vi` default / `en` / `ja`) (`window.__AGY_I18N__`).
+  3. `engine/kny_semantic_icons.js` — Crisp vector semantic iconography (`window.__AGY_KNY_ICONS__`).
+  4. `engine/kny_bio_audio.js` — `0 KB` Mathematical Web Audio synthesizer & Bio-Circadian Retinal Guard (`window.__AGY_BIO_AUDIO__`).
+  5. `engine/kny_fx_modes.js` — 60fps parallax canvas drawers, *Sukitōru Sekai*, particle density & laptop Eco-Battery governor (`window.__AGY_KNY_FX_DRAWERS__`).
+  6. `engine/kny_3d_vfx_kernel.js` — Zero-idle-VRAM Micro-WebGL2 3D ribbon/particle kernel with automatic Canvas2D fallback (`window.__AGY_3D_VFX_KERNEL__`).
+  7. `engine/kny_breathing_skills.js` — 60 full-screen 3D Breathing Forms (`15 characters × 4 forms`) (`window.__AGY_KNY_SKILLS__`).
+  8. `engine/kny_chibi_aura.js` — Elemental Chibi aura canvas & Crimson Red Blade (`赫刀`) heat gauge (`window.__AGY_KNY_CHIBI_AURA__`).
+  9. `engine/kny_squad_raid.js` — Live Hashira Squad Raid HUD tracking `invoke_subagent`, `swarm`, `run_workflow`, and `run_command` via SSE (`window.__AGY_SQUAD_RAID__`).
+  10. `engine/kny_token_hud.js` — Live Context Window, Turn Token odometer, `work_state_write` task progress, and Monaco/Terminal finisher guard (`window.__AGY_TOKEN_HUD__`).
+  11. `engine/agy_theme_forge.js` — Multiverse AI Theme Forge (`64×64` OKLCH palette extraction, WCAG AA contrast solver, 18 Master Personas, `.agytheme` v2.0) (`window.__AGY_THEME_FORGE__`).
+  12. `engine/kny_cinema_director.js` — Privacy Shield (`Alt+Shift+P`) & Auto-Showcase Trailer Director (`Alt+Shift+C`) (`window.__AGY_CINEMA_DIRECTOR__`).
+  13. `engine/core.js` — Core Zero-Live-Blur stylesheet engine, `AGY_DOM_CONTRACTS` circuit-breaker, `< 1 KB` `applyDaemonDelta` multi-window sync, Workspace Profiles, and 5-Tab WAI-ARIA Studio Modal.
+- `daemon/theme_daemon.js` — Hardened Node.js (`>= 22.0.0`) loopback daemon with SHA-256 doc-hash dedup, `< 1 KB` delta broadcast, external config watcher, and SSE byte-tailer.
+- `daemon/mcp_theme_server.js` — Zero-Dependency Stdio MCP Server (`open_theme_studio`, `switch_theme`, `set_persona`, `toggle_focus_mode`, `forge_theme_from_image`, `bind_workspace_profile`, `diagnose_cdp_onboarding`) + MCP App `ui://agy-theme/studio.html`.
+- `scripts/build_payload.js` & `scripts/build_payload.py` — Byte-identical payload compilers with build-time SVG XSS guard.
+- `scripts/export_clean_edition.js` — Exports a pure-MIT Clean Edition bundle (procedural/multiverse themes only) for enterprise or marketplace distribution.
 
 ## Workflow
 
-1. **Gather aesthetic & inspect artwork**
-   - Clarify mood only if ambiguous (Hashira elemental realm, cozy warm, cyberpunk neon, minimalist pure-CSS gradient, or `.agytheme` multiverse pack).
-   - Clean or crop unwanted corner watermarks before staging assets under `themes/assets/`.
-2. **Design cohesive tokens (OKLCH / WCAG AA Dark or Light Glass)**
-   - Read `references/theme-schema.md` for every `themes.json` and `.agytheme` key.
-   - Populate cohesive surface tokens (`primary`, `secondary`, `overlayRgb`, `bg`, `frameBg`, `sidebarBg`, `aiCardBg`, `headerBg`, `inputCardBg`, `modalBg`, `pillBg`, `pillBorder`).
-   - Support complete dual-persona ornaments when desired:
-     - Agent / Composer side: `sticker`, `actionSticker`, `cornerSvg`, `agentAvatar`
-     - User (First Swordsman Yoriichi / Master Persona) side: `userSticker`, `userActionSticker`, `userCornerSvg`, `userAvatar`
-3. **Stage assets & edit `themes/themes.json` (UTF-8 without BOM)**
-   - Store assets in `themes/assets/` and reference them as `"assets/<filename>"`.
-   - Never hardcode personal OS paths (`C:\Users\...`, `/Users/...`, `/home/...`) anywhere in JSON, JS, or documentation.
-   - Ensure all `.svg` files contain pure vector primitives (no `<script>`, `<foreignObject>`, inline `on*=` handlers, or external URLs).
-4. **Compile & syntax-check payload**
-   - Run `npm run build` (`node scripts/build_payload.js`; pass `--inline-all` only when generating a standalone zero-HTTP bundle).
-   - Run `node --check dist/theme_payload.js` to confirm zero syntax errors.
-5. **Run / hot-reload daemon**
-   - **Windows:** `powershell -ExecutionPolicy Bypass -File scripts/install-win.ps1`
-   - **macOS / Linux:** `bash scripts/install-unix.sh`
-   - When `daemon/theme_daemon.js` is already running, `npm run build` triggers automatic hot-reload via `fs.watch`.
-6. **Verify live via CDP**
-   - Run `npm run verify` (`node scripts/verify_cdp.js`) while Antigravity is open.
-   - Confirm `themeActive: true`, `hasLiveBlurRule: false`, valid `.agy-shell` background, visible user message bubbles, and readable composer pills.
+1. **Control instantly via MCP Tools (when installed as a Plugin)**
+   - Prefer calling `switch_theme`, `set_persona`, `toggle_focus_mode`, `forge_theme_from_image`, `bind_workspace_profile`, or `diagnose_cdp_onboarding` directly when the `antigravity-shinobu-theme_controller` MCP server is active.
+2. **Author or customize themes in `themes/themes.json`**
+   - Read `references/theme-schema.md` for token keys (`primary`, `secondary`, `overlayRgb`, `bg`, `frameBg`, `sidebarBg`, `aiCardBg`, `headerBg`, `inputCardBg`, `modalBg`, `pillBg`, `pillBorder`).
+   - Store assets in `themes/assets/` as `"assets/<filename>"` (prefer `.webp` for wallpapers/sprites and pure vector `.svg` without scripts or inline handlers).
+   - Never hardcode personal OS paths (`C:\Users\...`, `/Users/...`, `/home/...`) in tracked files.
+3. **Compile, test & hot-reload**
+   - Run `npm run build` (`node scripts/build_payload.js`) and `npm test` (`node tests/run_all.js`).
+   - Setup/repair CDP shortcut & background daemon:
+     - **Windows:** `powershell -ExecutionPolicy Bypass -File scripts/install-win.ps1`
+     - **macOS / Linux:** `bash scripts/install-unix.sh`
+   - Verify live injection via `npm run verify` (`node scripts/verify_cdp.js`).
 
-## Non-Negotiable Antigravity 2.0 DOM & Security Rules
+## Non-Negotiable Antigravity 2.x DOM & Security Rules
 
-1. **User Bubble `:empty` Trap Prevention (CRITICAL):**
-   - Antigravity 2.0 styles user message wrappers with the Tailwind selector `[&:has(>.agy-user-bubble-frame>:empty)]:hidden`.
-   - **NEVER** append an empty element (such as `<div></div>` or `<button class="agy-chibi-hitbox"></button>`) directly inside `.agy-user-bubble-frame` — doing so immediately hides the entire user message!
-   - Every direct helper child inside `.agy-user-bubble-frame` **MUST** contain a non-empty child node, e.g. `<button type="button" class="agy-chibi-hitbox"><i aria-hidden="true"></i></button>`.
-2. **Custom `<agy-live-fx>` Host Tag (CRITICAL):**
-   - `engine/core.js` targets `.agy-shell > div:first-of-type` (top header bar, `z-index: 3`) and `.agy-shell > div:not(:first-of-type)` (workbench body, `z-index: 2`).
-   - **NEVER** mount a `<div>` as a direct child of `.agy-shell` for background canvases, or `:first-of-type` structural selectors will shift! Always mount the custom element `<agy-live-fx id="agy-live-fx-host">` instead.
-3. **Zero Live Blur:**
-   - Never apply live `backdrop-filter: blur(...)` to `.agy-shell`, `.agy-chat-frame`, or scrolling containers. Use `syncPrebakedGlass` offscreen canvas baking exclusively.
-4. **Split-Browser Cutout & Strict CDP Target Verification:**
-   - Preserve `body[data-has-browser-hole="true"]` `evenodd` polygon cutouts so the right-side browser pane remains 100% unobstructed, and never inject scripts into non-Workbench Split Browser targets.
-5. **Zero XSS & Closure Security:**
-   - Render untrusted strings (`transcript.jsonl` titles, `Role`, `toolSummary`, imported `.agytheme` metadata) strictly via `document.createElement` + `.textContent` (never `.innerHTML` concatenation), and route authenticated daemon calls through `__AGY_SEC__`.
-
-## Troubleshooting: Theme Disappeared After Antigravity Update
-
-Antigravity v2.33.0+ requires `--remote-debugging-port=0` to expose `DevToolsActivePort` on `127.0.0.1`, and auto-updates may reset desktop shortcuts:
-
-- **Windows:** Re-run `powershell -ExecutionPolicy Bypass -File scripts/install-win.ps1`, quit Antigravity completely from the **System Tray (`Quit`)**, and relaunch from **Start Menu** (re-pin Taskbar icons from Start Menu if needed).
-- **macOS / Linux:** On macOS, quit Antigravity completely first (`Cmd + Q` or `osascript -e 'quit app "Antigravity"'`) and relaunch with `open -a Antigravity --args --remote-debugging-port=0`. On Linux, re-run `bash scripts/install-unix.sh` to auto-patch `~/.local/share/applications/antigravity*.desktop` without `sudo`, then restart Antigravity.
+1. **User Bubble `:empty` Trap Prevention:** Never append an empty direct child inside `.agy-user-bubble-frame` (`[&:has(>.agy-user-bubble-frame>:empty)]:hidden` will hide the entire message). Always include `<i aria-hidden="true"></i>`.
+2. **Custom `<agy-live-fx>` Host Tag:** Never mount a `<div>` as the first child of `.agy-shell`; always use `<agy-live-fx id="agy-live-fx-host">`.
+3. **Zero Live Blur & Monaco Safety:** Never apply `backdrop-filter: blur(...)` to scrolling containers or override `font-family`/`line-height` inside `.monaco-editor` / `.xterm`.
+4. **Zero XSS & Magic-Byte Validation:** Render untrusted labels via `.textContent` and validate image magic bytes before forging data URIs.

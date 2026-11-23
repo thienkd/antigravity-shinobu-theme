@@ -18,13 +18,14 @@ const SUITES = [
     'test_kny_skills_hud_cinema.js',
     'test_3d_breathing_vfx.js',
     'test_scripts_cli.js',
+    'test_phase3b_ecosystem.js',
     'test_live_e2e_cdp.js',
 ];
 
 function main() {
     const startMs = Date.now();
     console.log('======================================================================');
-    console.log(' KIỂM THỬ TOÀN DIỆN ANTIGRAVITY CUSTOM THEME v2.0 (CHẾ ĐỘ TUẦN TỰ)');
+    console.log(' KIỂM THỬ TOÀN DIỆN ANTIGRAVITY CUSTOM THEME v3.0 (CHẾ ĐỘ TUẦN TỰ)');
     console.log('======================================================================');
 
     let passedSuites = 0;

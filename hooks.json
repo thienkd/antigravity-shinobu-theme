@@ -1,0 +1,11 @@
+{
+  "antigravity-shinobu-theme": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "node ./scripts/session_start_hook.js",
+        "timeout": 8
+      }
+    ]
+  }
+}

@@ -1,18 +1,24 @@
-# 👑 Antigravity Custom Theme Engine v2.0 — Kimetsu no Yaiba & Multiverse Edition
+# 👑 Antigravity Custom Theme Engine v3.0 — Kimetsu no Yaiba 3D VFX & Native Plugin Edition
 
-[![Version](https://img.shields.io/badge/version-2.0.0-f59e0b.svg)](#)
+[![Version](https://img.shields.io/badge/version-3.0.0-f59e0b.svg)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.0.0-10b981.svg)](#)
 [![Dependencies](https://img.shields.io/badge/dependencies-0%20(Zero%20NPM)-38bdf8.svg)](SECURITY.md)
+[![Plugin](https://img.shields.io/badge/Antigravity%202.x-Native%20Plugin%20%2B%20MCP-ec4899.svg)](plugin.json)
 [![Security](https://img.shields.io/badge/security-Enterprise%20Hardened-a855f7.svg)](SECURITY.md)
 [![License: MIT](https://img.shields.io/badge/code%20license-MIT-fef08a.svg)](LICENSE)
 
-Hệ thống tùy biến giao diện **Live Wallpaper 4K 60/120fps**, **Quân Đoàn Cửu Trụ Subagent HUD**, **Âm Cảnh Sinh Học `0 KB` WebAudio** và **Lò Rèn Đa Vũ Trụ `.agytheme`** đạt chuẩn bảo mật doanh nghiệp dành cho **Google Antigravity IDE 2.x** (đồng thời đóng gói làm **AI Agent Skill**).
+Hệ thống tùy biến giao diện **Live Wallpaper WebP 60/120fps**, **60 Thức Hơi Thở 3D Micro-WebGL2**, **Quân Đoàn Cửu Trụ (Subagent • Swarm • Workflow)**, **Đa Ngôn Ngữ (`VI` / `EN` / `日本語`)**, **Hồ Sơ Theo Dự Án** và **Zero-Dep MCP Controller** chuẩn **Antigravity Native Plugin v3.0**.
 
 ---
 
-## 🌏 English Executive Summary
+## 🌏 English Executive Summary (v3.0 Highlights)
 
-**Antigravity Custom Theme Engine v2.0** transforms Google Antigravity IDE into a butter-smooth **60/120fps** glassmorphic workspace without touching application binaries or installing third-party NPM packages:
+**Antigravity Custom Theme Engine v3.0** transforms Google Antigravity IDE 2.x into a **60/120fps** glassmorphic workspace with zero NPM dependencies:
+
+- **Native Antigravity Plugin & Zero-Dep Stdio MCP Server (`plugin.json`, `mcp_config.json`, `hooks.json`)**: Switch themes, personas, Deep Focus mode, or forge OKLCH themes from local images directly via natural-language chat commands or the Side-Pane **Theme Studio MCP App** (complete with a 1-Click **CDP Onboarding Doctor**).
+- **Multilingual 5-Tab WAI-ARIA Studio (`< 8 KB` `agy_i18n.js`)**: Instant live switching between **Vietnamese (`VI`)**, **English (`EN`)**, and **Japanese (`日本語`)**, plus automatic **Workspace-Aware Theme Profiles** applied at `SessionStart`.
+- **WebP-Compressed Assets (`-81%` Repo Size) & `< 1 KB` Multi-Window Delta Sync**: 16 built-in themes + 18 Multiverse Personas, `AGY_DOM_CONTRACTS` circuit-breaker, and laptop battery Eco-Governor.
+- **Clean Edition Exporter (`npm run export:clean`)**: Generates a 100% pure-MIT procedural OKLCH distribution with zero third-party character artwork for enterprise environments.
 
 - **16 Built-in Themes & First Swordsman Yoriichi Persona**: Full *Kimetsu no Yaiba* roster (Ubuyashiki Royal Estate, all 9 Hashira, 4 main slayers) + 2 minimalist classics + **18 Multiverse Master Personas**.
 - **Live Hashira Swarm Squad (`< 30ms` SSE Byte-Tailer)**: Real-time subagent visualizations synchronized directly from active `transcript.jsonl` streams.
