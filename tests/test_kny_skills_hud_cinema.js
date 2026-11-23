@@ -2813,14 +2813,14 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     assert.equal(bladeBtn.dataset.compacting, '1', 'Phải bật data-compacting="1" trong lúc gửi');
     assert.ok(echo.querySelector('.agy-echo-text').textContent.includes('Đang nén phiên (/compact)'));
 
-    env.clock.advanceBy(90);
-    assert.deepEqual(sentPayloads, ['/compact'], 'Sau 80ms phải kích hoạt nút gửi với /compact');
+    env.clock.advanceBy(210);
+    assert.deepEqual(sentPayloads, ['/compact'], 'Sau 200ms phải kích hoạt nút gửi với /compact');
     assert.ok(
       echo.querySelector('.agy-echo-text').textContent.includes('Đang nén phiên (/compact)'),
       'Không được ghi đè Echo tiếng Việt bằng chuỗi /compact thô'
     );
     env.clock.advanceBy(700);
-    assert.equal(bladeBtn.dataset.compacting, undefined, 'Sau 720ms phải tắt data-compacting');
+    assert.equal(bladeBtn.dataset.compacting, undefined, 'Sau 860ms phải tắt data-compacting');
     assert.equal(hud.getCompactState().inFlight, false);
 
     // 4. Fallback Enter khi composer không có nút Send
@@ -2835,7 +2835,7 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     });
     bladeBtn.click();
     assert.equal(editor.value, '/compact');
-    env.clock.advanceBy(90);
+    env.clock.advanceBy(210);
     assert.deepEqual(enterEvents, ['/compact'], 'Khi thiếu nút Send phải fallback gửi bằng phím Enter');
     env.clock.advanceBy(700);
 
@@ -2873,10 +2873,10 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     bladeBtn2.click();
     assert.equal(ceEditor.textContent, '/compact', 'Phải điền /compact vào [contenteditable="true"]');
 
-    env.clock.advanceBy(90);
-    assert.equal(optClicks, 1, 'Khi có menu slash [role="listbox"] mở, bước 1 phải chọn option /compact');
-    env.clock.advanceBy(260);
-    assert.deepEqual(cePayloads, ['/compact'], 'Sau khi chọn option slash mà editor còn /compact, bước 2 phải gửi qua nút Send');
+    env.clock.advanceBy(210);
+    assert.equal(optClicks, 1, 'Khi có menu slash [role="listbox"] mở, bước 200ms phải chọn option /compact');
+    env.clock.advanceBy(270);
+    assert.deepEqual(cePayloads, ['/compact'], 'Sau khi chọn option slash mà editor còn /compact, bước 460ms phải gửi qua nút Send');
     env.clock.advanceBy(450);
     assert.equal(hud.getCompactState().inFlight, false);
   });
@@ -2930,12 +2930,12 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     assert.equal(autoSent.length, 0, 'Khi đang có nháp trong ô chat phải hoãn tự nén');
     assert.equal(hud.getCompactState().pending, true);
 
-    // 4. Người dùng xóa sạch nháp -> sau 1200ms settle + 80ms tự động nén đúng 1 lần
+    // 4. Người dùng xóa sạch nháp -> sau 1200ms settle + 200ms tự động nén đúng 1 lần
     editor.value = '';
     editor.dispatchEvent(new env.MiniEvent('input', { bubbles: true }));
-    env.clock.advanceBy(1400);
+    env.clock.advanceBy(1450);
     assert.deepEqual(autoSent, ['/compact'], 'Khi rảnh và hết nháp ở >=380K phải tự động gửi /compact');
-    env.clock.advanceBy(600);
+    env.clock.advanceBy(700);
     assert.equal(hud.getCompactState().disarmed, true, 'Sau khi tự nén 380K phải disarm tránh bắn lặp');
 
     // 5. Snapshot tiếp theo vẫn 386K -> không được bắn lặp
@@ -2955,7 +2955,7 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     hud.ingestTelemetrySnapshot({
       ok: true, cid: cidLive, contextTokens: 390000, turnCount: 6, stepCount: 10, isWorking: false
     });
-    env.clock.advanceBy(2000);
+    env.clock.advanceBy(2200);
     assert.deepEqual(autoSent, ['/compact', '/compact'], 'Sau khi re-arm và tăng lại >=380K phải tự động nén lần 2');
   });
 
@@ -2995,7 +2995,7 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     assert.equal(bladeBtn.dataset.compactReady, '1');
 
     bladeBtn.click();
-    env.clock.advanceBy(800);
+    env.clock.advanceBy(950);
     assert.deepEqual(sent, ['/compact'], 'Khi tắt tự nén vẫn kích tay gửi /compact được');
 
     // Chuột phải bật lại tự nén 380K & kiểm tra Popover Tiếng Việt 100%
@@ -3046,7 +3046,7 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     const bar = hud.mountTokenHud(composer, {});
     const bladeBtn = bar.querySelector('.agy-nichirin-pill');
 
-    // Chống gửi đúp khi Send là async (disable nút ngay tại click, nhưng >320ms mới xóa editor)
+    // Chống gửi đúp khi Send là async (disable nút ngay tại click, nhưng >460ms mới xóa editor)
     let sendClicks = 0;
     let enterFallbacks = 0;
     sendBtn.addEventListener('click', () => {
@@ -3058,15 +3058,15 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     });
 
     bladeBtn.click();
-    env.clock.advanceBy(400);
+    env.clock.advanceBy(500);
     assert.equal(decoyClicks, 0, 'Không được click nhầm nút Attach có HTML5 default type=submit');
     assert.equal(sendClicks, 1, 'Phải click đúng nút Send thật');
-    assert.equal(enterFallbacks, 0, 'Khi nút Send đã chuyển sang disabled (async IPC), bước 320ms KHÔNG được bắn Enter gây gửi đúp');
+    assert.equal(enterFallbacks, 0, 'Khi nút Send đã chuyển sang disabled (async IPC), bước 460ms KHÔNG được bắn Enter gây gửi đúp');
 
-    // Dọn editor như khi IPC async hoàn tất trước 720ms
+    // Dọn editor như khi IPC async hoàn tất trước 860ms
     editor.value = '';
     sendBtn.disabled = false;
-    env.clock.advanceBy(400);
+    env.clock.advanceBy(450);
     assert.equal(hud.getCompactState().failed, false);
 
     // 2. Popup position: fixed (Radix wrapper) có offsetParent === null nhưng rect > 0
@@ -3100,9 +3100,9 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
       sendBtn.disabled = false;
     });
     bladeBtn.click();
-    env.clock.advanceBy(90);
+    env.clock.advanceBy(210);
     assert.equal(fixedOptClicks, 1, 'findVisibleSlashCompactOption phải thấy được popup position:fixed (offsetParent=null)');
-    env.clock.advanceBy(700);
+    env.clock.advanceBy(750);
     assert.equal(sendClicks, 2);
 
     // 3. Gõ /compact thủ công ở 380K phải hủy timer auto-compact chống bắn chồng
@@ -3151,15 +3151,191 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     env.clock.advanceBy(2000);
     assert.equal(stuckEd.value, '', 'Tab ẩn vẫn đang hoãn');
 
-    // Quay lại tab visible -> tự động kích hoạt -> kẹt ở T=720ms -> báo cảnh báo và không đánh dấu disarmed
+    // Quay lại tab visible -> tự động kích hoạt -> kẹt ở T=860ms -> báo cảnh báo và không đánh dấu disarmed
     env.document.hidden = false;
     env.document.dispatchEvent(new env.MiniEvent('visibilitychange'));
-    env.clock.advanceBy(2100);
+    env.clock.advanceBy(2200);
     assert.equal(stuckEd.value, '/compact', 'Khi tab hiện lại phải chạy auto-compact');
-    assert.equal(hud.getCompactState().failed, true, 'Khi /compact còn kẹt trong ô chat sau 720ms phải đánh dấu failed=true');
+    assert.equal(hud.getCompactState().failed, true, 'Khi /compact còn kẹt trong ô chat sau 860ms phải đánh dấu failed=true');
     assert.equal(hud.getCompactState().disarmed, false, 'Gửi thất bại không được đánh dấu disarmed thành công giả');
     barStuck.querySelector('.agy-tok-ctx-pill').click();
     assert.ok(barStuck.textContent.includes('Cần nhấn Enter để hoàn tất /compact'), 'Popover phải báo rõ trạng thái cần nhấn Enter');
+  });
+
+  it('F13-T2-15 [COMPACT-LEXICAL-ASYNC]: Chống nhân 4 (/compact/compact...) trên Lexical async, chọn option aria-activedescendant, khóa an toàn exact-match & single fallback paste', async () => {
+    env = createKnyVmEnv();
+    const { composer, editor, sendBtn } = env.buildStandardIdeDom();
+    editor.remove();
+
+    const ceEditor = env.document.createElement('div');
+    ceEditor.setAttribute('contenteditable', 'true');
+    ceEditor.setAttribute('role', 'combobox');
+    ceEditor.setAttribute('aria-autocomplete', 'list');
+    ceEditor.setAttribute('aria-expanded', 'false');
+    ceEditor.setAttribute('data-lexical-editor', 'true');
+    composer.insertBefore(ceEditor, sendBtn);
+
+    env.loadModules(['agy_security.js', 'kny_semantic_icons.js', 'kny_squad_raid.js', 'kny_token_hud.js']);
+    const hud = env.sandbox.__AGY_TOKEN_HUD__;
+    const cid = 'aaaaaaaa-1234-4123-8123-aaaaaaaaaaaa';
+    env.sandbox.location.pathname = `/c/${cid}`;
+    const bar = hud.mountTokenHud(composer, {});
+    const bladeBtn = bar.querySelector('.agy-nichirin-pill');
+
+    // Bộ đếm mô phỏng Lexical: mỗi sự kiện chèn mà bị kích hoạt sẽ nối chuỗi như ngoài đời thật
+    let execCalls = 0;
+    let beforeInputCalls = 0;
+    let pasteCalls = 0;
+    let sendClicks = 0;
+    let enterCount = 0;
+    const sentPayloads = [];
+    let execMode = 'async_append';
+
+    class MockDataTransfer {
+      constructor() { this._map = new Map(); }
+      setData(k, v) { this._map.set(String(k), String(v)); }
+      getData(k) { return this._map.get(String(k)) || ''; }
+    }
+    class MockClipboardEvent extends env.MiniEvent {
+      constructor(type, init = {}) {
+        super(type, init);
+        this.clipboardData = init.clipboardData || new MockDataTransfer();
+      }
+    }
+    env.sandbox.DataTransfer = MockDataTransfer;
+    env.sandbox.ClipboardEvent = MockClipboardEvent;
+
+    let activePopup = null;
+    let activeOptClicks = 0;
+
+    ceEditor.addEventListener('beforeinput', (ev) => {
+      beforeInputCalls++;
+      if (execMode === 'async_append' && ev && ev.data) {
+        ceEditor.textContent += ev.data;
+      }
+    });
+    ceEditor.addEventListener('paste', (ev) => {
+      pasteCalls++;
+      const txt = ev && ev.clipboardData ? ev.clipboardData.getData('text/plain') : '';
+      if (txt) ceEditor.textContent += txt;
+    });
+    ceEditor.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') enterCount++;
+    });
+    sendBtn.addEventListener('click', () => {
+      sendClicks++;
+      sentPayloads.push(ceEditor.textContent);
+      ceEditor.textContent = '';
+    });
+
+    env.document.execCommand = (cmd, ui, val) => {
+      if (cmd !== 'insertText') return false;
+      execCalls++;
+      if (execMode === 'async_append') {
+        queueMicrotask(() => {
+          ceEditor.textContent += String(val || '');
+        });
+        return false; // Lexical gọi preventDefault() -> execCommand trả về false đồng bộ!
+      }
+      if (execMode === 'async_with_menu') {
+        queueMicrotask(() => {
+          ceEditor.textContent += String(val || '');
+          activePopup = env.document.createElement('div');
+          activePopup.id = 'lex-menu';
+          activePopup.setAttribute('role', 'listbox');
+          const opt = env.document.createElement('div');
+          opt.id = 'lex-opt-compact';
+          opt.setAttribute('role', 'option');
+          const s1 = env.document.createElement('span');
+          s1.textContent = '/compact';
+          const s2 = env.document.createElement('span');
+          s2.textContent = 'Tóm tắt phiên';
+          opt.appendChild(s1);
+          opt.appendChild(s2);
+          opt.addEventListener('click', () => {
+            activeOptClicks++;
+            ceEditor.textContent = '';
+            ceEditor.setAttribute('aria-expanded', 'false');
+            ceEditor.removeAttribute('aria-controls');
+            ceEditor.removeAttribute('aria-activedescendant');
+            if (activePopup) activePopup.remove();
+          });
+          activePopup.appendChild(opt);
+          env.document.body.appendChild(activePopup);
+          ceEditor.setAttribute('aria-expanded', 'true');
+          ceEditor.setAttribute('aria-controls', 'lex-menu');
+          ceEditor.setAttribute('aria-activedescendant', 'lex-opt-compact');
+        });
+        return false;
+      }
+      if (execMode === 'corrupted_duplicate') {
+        queueMicrotask(() => {
+          ceEditor.textContent = '/compact/compact';
+        });
+        return false;
+      }
+      if (execMode === 'noop') {
+        return false;
+      }
+      return false;
+    };
+
+    // Kịch bản A: Lexical async chèn đúng 1 lần, không rơi sang beforeinput/paste/textContent
+    bladeBtn.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(ceEditor.textContent, '/compact', 'Microtask Lexical chỉ được chèn đúng 1 lần /compact');
+    env.clock.advanceBy(80);
+    assert.equal(ceEditor.textContent, '/compact', 'Ở mốc 70ms khi đã có /compact thì không được chèn thêm fallback');
+    assert.equal(execCalls, 1, 'Chỉ gọi execCommand đúng 1 lần');
+    assert.equal(beforeInputCalls, 0, 'Không được bắn thêm beforeinput làm nhân đôi chuỗi');
+    assert.equal(pasteCalls, 0, 'Không được bắn thêm paste làm nhân đôi chuỗi');
+
+    env.clock.advanceBy(130); // vượt mốc 200ms
+    assert.deepEqual(sentPayloads, ['/compact'], 'Phải gửi duy nhất 1 lệnh /compact');
+    env.clock.advanceBy(700);
+    assert.equal(hud.getCompactState().inFlight, false);
+    assert.equal(hud.getCompactState().failed, false);
+
+    // Kịch bản B: Combobox aria-expanded + aria-activedescendant + span ghép sát (<span>/compact</span><span>Tóm tắt phiên</span>)
+    env.clock.advanceBy(4100);
+    execMode = 'async_with_menu';
+    bladeBtn.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    env.clock.advanceBy(210);
+    assert.equal(activeOptClicks, 1, 'Phải nhận diện & click đúng option #lex-opt-compact qua aria-activedescendant & span con');
+    assert.equal(sendClicks, 1, 'Option slash đã xử lý xong thì không được bấm nhầm nút Send thêm lần nữa');
+    env.clock.advanceBy(700);
+    assert.equal(hud.getCompactState().failed, false);
+    assert.equal(hud.getCompactState().inFlight, false);
+
+    // Kịch bản C: Hard Exact-Command Safety Guard chặn đứng chuỗi bị lặp (/compact/compact)
+    env.clock.advanceBy(4100);
+    execMode = 'corrupted_duplicate';
+    bladeBtn.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    env.clock.advanceBy(950);
+    assert.equal(sendClicks, 1, 'Khi text khác /compact (vd /compact/compact), tuyêt đối không được bấm Send');
+    assert.equal(enterCount, 0, 'Khi text khác /compact, tuyệt đối không được gửi Enter');
+    assert.equal(hud.getCompactState().failed, true, 'Phải đánh dấu failed=true khi chặn lệnh lỗi');
+    const echoText = env.document.querySelector('#agy-yoriichi-msg-echo .agy-echo-text').textContent;
+    assert.ok(echoText.includes('không khớp /compact'), 'Phải báo Echo cảnh báo tiếng Việt khi chặn lệnh sai');
+
+    // Kịch bản D: Single fallback paste ở T=70ms khi execCommand hoàn toàn không chèn gì
+    ceEditor.textContent = '';
+    env.clock.advanceBy(4100);
+    execMode = 'noop';
+    bladeBtn.click();
+    await Promise.resolve();
+    assert.equal(ceEditor.textContent, '', 'Trước 70ms khi execCommand noop thì ô chat vẫn trống');
+    env.clock.advanceBy(80);
+    assert.equal(pasteCalls, 1, 'Ở mốc 70ms phải kích hoạt đúng 1 lần fallback paste');
+    assert.equal(ceEditor.textContent, '/compact', 'Fallback paste phải điền đúng 1 chuỗi /compact');
+    env.clock.advanceBy(820);
+    assert.deepEqual(sentPayloads, ['/compact', '/compact'], 'Sau fallback paste phải gửi chính xác 1 lệnh /compact');
+    assert.equal(hud.getCompactState().failed, false);
   });
 });
 

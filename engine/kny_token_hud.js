@@ -1407,10 +1407,14 @@
     return null;
   }
 
+  function isExactCompactEditorState(editor) {
+    return readEditorText(editor).toLowerCase() === COMPACT_COMMAND;
+  }
+
   function hasVisibleSlashOrPopupMenu() {
     if (typeof document === 'undefined') return false;
     try {
-      const menus = document.querySelectorAll('[role="listbox"], [role="menu"], [data-radix-popper-content-wrapper]');
+      const menus = document.querySelectorAll('[role="listbox"], [role="menu"], [data-radix-popper-content-wrapper], [cmdk-list], [data-lexical-typeahead-menu]');
       for (let i = 0; i < menus.length; i++) {
         const m = menus[i];
         if (m && isPopupElementVisible(m) && !(typeof m.closest === 'function' && m.closest(`#${HUD_BAR_ID}`))) {
@@ -1421,20 +1425,78 @@
     return false;
   }
 
-  function findVisibleSlashCompactOption() {
+  function isSlashMenuOpenForEditor(editor) {
+    if (editor && typeof editor.getAttribute === 'function' && editor.getAttribute('aria-expanded') === 'true') {
+      return true;
+    }
+    return hasVisibleSlashOrPopupMenu();
+  }
+
+  function matchesCompactSlashItem(item) {
+    if (!item || (typeof item.closest === 'function' && item.closest(`#${HUD_BAR_ID}`))) {
+      return false;
+    }
+    const val = typeof item.getAttribute === 'function' ? String(item.getAttribute('data-value') || '').trim() : '';
+    const aria = typeof item.getAttribute === 'function' ? String(item.getAttribute('aria-label') || '').trim() : '';
+    const title = typeof item.getAttribute === 'function' ? String(item.getAttribute('title') || '').trim() : '';
+    if (
+      /^\/?compact$/i.test(val) ||
+      /(?:^|\s)\/compact(?:\s|$)/i.test(aria) ||
+      /(?:^|\s)\/compact(?:\s|$)/i.test(title)
+    ) {
+      return true;
+    }
+    const txt = String(item.textContent || '').trim();
+    if (/(?:^|\s)\/compact(?:\s|$)/i.test(txt)) {
+      return true;
+    }
+    if (typeof item.querySelectorAll === 'function') {
+      try {
+        const subNodes = item.querySelectorAll('span, div, code, strong');
+        for (let i = 0; i < subNodes.length; i++) {
+          const subTxt = String(subNodes[i].textContent || '').trim();
+          if (/^\/?compact$/i.test(subTxt)) {
+            return true;
+          }
+        }
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  function findVisibleSlashCompactOption(editor) {
     if (typeof document === 'undefined') return null;
     try {
-      const menus = document.querySelectorAll('[role="listbox"], [role="menu"], [data-radix-popper-content-wrapper], [cmdk-list]');
+      if (editor && typeof editor.getAttribute === 'function' && typeof document.getElementById === 'function') {
+        const activeId = String(editor.getAttribute('aria-activedescendant') || '').trim();
+        if (activeId) {
+          const activeEl = document.getElementById(activeId);
+          if (activeEl && isPopupElementVisible(activeEl) && matchesCompactSlashItem(activeEl)) {
+            return activeEl;
+          }
+        }
+        const controlsId = String(editor.getAttribute('aria-controls') || '').trim();
+        if (controlsId) {
+          const ctrlEl = document.getElementById(controlsId);
+          if (ctrlEl && isPopupElementVisible(ctrlEl) && !(typeof ctrlEl.closest === 'function' && ctrlEl.closest(`#${HUD_BAR_ID}`))) {
+            const ctrlItems = ctrlEl.querySelectorAll('[role="option"], [role="menuitem"], [cmdk-item], button, li, [tabindex]');
+            for (let k = 0; k < ctrlItems.length; k++) {
+              if (matchesCompactSlashItem(ctrlItems[k])) {
+                return ctrlItems[k];
+              }
+            }
+          }
+        }
+      }
+
+      const menus = document.querySelectorAll('[role="listbox"], [role="menu"], [data-radix-popper-content-wrapper], [cmdk-list], [data-lexical-typeahead-menu]');
       for (let i = 0; i < menus.length; i++) {
         const menu = menus[i];
         if (!menu || !isPopupElementVisible(menu) || (typeof menu.closest === 'function' && menu.closest(`#${HUD_BAR_ID}`))) continue;
         const items = menu.querySelectorAll('[role="option"], [role="menuitem"], [cmdk-item], button, li');
         for (let j = 0; j < items.length; j++) {
-          const item = items[j];
-          const val = String(item.getAttribute('data-value') || '').trim();
-          const txt = String(item.textContent || '').trim();
-          if (/^\/?compact$/i.test(val) || /(?:^|\s)\/compact(?:\s|$)/i.test(txt)) {
-            return item;
+          if (matchesCompactSlashItem(items[j])) {
+            return items[j];
           }
         }
       }
@@ -1442,8 +1504,49 @@
     return null;
   }
 
+  function collapseSelectionToEnd(editor) {
+    if (typeof window === 'undefined' || typeof window.getSelection !== 'function' || typeof document === 'undefined' || typeof document.createRange !== 'function') {
+      return;
+    }
+    try {
+      const sel = window.getSelection();
+      if (!sel) return;
+      const target = editor.firstElementChild || editor;
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (_) {}
+  }
+
+  function applySingleContentEditableFallback(editor, cmdText) {
+    if (!editor) return '';
+    try {
+      if (typeof editor.focus === 'function') editor.focus();
+    } catch (_) {}
+
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.ClipboardEvent === 'function' &&
+      typeof window.DataTransfer === 'function'
+    ) {
+      try {
+        const dt = new window.DataTransfer();
+        dt.setData('text/plain', cmdText);
+        editor.dispatchEvent(new window.ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }));
+        return 'paste_fallback';
+      } catch (_) {}
+    }
+
+    editor.textContent = cmdText;
+    collapseSelectionToEnd(editor);
+    editor.dispatchEvent(createDomEvent('input', { inputType: 'insertText', data: cmdText }, 'InputEvent'));
+    return 'dom_fallback';
+  }
+
   function insertCommandIntoEditor(editor, cmdText) {
-    if (!editor) return false;
+    if (!editor) return '';
     try {
       if (typeof editor.focus === 'function') editor.focus();
     } catch (_) {}
@@ -1465,62 +1568,36 @@
       }
       editor.dispatchEvent(createDomEvent('input', { inputType: 'insertText', data: cmdText }, 'InputEvent'));
       editor.dispatchEvent(createDomEvent('change', {}, 'Event'));
-      return true;
+      return 'value_setter';
     }
 
-    if (typeof window !== 'undefined' && typeof window.getSelection === 'function' && typeof document.createRange === 'function') {
+    if (typeof window !== 'undefined' && typeof window.getSelection === 'function' && typeof document !== 'undefined' && typeof document.createRange === 'function') {
       try {
         const sel = window.getSelection();
         if (sel) {
-          const range = document.createRange();
-          range.selectNodeContents(editor);
-          sel.removeAllRanges();
-          sel.addRange(range);
+          if (readEditorText(editor) !== '') {
+            const range = document.createRange();
+            range.selectNodeContents(editor);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          } else if (sel.rangeCount === 0 || (typeof editor.contains === 'function' && !editor.contains(sel.anchorNode))) {
+            collapseSelectionToEnd(editor);
+          }
         }
       } catch (_) {}
     }
 
-    let inserted = false;
     if (typeof document !== 'undefined' && typeof document.execCommand === 'function') {
       try {
-        inserted = Boolean(document.execCommand('insertText', false, cmdText));
-      } catch (_) {
-        inserted = false;
-      }
+        document.execCommand('insertText', false, cmdText);
+      } catch (_) {}
+      return 'execCommand';
     }
 
-    if (!inserted || readEditorText(editor) !== cmdText) {
-      editor.dispatchEvent(createDomEvent('beforeinput', { inputType: 'insertText', data: cmdText }, 'InputEvent'));
-      if (
-        readEditorText(editor) !== cmdText &&
-        typeof window !== 'undefined' &&
-        typeof window.ClipboardEvent === 'function' &&
-        typeof window.DataTransfer === 'function'
-      ) {
-        try {
-          const dt = new window.DataTransfer();
-          dt.setData('text/plain', cmdText);
-          editor.dispatchEvent(new window.ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }));
-        } catch (_) {}
-      }
-      if (readEditorText(editor) !== cmdText) {
-        editor.textContent = cmdText;
-        if (typeof window !== 'undefined' && typeof window.getSelection === 'function' && typeof document.createRange === 'function') {
-          try {
-            const sel = window.getSelection();
-            if (sel) {
-              const range = document.createRange();
-              range.selectNodeContents(editor);
-              range.collapse(false);
-              sel.removeAllRanges();
-              sel.addRange(range);
-            }
-          } catch (_) {}
-        }
-        editor.dispatchEvent(createDomEvent('input', { inputType: 'insertText', data: cmdText }, 'InputEvent'));
-      }
-    }
-    return true;
+    editor.textContent = cmdText;
+    collapseSelectionToEnd(editor);
+    editor.dispatchEvent(createDomEvent('input', { inputType: 'insertText', data: cmdText }, 'InputEvent'));
+    return 'dom_fallback';
   }
 
   function dispatchEnterKey(editor) {
@@ -1700,29 +1777,54 @@
 
     const reqEpoch = state.mountEpoch;
     const reqCidEpoch = state.cidEpoch;
-    if (existingText === COMPACT_COMMAND) {
-      try {
-        if (typeof editor.focus === 'function') editor.focus();
-      } catch (_) {}
-    } else {
-      insertCommandIntoEditor(editor, COMPACT_COMMAND);
-    }
+    const insertMethod = existingText === COMPACT_COMMAND
+      ? 'existing'
+      : insertCommandIntoEditor(editor, COMPACT_COMMAND);
 
     let submittedVia = '';
     let clickedSendBtn = null;
     const shouldDisarmManual = !isAuto && state.hasTelemetry && Math.round(state.serverCtxTokens || 0) >= AUTO_COMPACT_THRESHOLD;
 
     scheduleCompactStep(() => {
+      if (!state.compactInFlight) return;
       const curComp = state.composer || resolveComposerRoot() || comp;
       const curSig = curComp ? extractLivePageSignals(curComp) : { isWorking: false };
-      if (!readEditorText(editor) || state.isWorking || state.serverIsWorking || curSig.isWorking) {
+      if (state.isWorking || state.serverIsWorking || curSig.isWorking) {
         finishCompactDispatch({ failed: false, disarmOnSuccess: shouldDisarmManual });
         return;
       }
-      const optEl = findVisibleSlashCompactOption();
+      if (insertMethod === 'execCommand' && readEditorText(editor) === '') {
+        applySingleContentEditableFallback(editor, COMPACT_COMMAND);
+      }
+    }, 70, reqEpoch, reqCidEpoch);
+
+    scheduleCompactStep(() => {
+      if (!state.compactInFlight) return;
+      const curComp = state.composer || resolveComposerRoot() || comp;
+      const curSig = curComp ? extractLivePageSignals(curComp) : { isWorking: false };
+      if (state.isWorking || state.serverIsWorking || curSig.isWorking) {
+        finishCompactDispatch({ failed: false, disarmOnSuccess: shouldDisarmManual });
+        return;
+      }
+      const curText = readEditorText(editor);
+      if (!curText) {
+        finishCompactDispatch({ failed: false, disarmOnSuccess: shouldDisarmManual });
+        return;
+      }
+      if (!isExactCompactEditorState(editor)) {
+        finishCompactDispatch({ failed: true, disarmOnSuccess: false });
+        showUserMessageEcho('Phát hiện nội dung ô chat không khớp /compact — đã dừng gửi tự động để tránh gửi nhầm');
+        return;
+      }
+      const optEl = findVisibleSlashCompactOption(editor);
       if (optEl && typeof optEl.click === 'function') {
         submittedVia = 'slash_opt';
         optEl.click();
+        return;
+      }
+      if (isSlashMenuOpenForEditor(editor)) {
+        submittedVia = 'slash_enter';
+        dispatchEnterKey(editor);
         return;
       }
       const sendBtn = findComposerSendButton(curComp);
@@ -1734,7 +1836,7 @@
       }
       submittedVia = 'enter';
       dispatchEnterKey(editor);
-    }, 80, reqEpoch, reqCidEpoch);
+    }, 200, reqEpoch, reqCidEpoch);
 
     scheduleCompactStep(() => {
       if (!state.compactInFlight) return;
@@ -1744,8 +1846,13 @@
         finishCompactDispatch({ failed: false, disarmOnSuccess: shouldDisarmManual });
         return;
       }
-      if (submittedVia === 'slash_opt') {
-        if (hasVisibleSlashOrPopupMenu()) return;
+      if (!isExactCompactEditorState(editor)) {
+        finishCompactDispatch({ failed: true, disarmOnSuccess: false });
+        showUserMessageEcho('Phát hiện nội dung ô chat không khớp /compact — đã dừng gửi tự động để tránh gửi nhầm');
+        return;
+      }
+      if (submittedVia === 'slash_opt' || submittedVia === 'slash_enter') {
+        if (isSlashMenuOpenForEditor(editor)) return;
         const sendBtn = findComposerSendButton(curComp);
         if (sendBtn && typeof sendBtn.click === 'function') {
           clickedSendBtn = sendBtn;
@@ -1775,19 +1882,19 @@
           sendBtn.click();
         }
       }
-    }, 320, reqEpoch, reqCidEpoch);
+    }, 460, reqEpoch, reqCidEpoch);
 
     scheduleCompactStep(() => {
       if (!state.compactInFlight) return;
       const curComp = state.composer || resolveComposerRoot() || comp;
       const curSig = curComp ? extractLivePageSignals(curComp) : { isWorking: false };
       const workingAfter = Boolean(state.isWorking || state.serverIsWorking || curSig.isWorking);
-      const stillStuck = !workingAfter && readEditorText(editor) === COMPACT_COMMAND;
+      const stillStuck = !workingAfter && readEditorText(editor) !== '';
       finishCompactDispatch({ failed: stillStuck, disarmOnSuccess: !stillStuck && shouldDisarmManual });
       if (stillStuck) {
         showUserMessageEcho('Chưa thể tự gửi /compact — vui lòng nhấn Enter trong ô chat để nén phiên');
       }
-    }, 720, reqEpoch, reqCidEpoch);
+    }, 860, reqEpoch, reqCidEpoch);
 
     return { ok: true, source, threshold: AUTO_COMPACT_THRESHOLD };
   }
