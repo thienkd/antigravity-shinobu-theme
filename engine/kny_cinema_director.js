@@ -699,6 +699,15 @@
     const prevActive = state.shieldActive;
     state.shieldActive = typeof forceState === 'boolean' ? forceState : !state.shieldActive;
     syncShieldAttributes(!prevActive && state.shieldActive);
+    if (prevActive !== state.shieldActive) {
+      try {
+        if (ROOT.__AGY_THEME_CORE__ && typeof ROOT.__AGY_THEME_CORE__.syncPrivacyShield === 'function') {
+          ROOT.__AGY_THEME_CORE__.syncPrivacyShield(state.shieldActive);
+        } else if (typeof __AGY_SEC__ === 'object' && __AGY_SEC__ && typeof __AGY_SEC__.saveConfigSecure === 'function') {
+          __AGY_SEC__.saveConfigSecure({ privacyShieldActive: state.shieldActive });
+        }
+      } catch (_) {}
+    }
     return state.shieldActive;
   }
 

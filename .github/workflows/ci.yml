@@ -32,7 +32,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Build payload & run full 10-suite verification
+      - name: Build payload & run full 12-suite verification
         run: |
           npm run build
           npm test

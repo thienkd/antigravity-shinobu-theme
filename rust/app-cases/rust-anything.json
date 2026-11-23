@@ -1,0 +1,9 @@
+{
+  "schema": "rust-anything/app-cases@1",
+  "name": "build_payload",
+  "run": [
+    "node",
+    "scripts/build_payload.js"
+  ],
+  "timeout_secs": 30
+}

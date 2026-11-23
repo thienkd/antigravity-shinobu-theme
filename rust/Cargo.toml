@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/agy-core",
+    "crates/agy-theme",
+]
+
+[workspace.package]
+version = "3.0.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+serde_json = { version = "1.0", features = ["preserve_order"] }
+sha2 = "0.10"
+base64 = "0.22"
+hex = "0.4"
+getrandom = "0.2"
+regex = "1.11"
+tokio = { version = "1.43", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync", "fs", "process", "signal"] }
+tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "handshake"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

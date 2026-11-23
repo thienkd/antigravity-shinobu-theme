@@ -1,0 +1,4 @@
+bin.name = "build_payload"
+args = ["-h"]
+status.code = 0
+fs.sandbox = true

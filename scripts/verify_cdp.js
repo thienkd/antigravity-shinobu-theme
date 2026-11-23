@@ -22,6 +22,12 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const PID_FILE = path.join(ROOT_DIR, 'daemon.pid');
 const NODE_PROC_RE = /\bnode(?:js|\d+)?(?:\.exe)?\b/i;
 const DAEMON_SCRIPT_RE = /theme_daemon\.js/;
+const RUST_DAEMON_PROC_RE = /\bagy-theme(?:\.exe)?\b.*\bdaemon\b/i;
+
+function isAnyDaemonCommandLine(text) {
+    const s = String(text || '');
+    return (NODE_PROC_RE.test(s) && DAEMON_SCRIPT_RE.test(s)) || RUST_DAEMON_PROC_RE.test(s);
+}
 
 function isPidAlive(pid) {
     try {
@@ -55,6 +61,8 @@ function resolveLiveDaemonPid() {
     const home = getEffectiveHomedir();
     const pidFileCandidates = [
         PID_FILE,
+        path.join(home, '.gemini', 'config', 'plugins', 'antigravity-shinobu-theme', 'daemon.pid'),
+        path.join(home, '.gemini', 'config', 'plugins', 'antigravity-custom-theme', 'daemon.pid'),
         path.join(home, '.gemini', 'config', 'skills', 'antigravity-custom-theme', 'daemon.pid'),
         path.join(home, '.gemini', 'antigravity', 'skills', 'antigravity-custom-theme', 'daemon.pid'),
         path.join(home, '.agents', 'skills', 'antigravity-custom-theme', 'daemon.pid'),
@@ -83,7 +91,7 @@ function resolveLiveDaemonPid() {
                     '-NoProfile',
                     '-NonInteractive',
                     '-Command',
-                    `Get-CimInstance Win32_Process -Filter "Name LIKE 'node%'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match 'theme_daemon\\.js' } | Select-Object -ExpandProperty ProcessId`,
+                    `Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { ($_.Name -like 'node*' -and $_.CommandLine -match 'theme_daemon\\.js') -or ($_.Name -like 'agy-theme*' -and $_.CommandLine -match '\\bdaemon\\b') } | Select-Object -ExpandProperty ProcessId`,
                 ],
                 { encoding: 'utf8', windowsHide: true, timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
             ).trim();
@@ -149,7 +157,7 @@ function isVerifiedDaemonProcess(pid) {
                 { encoding: 'utf8', windowsHide: true, timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
             ).trim();
             if (!out) return false;
-            return NODE_PROC_RE.test(out) && DAEMON_SCRIPT_RE.test(out);
+            return isAnyDaemonCommandLine(out);
         } catch (_) {
             try {
                 const wmicOut = execFileSync(
@@ -158,7 +166,7 @@ function isVerifiedDaemonProcess(pid) {
                     { encoding: 'utf8', windowsHide: true, timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'] }
                 ).trim();
                 if (!wmicOut) return false;
-                return NODE_PROC_RE.test(wmicOut) && DAEMON_SCRIPT_RE.test(wmicOut);
+                return isAnyDaemonCommandLine(wmicOut);
             } catch (__) {
                 return false;
             }
@@ -169,7 +177,7 @@ function isVerifiedDaemonProcess(pid) {
         try {
             const rawCmd = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0+/g, ' ').trim();
             if (rawCmd) {
-                return NODE_PROC_RE.test(rawCmd) && DAEMON_SCRIPT_RE.test(rawCmd);
+                return isAnyDaemonCommandLine(rawCmd);
             }
         } catch (_) {}
     }
@@ -180,7 +188,7 @@ function isVerifiedDaemonProcess(pid) {
             timeout: 3000,
             stdio: ['ignore', 'pipe', 'ignore'],
         }).trim();
-        return NODE_PROC_RE.test(cmdline) && DAEMON_SCRIPT_RE.test(cmdline);
+        return isAnyDaemonCommandLine(cmdline);
     } catch (_) {
         return false;
     }

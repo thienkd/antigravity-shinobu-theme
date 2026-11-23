@@ -1,0 +1,4 @@
+bin.name = "build_payload"
+args = ["extra_positional"]
+status.code = 2
+fs.sandbox = true

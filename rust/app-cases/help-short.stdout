@@ -1,0 +1,8 @@
+Usage: node scripts/build_payload.js [options]
+
+Options:
+  --themes <path>   Path to themes.json (default: themes/themes.json)
+  --engine <path>   Path to engine/core.js (default: engine/core.js)
+  --out <path>      Output bundle path (default: dist/theme_payload.js)
+  --inline-all      Embed all assets (including 2K wallpapers) as data: URIs
+  -h, --help        Show this help message and exit

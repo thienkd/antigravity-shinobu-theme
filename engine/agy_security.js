@@ -421,7 +421,7 @@ const __AGY_SEC__ = (() => {
             }
 
             if (attrStr.trim()) {
-                if (/\s+on[a-z0-9_-]+\s*(?:=|\s|$)/i.test(' ' + attrStr)) return '';
+                if (/(?:^|\s)on[a-z0-9_-]+(?=\s|=|$)/i.test(attrStr)) return '';
 
                 const attrRe = /\s+([a-zA-Z0-9_:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
                 let lastEnd = 0;
@@ -666,6 +666,12 @@ const __AGY_SEC__ = (() => {
         if (typeof src.stickerRight === 'number' && Number.isFinite(src.stickerRight)) {
             out.stickerRight = Math.max(0, Math.min(64, Math.round(src.stickerRight)));
         }
+        if (typeof src.personaTraitId === 'string') {
+            const pt = src.personaTraitId.trim().toLowerCase();
+            if (/^[a-z0-9_]{1,36}$/.test(pt) && !isDangerousKey(pt)) {
+                out.personaTraitId = pt;
+            }
+        }
         if (src.npc && typeof src.npc === 'object' && !Array.isArray(src.npc)) {
             const n = src.npc;
             out.npc = {
@@ -729,6 +735,59 @@ const __AGY_SEC__ = (() => {
         if (typeof src.chibiEnabled === 'boolean') out.chibiEnabled = src.chibiEnabled;
         if (typeof src.autoFinisher === 'boolean') out.autoFinisher = src.autoFinisher;
         if (typeof src.ecoBattery === 'boolean') out.ecoBattery = src.ecoBattery;
+        if (typeof src.focusMode === 'boolean') out.focusMode = src.focusMode;
+        if (typeof src.privacyShieldActive === 'boolean') out.privacyShieldActive = src.privacyShieldActive;
+        if (typeof src.aiPersonaMode === 'string') {
+            const apm = src.aiPersonaMode.trim().toLowerCase();
+            if (apm === 'off' || apm === 'subtle' || apm === 'roleplay') out.aiPersonaMode = apm;
+        }
+        if (typeof src.uiLang === 'string') {
+            const ul = src.uiLang.trim().toLowerCase();
+            if (ul === 'vi' || ul === 'en' || ul === 'ja') out.uiLang = ul;
+        }
+        if (typeof src.activeWorkspace === 'string') {
+            const aws = src.activeWorkspace.replace(/[^a-zA-Z0-9._-]/g, '-').slice(0, 64).toLowerCase();
+            if (!isDangerousKey(aws)) out.activeWorkspace = aws;
+        }
+        if (src.workspaceProfiles && typeof src.workspaceProfiles === 'object' && !Array.isArray(src.workspaceProfiles)) {
+            const cleanProfiles = {};
+            const rawKeys = Object.keys(src.workspaceProfiles);
+            for (let i = 0; i < rawKeys.length; i++) {
+                if (Object.keys(cleanProfiles).length >= 48) break;
+                const wk = String(rawKeys[i] || '').replace(/[^a-zA-Z0-9._-]/g, '-').slice(0, 64).toLowerCase();
+                if (!wk || isDangerousKey(wk)) continue;
+                const item = src.workspaceProfiles[rawKeys[i]];
+                if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+                const entry = {};
+                if (typeof item.themeName === 'string') {
+                    const tn = item.themeName.replace(/[\x00-\x1f\x7f<>`{}]/g, '').trim().slice(0, 80);
+                    if (tn && !isDangerousKey(tn)) entry.themeName = tn;
+                }
+                if (typeof item.bubbleName === 'string') {
+                    const bn = item.bubbleName.replace(/[\x00-\x1f\x7f<>`{}]/g, '').trim().slice(0, 80);
+                    if (bn && !isDangerousKey(bn)) entry.bubbleName = bn;
+                }
+                if (typeof item.masterPersona === 'string') {
+                    const mp = item.masterPersona.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 36).toLowerCase();
+                    if (mp && !isDangerousKey(mp)) entry.masterPersona = mp;
+                }
+                if (typeof item.aiPersonaMode === 'string') {
+                    const m = item.aiPersonaMode.trim().toLowerCase();
+                    if (m === 'off' || m === 'subtle' || m === 'roleplay') entry.aiPersonaMode = m;
+                }
+                if (typeof item.dimming === 'number' && Number.isFinite(item.dimming)) {
+                    entry.dimming = Math.max(15, Math.min(92, Math.round(item.dimming)));
+                }
+                if (typeof item.fxDensity === 'number' && Number.isFinite(item.fxDensity)) {
+                    entry.fxDensity = Math.max(0, Math.min(100, Math.round(item.fxDensity)));
+                }
+                if (typeof item.chibiEnabled === 'boolean') entry.chibiEnabled = item.chibiEnabled;
+                if (typeof item.autoFinisher === 'boolean') entry.autoFinisher = item.autoFinisher;
+                if (typeof item.focusMode === 'boolean') entry.focusMode = item.focusMode;
+                if (Object.keys(entry).length > 0) cleanProfiles[wk] = entry;
+            }
+            out.workspaceProfiles = cleanProfiles;
+        }
 
         if (typeof src.customWp === 'string') {
             out.customWp = src.customWp.trim() === '' ? '' : sanitizeCssUrl(src.customWp);

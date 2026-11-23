@@ -144,7 +144,22 @@
   const STORAGE_UI_LANG = 'agy_ui_lang_v1';
   const STORAGE_WS_PROFILES = 'agy_workspace_profiles_v1';
   const STORAGE_ACTIVE_WS = 'agy_active_workspace_v1';
+  const STORAGE_AI_PERSONA_MODE = 'agy_ai_persona_mode_v1';
+  const STORAGE_FOCUS_MODE = 'agy_focus_mode_v1';
   const MAX_WORKSPACE_PROFILES = 24;
+
+  function getDefaultAiPersonaMode() {
+    const keys = Object.keys(THEMES);
+    const hasKny = keys.some((k) => /Trụ|Kamado|Ubuyashiki|Agatsuma|Hashibira/i.test(k));
+    return hasKny ? 'subtle' : 'off';
+  }
+
+  function normalizeAiPersonaMode(raw, fallback) {
+    const fb = fallback || getDefaultAiPersonaMode();
+    if (typeof raw !== 'string') return fb;
+    const v = raw.trim().toLowerCase();
+    return (v === 'off' || v === 'subtle' || v === 'roleplay') ? v : fb;
+  }
 
   function normalizeUiLang(raw) {
     if (typeof window !== 'undefined' && window.__AGY_I18N__ && typeof window.__AGY_I18N__.normalizeLang === 'function') {
@@ -198,9 +213,12 @@
         themeName: thName,
         bubbleName: bubName,
         masterPersona: typeof item.masterPersona === 'string' ? normalizeSafeMasterPersona(item.masterPersona) : 'yoriichi',
+        aiPersonaMode: normalizeAiPersonaMode(item.aiPersonaMode, getDefaultAiPersonaMode()),
         dimming: clampInt(item.dimming, 15, 92, THEMES[thName]?.defaultDimming ?? 69),
         fxDensity: clampInt(item.fxDensity, 0, 100, 100),
-        chibiEnabled: item.chibiEnabled !== false
+        chibiEnabled: item.chibiEnabled !== false,
+        autoFinisher: item.autoFinisher !== false,
+        focusMode: Boolean(item.focusMode)
       };
     }
     return out;
@@ -390,6 +408,12 @@
       if (typeof syncCfg.activeWorkspace === 'string') {
         localStorage.setItem(STORAGE_ACTIVE_WS, normalizeWorkspaceKey(syncCfg.activeWorkspace));
       }
+      if (typeof syncCfg.aiPersonaMode === 'string' && syncCfg.aiPersonaMode) {
+        localStorage.setItem(STORAGE_AI_PERSONA_MODE, normalizeAiPersonaMode(syncCfg.aiPersonaMode));
+      }
+      if (typeof syncCfg.focusMode === 'boolean') {
+        localStorage.setItem(STORAGE_FOCUS_MODE, String(syncCfg.focusMode));
+      }
       if (syncCfg.workspaceProfiles && typeof syncCfg.workspaceProfiles === 'object' && !Array.isArray(syncCfg.workspaceProfiles)) {
         localStorage.setItem(STORAGE_WS_PROFILES, JSON.stringify(sanitizeWorkspaceProfilesMap(syncCfg.workspaceProfiles)));
       }
@@ -503,6 +527,20 @@
     const storedActiveWs = localStorage.getItem(STORAGE_ACTIVE_WS);
     const activeWorkspace = normalizeWorkspaceKey((storedActiveWs !== null && storedActiveWs !== '') ? storedActiveWs : (init.activeWorkspace || ''));
 
+    const storedAiMode = localStorage.getItem(STORAGE_AI_PERSONA_MODE);
+    const aiPersonaMode = normalizeAiPersonaMode((storedAiMode !== null && storedAiMode !== '') ? storedAiMode : init.aiPersonaMode);
+
+    const storedFocusMode = localStorage.getItem(STORAGE_FOCUS_MODE);
+    const focusMode = storedFocusMode !== null
+      ? storedFocusMode === 'true'
+      : Boolean(init.focusMode);
+
+    const privacyShieldActive = Boolean(
+      typeof document !== 'undefined' &&
+      document.documentElement &&
+      document.documentElement.dataset.agyPrivacyShield === '1'
+    );
+
     let workspaceProfiles = {};
     try {
       const rawWsJson = localStorage.getItem(STORAGE_WS_PROFILES);
@@ -527,6 +565,9 @@
       avatarRadius,
       transparentWorld,
       masterPersona,
+      aiPersonaMode,
+      focusMode,
+      privacyShieldActive,
       chibiEnabled,
       fxDensity,
       autoFinisher,
@@ -763,6 +804,19 @@
     st.autoFinisher = st.autoFinisher !== false;
     st.ecoBattery = st.ecoBattery !== false;
     st.masterPersona = normalizeSafeMasterPersona(st.masterPersona);
+    st.aiPersonaMode = normalizeAiPersonaMode(st.aiPersonaMode);
+    if (overrides.focusMode !== undefined) {
+      st.focusMode = Boolean(overrides.focusMode);
+    } else if (
+      overrides.chibiEnabled === true ||
+      overrides.autoFinisher === true ||
+      overrides.aiPersonaMode === 'subtle' ||
+      overrides.aiPersonaMode === 'roleplay'
+    ) {
+      st.focusMode = false;
+    } else {
+      st.focusMode = Boolean(st.focusMode);
+    }
     st.uiLang = normalizeUiLang(st.uiLang);
     st.activeWorkspace = normalizeWorkspaceKey(st.activeWorkspace);
     st.workspaceProfiles = sanitizeWorkspaceProfilesMap(st.workspaceProfiles);
@@ -787,6 +841,8 @@
         localStorage.setItem(STORAGE_BUBBLE_RADIUS, String(st.bubbleRadius));
         localStorage.setItem(STORAGE_ECO_BATTERY, String(st.ecoBattery));
         localStorage.setItem(STORAGE_MASTER_PERSONA, st.masterPersona);
+        localStorage.setItem(STORAGE_AI_PERSONA_MODE, st.aiPersonaMode);
+        localStorage.setItem(STORAGE_FOCUS_MODE, String(Boolean(st.focusMode)));
         localStorage.setItem(STORAGE_UI_LANG, st.uiLang);
         if (typeof window !== 'undefined' && window.__AGY_I18N__ && typeof window.__AGY_I18N__.setLang === 'function') {
           window.__AGY_I18N__.setLang(st.uiLang);
@@ -1909,9 +1965,12 @@
         themeName: THEMES[src.themeName] ? src.themeName : cur.themeName,
         bubbleName: THEMES[src.bubbleName] ? src.bubbleName : cur.bubbleName,
         masterPersona: normalizeSafeMasterPersona(src.masterPersona),
+        aiPersonaMode: normalizeAiPersonaMode(src.aiPersonaMode, cur.aiPersonaMode),
         dimming: clampInt(src.dimming, 15, 92, cur.dimming),
         fxDensity: clampInt(src.fxDensity, 0, 100, cur.fxDensity),
-        chibiEnabled: src.chibiEnabled !== false
+        chibiEnabled: src.chibiEnabled !== false,
+        autoFinisher: src.autoFinisher !== false,
+        focusMode: Boolean(src.focusMode)
       };
       applyTheme({ activeWorkspace: wsKey, workspaceProfiles: sanitizeWorkspaceProfilesMap(nextMap) });
       return true;
@@ -1930,10 +1989,26 @@
         themeName: prof.themeName,
         bubbleName: prof.bubbleName,
         masterPersona: prof.masterPersona,
+        aiPersonaMode: prof.aiPersonaMode || cur.aiPersonaMode,
         dimming: prof.dimming,
         fxDensity: prof.fxDensity,
-        chibiEnabled: prof.chibiEnabled
+        chibiEnabled: prof.chibiEnabled,
+        autoFinisher: prof.autoFinisher !== false,
+        focusMode: Boolean(prof.focusMode)
       });
+      return true;
+    },
+    syncPrivacyShield: (active) => {
+      if (coreDestroyed) return false;
+      const cur = getState();
+      SEC.saveConfigSecure({ ...cur, privacyShieldActive: Boolean(active) });
+      try {
+        const backdrop = typeof document !== 'undefined' ? document.getElementById('agy-custom-theme-modal-backdrop') : null;
+        if (backdrop && backdrop.style.display !== 'none') {
+          const bodyEl = backdrop.querySelector('#agy-theme-modal-body');
+          if (bodyEl) renderThemePanels(bodyEl);
+        }
+      } catch (_) {}
       return true;
     },
     removeWorkspaceProfile: (rawKey) => {
@@ -2399,6 +2474,22 @@
       minimal: ['in_min_l', 'in_min_d']
     };
 
+    let savedFocusSelector = '';
+    try {
+      const ae = typeof document !== 'undefined' ? document.activeElement : null;
+      if (ae && container.contains(ae)) {
+        if (ae.id) {
+          savedFocusSelector = '#' + ae.id;
+        } else if (ae.getAttribute('data-ai-persona-mode')) {
+          savedFocusSelector = `.agy-ai-persona-mode-btn[data-ai-persona-mode="${ae.getAttribute('data-ai-persona-mode')}"]`;
+        } else if (ae.getAttribute('data-persona')) {
+          savedFocusSelector = `.agy-persona-pill[data-persona="${ae.getAttribute('data-persona')}"]`;
+        } else if (ae.getAttribute('data-tab')) {
+          savedFocusSelector = `[data-tab="${ae.getAttribute('data-tab')}"]`;
+        }
+      }
+    } catch (_) {}
+
     container.innerHTML = `
       <div id="agy-studio-tablist" role="tablist" aria-label="${esc(tr('tablistAria', 'Phân mục tùy biến giao diện'))}">
         ${STUDIO_TABS.map((tab) => {
@@ -2635,6 +2726,30 @@
               </label>
             </div>
           </div>
+
+          <div class="agy-studio-surface" style="border-color: ${escMainBorder}; background: ${escCardBg}; display: flex; flex-direction: column; gap: 12px;">
+            <div>
+              <div id="agy-ai-persona-group-lbl" style="font-size: 14.5px; font-weight: 600; color: #f8fafc; margin-bottom: 3px;">${esc(tr('aiTH', '🗣️ Khí Chất & Tính Cách Trợ Lý AI (Đồng bộ theo Chủ đề)'))}</div>
+              <div style="font-size: 12.5px; color: #94a3b8;">${esc(tr('aiTD', 'Tự động đổi giọng trả lời AI theo Trụ đang chọn (tự khóa về thuần kỹ thuật khi bật Tập trung sâu hoặc Khiên Che Mật Alt+Shift+P).'))}</div>
+            </div>
+            <div role="group" aria-labelledby="agy-ai-persona-group-lbl" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;">
+              ${[
+                { id: 'off', key: 'aiT0', vi: '🔇 Thuần kỹ thuật' },
+                { id: 'subtle', key: 'aiT1', vi: '✨ Tinh tế (Khuyên dùng)' },
+                { id: 'roleplay', key: 'aiT2', vi: '🎭 Nhập vai Trụ' }
+              ].map((opt) => {
+                const isSel = st.aiPersonaMode === opt.id;
+                return `<button type="button" class="agy-ai-persona-mode-btn" data-ai-persona-mode="${opt.id}" aria-pressed="${isSel ? 'true' : 'false'}" style="padding: 10px 12px; border-radius: 10px; cursor: pointer; font-size: 12.5px; font-weight: ${isSel ? '600' : '500'}; color: ${isSel ? '#f8fafc' : '#cbd5e1'}; background: ${isSel ? 'rgba(255,255,255,0.14)' : 'rgba(11,14,22,0.62)'}; border: ${isSel ? '1.5px solid ' + escMainPrimary : '1px solid rgba(255,255,255,0.09)'}; transition: border-color 0.15s ease, background-color 0.15s ease;">${esc(tr(opt.key, opt.vi))}</button>`;
+              }).join('')}
+            </div>
+            ${(st.focusMode || st.privacyShieldActive) && st.aiPersonaMode !== 'off'
+              ? `<div id="agy-ai-persona-mute-banner" style="font-size: 12px; color: #fde047; background: rgba(250, 204, 21, 0.10); border: 1px solid rgba(250, 204, 21, 0.28); border-radius: 8px; padding: 7px 11px;">${esc(
+                  st.privacyShieldActive
+                    ? tr('aiMS', '🛡️ Khiên Che Mật (Alt+Shift+P) đang bật — giọng nhập vai tạm thời thu gọn về Thuần kỹ thuật (nhấn Alt+Shift+P để khôi phục).')
+                    : tr('aiMF', '⚡ Chế độ Tập trung sâu đang bật — giọng nhập vai tạm thời thu gọn về Thuần kỹ thuật (chọn lại ✨ Tinh tế / 🎭 Nhập vai hoặc tắt Tập trung sâu để khôi phục).')
+                )}</div>`
+              : ''}
+          </div>
         </section>
 
         <!-- TAB 3: TIN NHẮN & KHUNG SOẠN THẢO -->
@@ -2807,8 +2922,8 @@
               <div style="font-size: 12.5px; color: #94a3b8;">${esc(tr('twD', 'Tự làm dịu hạt nền khi gõ liên tục, hoặc nhấn nút bên cạnh để kích hoạt nhanh cấu hình Tập Trung Sâu.'))}</div>
             </div>
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-              <button id="agy-focus-preset-btn" type="button" class="agy-studio-btn" style="background: rgba(56, 189, 248, 0.14); border-color: rgba(56, 189, 248, 0.40); color: #e0f2fe; font-weight: 600;">
-                ${esc(tr('focB', '⚡ Bật chế độ Tập trung sâu'))}
+              <button id="agy-focus-preset-btn" type="button" aria-pressed="${st.focusMode ? 'true' : 'false'}" class="agy-studio-btn" style="background: ${st.focusMode ? 'rgba(16, 185, 129, 0.22)' : 'rgba(56, 189, 248, 0.14)'}; border-color: ${st.focusMode ? 'rgba(16, 185, 129, 0.55)' : 'rgba(56, 189, 248, 0.40)'}; color: ${st.focusMode ? '#ecfdf5' : '#e0f2fe'}; font-weight: 600;">
+                ${esc(st.focusMode ? '✓ ' : '')}${esc(tr('focB', '⚡ Bật chế độ Tập trung sâu'))}
               </button>
               <label style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 13px; border-radius: 999px; background: rgba(250, 204, 21, 0.10); border: 1px solid rgba(250, 204, 21, 0.35); font-size: 12.5px; color: #fef08a; font-weight: 600; cursor: pointer;">
                 <input id="agy-tw-toggle" type="checkbox" ${st.transparentWorld ? 'checked' : ''} style="accent-color: #facc15; cursor: pointer;" />
@@ -3440,6 +3555,14 @@
       });
     }
 
+    container.querySelectorAll('.agy-ai-persona-mode-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const mode = normalizeAiPersonaMode(btn.getAttribute('data-ai-persona-mode'));
+        applyTheme({ aiPersonaMode: mode });
+        renderThemePanels(container);
+      });
+    });
+
     const bubbleRadSlider = container.querySelector('#agy-bubble-rad-slider');
     const bubbleRadVal = container.querySelector('#agy-bubble-rad-val');
     if (bubbleRadSlider) {
@@ -3473,12 +3596,24 @@
     const focusPresetBtn = container.querySelector('#agy-focus-preset-btn');
     if (focusPresetBtn) {
       focusPresetBtn.addEventListener('click', () => {
-        applyTheme({
-          chibiEnabled: false,
-          fxDensity: 20,
-          autoFinisher: false,
-          transparentWorld: true
-        });
+        const curFocus = Boolean(getState().focusMode);
+        if (curFocus) {
+          applyTheme({
+            chibiEnabled: true,
+            fxDensity: 100,
+            autoFinisher: true,
+            transparentWorld: true,
+            focusMode: false
+          });
+        } else {
+          applyTheme({
+            chibiEnabled: false,
+            fxDensity: 20,
+            autoFinisher: false,
+            transparentWorld: true,
+            focusMode: true
+          });
+        }
         renderThemePanels(container);
       });
     }
@@ -3596,6 +3731,18 @@
       if (typeof parsed.bubbleRadius === 'number' && Number.isFinite(parsed.bubbleRadius)) {
         allowed.bubbleRadius = clampInt(parsed.bubbleRadius, 6, 22, 14);
       }
+      if (typeof parsed.aiPersonaMode === 'string') {
+        allowed.aiPersonaMode = normalizeAiPersonaMode(parsed.aiPersonaMode);
+      }
+      if (typeof parsed.focusMode === 'boolean') {
+        allowed.focusMode = parsed.focusMode;
+      }
+      if (typeof parsed.uiLang === 'string') {
+        allowed.uiLang = normalizeUiLang(parsed.uiLang);
+      }
+      if (parsed.workspaceProfiles && typeof parsed.workspaceProfiles === 'object' && !Array.isArray(parsed.workspaceProfiles)) {
+        allowed.workspaceProfiles = sanitizeWorkspaceProfilesMap(parsed.workspaceProfiles);
+      }
       ['customWp', 'userAvatar', 'agentAvatar'].forEach((urlKey) => {
         if (typeof parsed[urlKey] === 'string') {
           const v = parsed[urlKey].trim();
@@ -3617,8 +3764,8 @@
         const json = JSON.stringify(getState(), null, 2);
         if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
           navigator.clipboard.writeText(json).then(() => {
-            exportBtn.textContent = 'Đã chép ✓';
-            setTimeout(() => { exportBtn.textContent = 'Xuất JSON'; }, 1500);
+            exportBtn.textContent = '✓';
+            setTimeout(() => { exportBtn.textContent = tr('expJ', 'Xuất JSON'); }, 1500);
           }).catch(() => {
             if (importBox && importText) {
               importBox.style.display = 'flex';
@@ -3703,6 +3850,8 @@
       localStorage.removeItem(STORAGE_BUBBLE_RADIUS);
       localStorage.removeItem(STORAGE_ECO_BATTERY);
       localStorage.removeItem(STORAGE_MASTER_PERSONA);
+      localStorage.removeItem(STORAGE_AI_PERSONA_MODE);
+      localStorage.removeItem(STORAGE_FOCUS_MODE);
       const defTh = THEMES[DEFAULT_THEME_KEY] || {};
       const defDim = defTh.defaultDimming ?? 24;
       const defBlurParsed = parseFloat(defTh.headerBlur);
@@ -3725,7 +3874,9 @@
         autoFinisher: true,
         bubbleRadius: 14,
         ecoBattery: true,
-        masterPersona: 'yoriichi'
+        masterPersona: 'yoriichi',
+        aiPersonaMode: getDefaultAiPersonaMode(),
+        focusMode: false
       });
       renderThemePanels(container);
     });
@@ -3766,7 +3917,7 @@
         const pickedPrimary = SEC.sanitizeCssValue(pickedTh.primary, '#c084fc');
         container.style.setProperty('--agy-st-accent', pickedPrimary);
         if (summaryEl) {
-          summaryEl.textContent = `Đang dùng: ${name}`;
+          summaryEl.textContent = tr('activeUsing', 'Đang dùng: {name}', { name });
         }
         if (wpToggle) wpToggle.checked = true;
         if (slider) slider.value = nextDim;
@@ -3846,6 +3997,14 @@
     }
     if (savedOuterScrollTop > 0) {
       container.scrollTop = savedOuterScrollTop;
+    }
+    if (savedFocusSelector) {
+      try {
+        const nextFocusEl = container.querySelector(savedFocusSelector);
+        if (nextFocusEl && typeof nextFocusEl.focus === 'function') {
+          nextFocusEl.focus({ preventScroll: true });
+        }
+      } catch (_) {}
     }
   }
 
@@ -5107,33 +5266,38 @@
     const rt = getShinobuRuntime();
     const prof = getActiveNpcProfile(bTheme);
 
-    const composer = document.querySelector('.surface-composer');
-    if (!composer) return;
+    const composers = Array.from(document.querySelectorAll('.surface-composer'));
+    if (composers.length === 0) return;
+    const composer = composers.find(
+      (c) => document.activeElement && (c === document.activeElement || (typeof c.contains === 'function' && c.contains(document.activeElement)))
+    ) || composers[0];
 
-    let mainHit = composer.querySelector(':scope > .agy-chibi-hitbox');
-    if (!mainHit) {
-      mainHit = document.createElement('button');
-      mainHit.type = 'button';
-      mainHit.className = 'agy-chibi-hitbox';
-      mainHit.innerHTML = '<i aria-hidden="true"></i>';
-      mainHit.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill === 'function') {
-          window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill({
-            originEl: e.currentTarget,
-            sourceFrameEl: composer,
-            fromChibiClick: true
-          });
-          return;
-        }
-        triggerChibiBounce(composer);
-        const curText = document.querySelector('#agy-shinobu-npc-wrap .agy-npc-dialog-text')?.textContent || '';
-        speakShinobuLine(pickRandomLine('welcome', curText), true);
-      });
-      composer.appendChild(mainHit);
-    }
-    mainHit.title = `⚡ Nhấn vào ${prof.badgeLabel || 'Chibi'} để nhảy ra thi triển Hơi Thở!`;
-    mainHit.setAttribute('aria-label', mainHit.title);
+    composers.forEach((compItem) => {
+      let mainHit = compItem.querySelector(':scope > .agy-chibi-hitbox');
+      if (!mainHit) {
+        mainHit = document.createElement('button');
+        mainHit.type = 'button';
+        mainHit.className = 'agy-chibi-hitbox';
+        mainHit.innerHTML = '<i aria-hidden="true"></i>';
+        mainHit.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill === 'function') {
+            window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill({
+              originEl: e.currentTarget,
+              sourceFrameEl: compItem,
+              fromChibiClick: true
+            });
+            return;
+          }
+          triggerChibiBounce(compItem);
+          const curText = document.querySelector('#agy-shinobu-npc-wrap .agy-npc-dialog-text')?.textContent || '';
+          speakShinobuLine(pickRandomLine('welcome', curText), true);
+        });
+        compItem.appendChild(mainHit);
+      }
+      mainHit.title = `⚡ Nhấn vào ${prof.badgeLabel || 'Chibi'} để nhảy ra thi triển Hơi Thở!`;
+      mainHit.setAttribute('aria-label', mainHit.title);
+    });
 
     if (!composer.dataset.agyNpcKeyBound) {
       composer.dataset.agyNpcKeyBound = '1';
@@ -5398,7 +5562,32 @@
     const personaRingColor = SEC.sanitizeCssValue(persona.ringColor, '#fde047');
     const personaGlowColor = SEC.sanitizeCssValue(persona.glowColor, 'rgba(239, 68, 68, 0.52)');
 
-    const composer = document.querySelector('.surface-composer') || document.querySelector('[data-testid="composer"]');
+    const resolveActiveComposer = () => {
+      const all = Array.from(document.querySelectorAll('.surface-composer, [data-testid="composer"]'));
+      if (all.length === 0) return null;
+      if (all.length === 1) return all[0];
+      const ae = document.activeElement;
+      if (ae) {
+        const focused = all.find((c) => c === ae || (typeof c.contains === 'function' && c.contains(ae)));
+        if (focused) return focused;
+      }
+      const locStr = `${window.location?.pathname || ''}${window.location?.hash || ''}${window.location?.search || ''}`;
+      const m = locStr.match(/\/c\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+      if (m) {
+        const urlCid = m[1].toLowerCase();
+        const byUrl = all.find((c) => {
+          const anc = typeof c.closest === 'function'
+            ? c.closest('[data-conversation-id], [data-cascade-id], [data-trajectory-id], [data-session-id]')
+            : null;
+          if (!anc) return false;
+          const v = String(anc.getAttribute('data-conversation-id') || anc.getAttribute('data-cascade-id') || '').trim().toLowerCase();
+          return v === urlCid;
+        });
+        if (byUrl) return byUrl;
+      }
+      return all[0];
+    };
+    const composer = resolveActiveComposer();
     if (composer && window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.mountTokenHud === 'function') {
       try {
         const hudThemeCfg = {
@@ -5492,8 +5681,71 @@
     });
   }
 
+  const RESERVED_NON_WS_SLUGS = new Set([
+    'antigravity', 'launchpad', 'new-conversation', 'settings',
+    'customizations', 'automations', 'theme-studio', 'welcome', 'open-ide'
+  ]);
+  let lastObservedDocTitle = '';
+
+  function extractWorkspaceFromDocTitle(rawTitle) {
+    if (typeof rawTitle !== 'string') return '';
+    const trimmed = rawTitle.trim();
+    if (!trimmed) return '';
+    const lower = trimmed.toLowerCase();
+    let base = '';
+    if (lower.endsWith(' - antigravity')) {
+      base = trimmed.slice(0, trimmed.length - ' - antigravity'.length);
+    } else if (lower.endsWith(' — antigravity')) {
+      base = trimmed.slice(0, trimmed.length - ' — antigravity'.length);
+    } else {
+      return '';
+    }
+    const sepIdx = base.lastIndexOf(' - ');
+    const candidate = (sepIdx !== -1 ? base.slice(sepIdx + 3) : base).trim();
+    if (!candidate) return '';
+    const key = normalizeWorkspaceKey(candidate);
+    if (!key || RESERVED_NON_WS_SLUGS.has(key)) return '';
+    return key;
+  }
+
+  function syncActiveWorkspaceFromDom() {
+    if (typeof document === 'undefined' || typeof document.title !== 'string') return;
+    if (document.title === lastObservedDocTitle) return;
+    lastObservedDocTitle = document.title;
+    const liveWs = extractWorkspaceFromDocTitle(document.title);
+    if (!liveWs) return;
+    const curState = getState();
+    if (curState.activeWorkspace === liveWs) return;
+    try {
+      localStorage.setItem(STORAGE_ACTIVE_WS, liveWs);
+    } catch (_) {}
+    const profMap = curState.workspaceProfiles;
+    if (profMap && typeof profMap === 'object' && Object.prototype.hasOwnProperty.call(profMap, liveWs)) {
+      const prof = profMap[liveWs];
+      if (prof && typeof prof === 'object') {
+        applyTheme({
+          activeWorkspace: liveWs,
+          themeName: prof.themeName,
+          bubbleName: prof.bubbleName || prof.themeName,
+          masterPersona: prof.masterPersona || 'yoriichi',
+          aiPersonaMode: prof.aiPersonaMode || curState.aiPersonaMode,
+          dimming: prof.dimming,
+          fxDensity: prof.fxDensity,
+          chibiEnabled: prof.chibiEnabled !== false,
+          autoFinisher: prof.autoFinisher !== false,
+          focusMode: Boolean(prof.focusMode)
+        });
+        return;
+      }
+    }
+    if (SEC && typeof SEC.saveConfigSecure === 'function') {
+      SEC.saveConfigSecure({ ...getState(), activeWorkspace: liveWs });
+    }
+  }
+
   function tick() {
     if (coreDestroyed) return;
+    syncActiveWorkspaceFromDom();
     injectMainSidebarButton();
     injectSettingsModalButton();
     hookSidebarScroll();
@@ -5580,6 +5832,17 @@
     window.__AGY_MODAL_OBSERVER__.disconnect();
   }
   applyTheme({}, { skipSaveDisk: true });
+  try {
+    const bootInit = SEC.getInitialConfig() || {};
+    const domHasShield = Boolean(
+      typeof document !== 'undefined' &&
+      document.documentElement &&
+      document.documentElement.dataset.agyPrivacyShield === '1'
+    );
+    if (bootInit.privacyShieldActive === true && !domHasShield) {
+      SEC.saveConfigSecure({ ...getState(), privacyShieldActive: false });
+    }
+  } catch (_) {}
   window.__AGY_MODAL_OBSERVER__ = new MutationObserver((mutations) => {
     for (let i = 0; i < mutations.length; i++) {
       if (!isInternalEngineMutation(mutations[i])) {

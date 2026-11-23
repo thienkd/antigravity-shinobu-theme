@@ -129,6 +129,7 @@
 
     // Telemetry sequence baselines
     telemetryPrimed: false,
+    lastTelemetryCid: '',
     lastTurnFinishedSeq: null,
     lastSlashSeq: null,
     lastWorkingState: false,
@@ -1318,26 +1319,50 @@
    * 4. TELEMETRY BRIDGE & POPOVER UI (100% createElement + textContent)
    * ========================================================================== */
 
+  function resetConversation(nextCid) {
+    if (state.destroyed) return;
+    const normCid = typeof nextCid === 'string' ? nextCid.trim() : '';
+    const wasWorking = state.lastWorkingState;
+    state.telemetryPrimed = false;
+    state.lastTelemetryCid = (normCid && normCid !== 'latest' && normCid !== 'idle') ? normCid : '';
+    state.lastTurnFinishedSeq = null;
+    state.lastSlashSeq = null;
+    state.lastWorkingState = false;
+    if (wasWorking) {
+      markOneShotActivity(3.5);
+    }
+  }
+
   function onTelemetry(snap) {
     if (state.destroyed || !snap || typeof snap !== 'object') return;
 
+    const snapCid = typeof snap.cid === 'string' ? snap.cid.trim() : '';
     const turnSeq = typeof snap.turnFinishedSeq === 'number' ? snap.turnFinishedSeq : null;
     const slashSeq = typeof snap.slashSeq === 'number' ? snap.slashSeq : null;
     const hasWorkingBool = typeof snap.isWorking === 'boolean';
 
-    if (!state.telemetryPrimed) {
+    // Re-baseline silently on conversation switch — zero false Koto chime or katana sheathe!
+    if (!state.telemetryPrimed || (snapCid && state.lastTelemetryCid && snapCid !== state.lastTelemetryCid)) {
       state.telemetryPrimed = true;
-      if (turnSeq !== null) state.lastTurnFinishedSeq = turnSeq;
-      if (slashSeq !== null) state.lastSlashSeq = slashSeq;
+      if (snapCid) state.lastTelemetryCid = snapCid;
+      state.lastTurnFinishedSeq = turnSeq;
+      state.lastSlashSeq = slashSeq;
       if (hasWorkingBool) {
+        const prevW = state.lastWorkingState;
         state.lastWorkingState = snap.isWorking;
         if (snap.isWorking && state.prefs.enabled && state.userInteracted) {
           clearTimeout(state.suspendTimer);
           state.suspendTimer = 0;
           ensureAudioContext();
+        } else if (prevW && !snap.isWorking) {
+          markOneShotActivity(3.5);
         }
       }
       return;
+    }
+
+    if (snapCid && !state.lastTelemetryCid) {
+      state.lastTelemetryCid = snapCid;
     }
 
     const prevWorking = state.lastWorkingState;
@@ -1940,6 +1965,7 @@
     openPopover,
     closePopover,
     onTelemetry,
+    resetConversation,
     playNichirinSheathe,
     playSheathe: playNichirinSheathe,
     playKaguraChime,

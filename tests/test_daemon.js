@@ -1393,6 +1393,174 @@ describe('F02 — Incremental Tailer O(Δbytes), OversizeScanner, SSE, Crisis/Sl
             }
             await ctx.cleanup();
         });
+
+        it('F02-T2-08: Cô lập tuyệt đối Subagent/Token giữa các phiên, bắt đa Subagent song song, thu hồi Zombie Swarm & lọc Subagent khỏi cid=latest', async () => {
+            const ctx = await startIsolatedDaemon();
+            const cidParentA = 'aaaa1111-1111-4111-8111-111111111111';
+            const cidParentB = 'bbbb2222-2222-4222-8222-222222222222';
+            const cidSubOfA1 = 'cccc3333-3333-4333-8333-333333333333';
+            const cidSubOfA2 = 'dddd4444-4444-4444-8444-444444444444';
+
+            // 1. Phiên A gọi 2 invoke_subagent SONG SONG trong cùng 1 bước GENERIC + swarm + work_state_write (args JSON-encoded)
+            const fParentA = ctx.writeTranscript(cidParentA, [
+                { step_index: 1, type: 'USER_INPUT', source: 'USER_EXPLICIT', status: 'DONE', content: 'Chạy nghiên cứu ở Phiên A' },
+                {
+                    step_index: 2,
+                    type: 'PLANNER_RESPONSE',
+                    status: 'DONE',
+                    input_tokens: 14000,
+                    cache_read_tokens: 120000,
+                    output_tokens: 950,
+                    tool_calls: [
+                        {
+                            name: 'invoke_subagent',
+                            args: {
+                                Role: '"Chuyên viên 1 Phiên A"',
+                                TypeName: '"research"',
+                            },
+                        },
+                        {
+                            name: 'invoke_subagent',
+                            args: {
+                                Role: '"Chuyên viên 2 Phiên A"',
+                                TypeName: '"browser"',
+                            },
+                        },
+                        {
+                            name: 'swarm',
+                            args: {
+                                action: '"add"',
+                                name: '"worker-alpha"',
+                                brief: '"Xử lý dữ liệu Phiên A"',
+                                n: '2',
+                            },
+                        },
+                        {
+                            name: 'call_mcp_tool',
+                            args: {
+                                ServerName: '"agy-mem_agy-mem"',
+                                ToolName: '"work_state_write"',
+                                Arguments: '{"list":"tien-do","fields":{"task":"Đầu việc riêng Phiên A","status":"doing"}}',
+                            },
+                        },
+                    ],
+                },
+                {
+                    step_index: 3,
+                    type: 'GENERIC',
+                    status: 'DONE',
+                    content:
+                        `Created At: 2026-11-23T18:00:00Z\nCreated the following subagent: {"conversationId": "${cidSubOfA1}"}\n` +
+                        `Created At: 2026-11-23T18:00:01Z\nCreated the following subagent: {"conversationId": "${cidSubOfA2}"}`,
+                },
+            ]);
+            const baseTime = Date.now() - 10000;
+            fs.utimesSync(fParentA, new Date(baseTime), new Date(baseTime));
+
+            // 2. Phiên B độc lập hoàn toàn (ít token, không có subagent)
+            const fParentB = ctx.writeTranscript(cidParentB, [
+                { step_index: 1, type: 'USER_INPUT', source: 'USER_EXPLICIT', status: 'DONE', content: 'Câu hỏi ngắn ở Phiên B' },
+                {
+                    step_index: 2,
+                    type: 'PLANNER_RESPONSE',
+                    status: 'DONE',
+                    input_tokens: 800,
+                    cache_read_tokens: 1200,
+                    output_tokens: 120,
+                    content: 'Trả lời ngắn gọn.',
+                },
+            ]);
+            fs.utimesSync(fParentB, new Date(baseTime - 20000), new Date(baseTime - 20000));
+
+            // 3. Transcript riêng của Subagent cidSubOfA1 có mtime MỚI NHẤT toàn thư mục brain/
+            const fSubA = ctx.writeTranscript(cidSubOfA1, [
+                { step_index: 0, type: 'SYSTEM_MESSAGE', source: 'SYSTEM', status: 'DONE', content: 'Subagent system prompt' },
+                {
+                    step_index: 1,
+                    type: 'PLANNER_RESPONSE',
+                    status: 'DONE',
+                    input_tokens: 50000,
+                    output_tokens: 3000,
+                    tool_calls: [{ name: 'read_file', args: { toolSummary: '"Đọc mã nguồn"' } }],
+                },
+            ]);
+            const newestSubTime = Date.now();
+            fs.utimesSync(fSubA, new Date(newestSubTime), new Date(newestSubTime));
+
+            // Kiểm chứng 1: cid=latest PHẢI bỏ qua transcript của Subagent cidSubOfA1 và chọn đúng hội thoại chính cidParentA!
+            const snapLatest = (
+                await rawHttpRequest({
+                    port: ctx.assetPort,
+                    path: '/__telemetry?cid=latest',
+                    headers: { 'X-Agy-Token': ctx.token },
+                })
+            ).json();
+            assert.equal(snapLatest.ok, true);
+            assert.equal(
+                snapLatest.cid,
+                cidParentA,
+                'cid=latest không được chọn nhầm transcript.jsonl của Subagent đang chạy'
+            );
+
+            // Kiểm chứng 2: Phiên A bắt đủ cả 4 đơn vị activeSubagents (2 subagent song song + 2 swarm workers) với đúng Role FIFO!
+            assert.equal(snapLatest.contextTokens, 134000);
+            assert.equal(snapLatest.activeSubagents.length, 4, 'Phải bắt đủ cả 2 invoke_subagent song song trong 1 step GENERIC + 2 swarm workers');
+            assert.equal(snapLatest.activeSubagents.find((s) => s.cid === cidSubOfA1)?.role, 'Chuyên viên 1 Phiên A');
+            assert.equal(snapLatest.activeSubagents.find((s) => s.cid === cidSubOfA2)?.role, 'Chuyên viên 2 Phiên A');
+            assert.equal(snapLatest.workStateItems.length, 1);
+            assert.equal(snapLatest.workStateItems[0].task, 'Đầu việc riêng Phiên A');
+
+            // Kiểm chứng 3: Truy vấn Phiên B đồng thời -> KHÔNG HỀ bị dính token, subagent hay workStateItems của Phiên A!
+            const snapB = (
+                await rawHttpRequest({
+                    port: ctx.assetPort,
+                    path: `/__telemetry?cid=${cidParentB}`,
+                    headers: { 'X-Agy-Token': ctx.token },
+                })
+            ).json();
+            assert.equal(snapB.ok, true);
+            assert.equal(snapB.cid, cidParentB);
+            assert.equal(snapB.contextTokens, 2000, 'Token ngữ cảnh của Phiên B phải độc lập tuyệt đối với Phiên A');
+            assert.equal(snapB.outputTokens, 120);
+            assert.deepEqual(snapB.activeSubagents, [], 'Subagent của Phiên A tuyệt đối không được hiện trong Phiên B');
+            assert.deepEqual(snapB.recentCompletedSubagents, []);
+            assert.deepEqual(snapB.workStateItems, []);
+
+            // Kiểm chứng 4: Phiên A kill_all direct subagents & kết thúc lượt mà KHÔNG gọi swarm kill -> Zombie Swarm Workers cũng tự động thu hồi!
+            ctx.appendTranscript(cidParentA, [
+                {
+                    step_index: 4,
+                    type: 'PLANNER_RESPONSE',
+                    status: 'DONE',
+                    tool_calls: [
+                        {
+                            name: 'manage_subagents',
+                            args: {
+                                Action: '"kill_all"',
+                            },
+                        },
+                    ],
+                },
+                {
+                    step_index: 5,
+                    type: 'PLANNER_RESPONSE',
+                    status: 'DONE',
+                    tool_calls: [],
+                    content: 'Hoàn tất toàn bộ lượt làm việc.',
+                },
+            ]);
+            const snapAAfterIdleDone = (
+                await rawHttpRequest({
+                    port: ctx.assetPort,
+                    path: `/__telemetry?cid=${cidParentA}`,
+                    headers: { 'X-Agy-Token': ctx.token },
+                })
+            ).json();
+            assert.deepEqual(snapAAfterIdleDone.activeSubagents, [], 'Sau manage_subagents kill_all và kết thúc lượt, cả direct subagents lẫn swarm workers đều phải thu hồi sạch');
+            assert.equal(snapAAfterIdleDone.recentCompletedSubagents.length, 4);
+
+            await ctx.cleanup();
+        });
     });
 });
 

@@ -19,6 +19,8 @@ const SUITES = [
     'test_3d_breathing_vfx.js',
     'test_scripts_cli.js',
     'test_phase3b_ecosystem.js',
+    'test_persona_engine.js',
+    'test_mcp_studio_3tier.js',
     'test_live_e2e_cdp.js',
 ];
 

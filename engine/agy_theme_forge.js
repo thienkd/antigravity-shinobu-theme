@@ -1707,6 +1707,13 @@
     const settings = (clean.settings && typeof clean.settings === 'object') ? clean.settings : {};
     const rawPersona = typeof clean.masterPersona === 'string' ? clean.masterPersona.trim() : '';
     const safePersona = (rawPersona && !isDangerousSettingKey(rawPersona) && hasOwn(PERSONA_MAP, rawPersona)) ? rawPersona : undefined;
+    const rawTrait = typeof rawTheme.personaTraitId === 'string' ? rawTheme.personaTraitId.trim().toLowerCase() : '';
+    const allowedElementalTraits = new Set(['elem_grace', 'elem_calm', 'elem_valor', 'elem_swift', 'astral_prime', 'neutral']);
+    if (rawTrait && !isDangerousSettingKey(rawTrait) && (hasOwn(PERSONA_MAP, rawTrait) || allowedElementalTraits.has(rawTrait))) {
+      registered.theme.personaTraitId = rawTrait;
+    } else {
+      delete registered.theme.personaTraitId;
+    }
     const rawInputStyle = typeof settings.inputStyle === 'string' ? settings.inputStyle.trim() : '';
     const safeInputStyle = (rawInputStyle && !isDangerousSettingKey(rawInputStyle)) ? rawInputStyle : undefined;
     return {

@@ -42,6 +42,24 @@ const PAYLOAD_PATH = path.join(DIST_DIR, 'theme_payload.js');
 const BUILD_SCRIPT_JS = path.join(ROOT_DIR, 'scripts', 'build_payload.js');
 const LOG_FILE = path.join(ROOT_DIR, 'daemon.log');
 const DEFAULT_CONFIG = {};
+const FALLBACK_DANGEROUS_KEYS = new Set([
+    '__proto__', 'constructor', 'prototype', 'toString', 'valueOf',
+    'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable', 'toLocaleString',
+    '__defineGetter__', '__defineSetter__', '__lookupGetter__', '__lookupSetter__',
+]);
+let DANGEROUS_KEYS = FALLBACK_DANGEROUS_KEYS;
+let syncPersonaRuntimeHint = null;
+let writeFileAtomicSync = null;
+let sanitizeWorkspaceProfilesStrict = null;
+try {
+    const personaSyncMod = require('../scripts/persona_hint_sync');
+    syncPersonaRuntimeHint = personaSyncMod.syncPersonaRuntimeHint;
+    writeFileAtomicSync = personaSyncMod.writeFileAtomicSync;
+    sanitizeWorkspaceProfilesStrict = personaSyncMod.sanitizeWorkspaceProfilesStrict;
+    if (personaSyncMod.DANGEROUS_KEYS instanceof Set) {
+        DANGEROUS_KEYS = personaSyncMod.DANGEROUS_KEYS;
+    }
+} catch (_) {}
 
 const MAX_BINDING_PAYLOAD_BYTES = 4 * 1024 * 1024;
 const MAX_ACTIVE_FORGED_THEME_BYTES = Math.floor(1.8 * 1024 * 1024);
@@ -253,7 +271,9 @@ const conversationTrackers = new Map();
 const childSubagentTrackers = new Map();
 let latestCidCache = { cid: null, expiresAt: 0 };
 
-const GIT_PUSH_CMD_RE = /\bgit(?:\s+(?:-C|-c|--git-dir|--work-tree)(?:=|\s+)(?:"[^"]*"|'[^']*'|\S+)|\s+--[a-z-]+)*\s+push\b|\bgh\s+repo\s+create\b[\s\S]*?--push\b/i;
+const GIT_PUSH_CMD_RE = /\bgit(?:\s+(?:-C|-c|--git-dir|--work-tree)(?:=|\s+)(?:"[^"]*"|'[^']*'|\S+)|\s+--[a-z-]+)*\s+push\b/i;
+const GH_REPO_CREATE_RE = /\bgh\s+repo\s+create\b/i;
+const PUSH_FLAG_RE = /(?:^|\s)--push(?=\s|$)/i;
 const DRY_RUN_FLAG_RE = /(?:^|\s)(?:--dry-run|-n)(?=\s|$)/i;
 const READ_FILE_OUTPUT_PREFIX_RE = /^\s*Created At:[^\r\n]*\r?\n(?:Completed At:[^\r\n]*\r?\n)?Showing lines\s+\d+/i;
 
@@ -331,11 +351,13 @@ function splitShellSubCommands(raw) {
 
 function isGitPushCommandLine(rawCmdLine) {
     if (typeof rawCmdLine !== 'string' || !rawCmdLine.trim()) return false;
-    const subCmds = splitShellSubCommands(rawCmdLine);
+    const bounded = rawCmdLine.length > 8192 ? rawCmdLine.slice(0, 8192) : rawCmdLine;
+    const subCmds = splitShellSubCommands(bounded);
     for (let i = 0; i < subCmds.length; i++) {
         const sub = subCmds[i];
         if (DRY_RUN_FLAG_RE.test(sub)) continue;
         if (GIT_PUSH_CMD_RE.test(sub)) return true;
+        if (GH_REPO_CREATE_RE.test(sub) && PUSH_FLAG_RE.test(sub)) return true;
     }
     return false;
 }
@@ -372,6 +394,58 @@ function isDynamicCidAlias(cid) {
     return cid === 'latest' || cid === 'active';
 }
 
+function isKnownOrDetectedSubagentTranscript(realBrain, candidateCid, transcriptPath) {
+    if (childSubagentTrackers.has(candidateCid)) return true;
+    for (const pTrk of conversationTrackers.values()) {
+        if (pTrk.subagentsMap.has(candidateCid) || pTrk.knownSubagents.has(candidateCid)) {
+            return true;
+        }
+    }
+    let fd = -1;
+    try {
+        fd = fs.openSync(transcriptPath, 'r');
+        const buf = Buffer.allocUnsafe(8192);
+        const bytesRead = fs.readSync(fd, buf, 0, buf.length, 0);
+        if (bytesRead <= 0) return false;
+        const headText = stripBom(buf.subarray(0, bytesRead).toString('utf8')).trimStart();
+        if (!headText) return false;
+        const nlIdx = headText.indexOf('\n');
+        const firstChunk = nlIdx >= 0 ? headText.slice(0, nlIdx).trim() : headText;
+        if (nlIdx >= 0 && firstChunk.startsWith('{')) {
+            try {
+                const firstStep = JSON.parse(firstChunk);
+                if (firstStep && typeof firstStep === 'object') {
+                    const t = String(firstStep.type || '');
+                    const src = String(firstStep.source || '');
+                    if (t === 'USER_INPUT' || t === 'CHECKPOINT') return false;
+                    if (t === 'SYSTEM_MESSAGE' && (src === 'SYSTEM' || src === 'SYSTEM_SDK')) {
+                        return true;
+                    }
+                    if (src === 'SYSTEM_SDK') return true;
+                }
+            } catch (_) {}
+        } else {
+            if (/"type"\s*:\s*"(?:USER_INPUT|CHECKPOINT)"/.test(firstChunk)) return false;
+            if (/"source"\s*:\s*"SYSTEM_SDK"/.test(firstChunk)) return true;
+            if (
+                /"type"\s*:\s*"SYSTEM_MESSAGE"/.test(firstChunk) &&
+                /"source"\s*:\s*"SYSTEM"/.test(firstChunk)
+            ) {
+                return true;
+            }
+        }
+    } catch (_) {
+        return false;
+    } finally {
+        if (fd !== -1) {
+            try {
+                fs.closeSync(fd);
+            } catch (_) {}
+        }
+    }
+    return false;
+}
+
 function resolveLatestConversationId() {
     const now = Date.now();
     if (now < latestCidCache.expiresAt) {
@@ -379,10 +453,10 @@ function resolveLatestConversationId() {
     }
 
     let bestCid = null;
-    let bestMtimeMs = -1;
     try {
         const realBrain = fs.realpathSync(resolveBrainDir());
         const entries = fs.readdirSync(realBrain, { withFileTypes: true });
+        const candidates = [];
         for (let i = 0; i < entries.length; i++) {
             const entry = entries[i];
             if (!entry || !entry.isDirectory()) continue;
@@ -391,11 +465,19 @@ function resolveLatestConversationId() {
             const transcriptPath = path.join(realBrain, entry.name, '.system_generated', 'logs', 'transcript.jsonl');
             try {
                 const st = fs.statSync(transcriptPath);
-                if (st.isFile() && st.mtimeMs > bestMtimeMs) {
-                    bestMtimeMs = st.mtimeMs;
-                    bestCid = candidateCid;
+                if (st.isFile()) {
+                    candidates.push({ cid: candidateCid, transcriptPath, mtimeMs: st.mtimeMs });
                 }
             } catch (_) {}
+        }
+        candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+        for (let i = 0; i < candidates.length; i++) {
+            const c = candidates[i];
+            if (isKnownOrDetectedSubagentTranscript(realBrain, c.cid, c.transcriptPath)) {
+                continue;
+            }
+            bestCid = c.cid;
+            break;
         }
     } catch (_) {}
 
@@ -435,20 +517,53 @@ function sanitizeDisplayLabel(raw, maxLen = 90) {
     return s.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxLen);
 }
 
+function decodeJsonEncodedArgValue(val) {
+    if (typeof val !== 'string') return val;
+    const s = val.trim();
+    if (!s) return val;
+    const c0 = s[0];
+    if (
+        (c0 === '"' && s.length >= 2 && s.endsWith('"')) ||
+        (c0 === '{' && s.endsWith('}')) ||
+        (c0 === '[' && s.endsWith(']')) ||
+        s === 'true' ||
+        s === 'false' ||
+        /^-?\d+(?:\.\d+)?$/.test(s)
+    ) {
+        try {
+            return JSON.parse(s);
+        } catch (_) {
+            return val;
+        }
+    }
+    return val;
+}
+
 function parseToolArgs(tc) {
     if (!tc || typeof tc !== 'object') return {};
     const raw = tc.args !== undefined ? tc.args : tc.arguments;
     if (!raw) return {};
-    if (typeof raw === 'object') return raw;
-    if (typeof raw === 'string') {
+    let base = null;
+    if (typeof raw === 'object' && !Array.isArray(raw)) {
+        base = raw;
+    } else if (typeof raw === 'string') {
         try {
             const parsed = JSON.parse(raw);
-            return parsed && typeof parsed === 'object' ? parsed : {};
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                base = parsed;
+            }
         } catch (_) {
             return {};
         }
     }
-    return {};
+    if (!base) return {};
+    const out = Object.create(null);
+    const keys = Object.keys(base);
+    for (let i = 0; i < keys.length; i++) {
+        const k = keys[i];
+        out[k] = decodeJsonEncodedArgValue(base[k]);
+    }
+    return out;
 }
 
 function touchLruMap(map, key, value, maxEntries) {
@@ -718,7 +833,7 @@ function createOversizeScanner(childMode = false) {
         workflowCalls: [],
         workStateCalls: [],
         sendMessageRecipients: [],
-        createdChildCid: '',
+        createdChildCids: [],
         senderCids: [],
         lastTool: '',
     };
@@ -776,7 +891,7 @@ function feedContentDecodedChar(scan, outCh) {
     scan.contentTail += outCh;
     scan.senderFlushCounter++;
 
-    if (!scan.createdChildCid) {
+    if (scan.createdChildCids.length < 16) {
         if (scan.awaitingChildCidRemain > 0) {
             scan.awaitingChildCidRemain--;
             if (outCh === '"' || outCh === '}' || scan.awaitingChildCidRemain === 0) {
@@ -784,7 +899,11 @@ function feedContentDecodedChar(scan, outCh) {
                     /"conversationId"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/i
                 );
                 if (cidMatch) {
-                    scan.createdChildCid = cidMatch[1].toLowerCase();
+                    const foundCid = cidMatch[1].toLowerCase();
+                    if (!scan.createdChildCids.includes(foundCid)) {
+                        scan.createdChildCids.push(foundCid);
+                    }
+                    scan.contentTail = '';
                     scan.awaitingChildCidRemain = 0;
                 }
             }
@@ -844,7 +963,7 @@ function finalizeCurrentToolCall(scan) {
             });
         }
     } else if (
-        (tc.name === 'call_mcp_tool' && String(tc.toolName || '').toLowerCase() === 'work_state_write') ||
+        (tc.name === 'call_mcp_tool' && sanitizeDisplayLabel(tc.toolName || '', 64).toLowerCase() === 'work_state_write') ||
         String(tc.name || '').toLowerCase().endsWith('work_state_write')
     ) {
         if (tc.task && scan.workStateCalls.length < 12) {
@@ -954,11 +1073,16 @@ function feedOversizeChunk(scan, textChunk, isFinalChunk = false) {
                         scan.isReadFileHeader = true;
                     }
                     flushContentLine(scan);
-                    if (!scan.createdChildCid && scan.awaitingChildCidRemain > 0) {
+                    if (scan.createdChildCids.length < 16 && scan.awaitingChildCidRemain > 0) {
                         const cidMatch = scan.contentTail.match(
                             /"conversationId"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/i
                         );
-                        if (cidMatch) scan.createdChildCid = cidMatch[1].toLowerCase();
+                        if (cidMatch) {
+                            const foundCid = cidMatch[1].toLowerCase();
+                            if (!scan.createdChildCids.includes(foundCid)) {
+                                scan.createdChildCids.push(foundCid);
+                            }
+                        }
                         scan.awaitingChildCidRemain = 0;
                     }
                     flushContentSenders(scan, true);
@@ -1273,6 +1397,25 @@ function applyStepSignals(tracker, step, isLiveDelta) {
                 cTrk.revivedAtMs = reviveMs;
                 cTrk.lastStepStatus = 'WORKING';
             }
+        } else if (tc.name === 'manage_subagents') {
+            const act = sanitizeDisplayLabel(String(args.Action || args.action || ''), 32).toLowerCase();
+            if (act === 'kill_all') {
+                for (const key of Array.from(tracker.subagentsMap.keys())) {
+                    if (UUID_RE.test(key)) {
+                        recordCompletedSubagent(tracker, key, stepTsMs, isLiveDelta);
+                    }
+                }
+            } else if (act === 'kill') {
+                const rawIds = args.ConversationIds || args.conversationIds;
+                if (Array.isArray(rawIds)) {
+                    for (let k = 0; k < rawIds.length; k++) {
+                        const targetCid = sanitizeDisplayLabel(String(rawIds[k] || ''), 64).toLowerCase();
+                        if (UUID_RE.test(targetCid)) {
+                            recordCompletedSubagent(tracker, targetCid, stepTsMs, isLiveDelta);
+                        }
+                    }
+                }
+            }
         } else if (tc.name === 'run_command') {
             const rawCmdLine = String(args.CommandLine || args.commandLine || '');
             const isGitPush = isGitPushCommandLine(rawCmdLine);
@@ -1286,7 +1429,7 @@ function applyStepSignals(tracker, step, isLiveDelta) {
                 0
             );
         } else if (tc.name === 'swarm') {
-            const action = String(args.action || '').trim().toLowerCase();
+            const action = sanitizeDisplayLabel(String(args.action || ''), 32).toLowerCase();
             const rawName = sanitizeDisplayLabel(String(args.name || 'worker'), 32)
                 .toLowerCase()
                 .replace(/[^a-z0-9_-]/g, '') || 'worker';
@@ -1374,27 +1517,36 @@ function applyStepSignals(tracker, step, isLiveDelta) {
     const contentStr = typeof step.content === 'string' ? step.content : '';
 
     if (contentStr.includes('Created the following subagent:')) {
-        const m = contentStr.match(/Created the following subagent:[\s\S]*?"conversationId"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/i);
-        if (m) {
-            const childCid = m[1].toLowerCase();
-            const meta = tracker.pendingSubagentQueue.shift() || {
-                role: 'Subagent',
-                typeName: 'self',
-                startedAt: stepTsMs || Date.now(),
-            };
-            tracker.recentCompletedSubagents = tracker.recentCompletedSubagents.filter((x) => x.cid !== childCid);
-            const subEntry = {
-                cid: childCid,
-                role: meta.role,
-                typeName: meta.typeName,
-                status: 'working',
-                stepCount: 0,
-                lastTool: meta.role,
-                startedAt: meta.startedAt || Date.now(),
-                completedAt: 0,
-            };
-            tracker.subagentsMap.set(childCid, subEntry);
-            touchLruMap(tracker.knownSubagents, childCid, { ...subEntry }, MAX_KNOWN_SUBAGENTS);
+        let searchFrom = 0;
+        while (searchFrom < contentStr.length) {
+            const subIdx = contentStr.indexOf('Created the following subagent:', searchFrom);
+            if (subIdx === -1) break;
+            const snippet = contentStr.slice(subIdx, subIdx + 1024);
+            const m = snippet.match(/Created the following subagent:[\s\S]{0,600}?"conversationId"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/i);
+            if (m) {
+                const childCid = m[1].toLowerCase();
+                const meta = tracker.pendingSubagentQueue.shift() || {
+                    role: 'Subagent',
+                    typeName: 'self',
+                    startedAt: stepTsMs || Date.now(),
+                };
+                tracker.recentCompletedSubagents = tracker.recentCompletedSubagents.filter((x) => x.cid !== childCid);
+                const subEntry = {
+                    cid: childCid,
+                    role: meta.role,
+                    typeName: meta.typeName,
+                    status: 'working',
+                    stepCount: 0,
+                    lastTool: meta.role,
+                    startedAt: meta.startedAt || Date.now(),
+                    completedAt: 0,
+                };
+                tracker.subagentsMap.set(childCid, subEntry);
+                touchLruMap(tracker.knownSubagents, childCid, { ...subEntry }, MAX_KNOWN_SUBAGENTS);
+                searchFrom = subIdx + m[0].length;
+            } else {
+                searchFrom = subIdx + 31;
+            }
         }
     }
 
@@ -1490,7 +1642,7 @@ function applyStepSignals(tracker, step, isLiveDelta) {
     if (tracker.isWorking && !nextIsWorking) {
         tracker.turnFinishedSeq++;
         for (const key of Array.from(tracker.subagentsMap.keys())) {
-            if (key.startsWith('workflow:')) {
+            if (key.startsWith('workflow:') || (isPlannerIdleDone && key.startsWith('swarm:'))) {
                 recordCompletedSubagent(tracker, key, stepTsMs, isLiveDelta);
             }
         }
@@ -1553,8 +1705,8 @@ function applyOversizeScanSignals(tracker, scan, isLiveDelta) {
     };
 
     const contentParts = [];
-    if (scan.createdChildCid) {
-        contentParts.push(`Created the following subagent: {"conversationId": "${scan.createdChildCid}"}`);
+    for (const ccid of scan.createdChildCids) {
+        contentParts.push(`Created the following subagent: {"conversationId": "${ccid}"}`);
     }
     for (const scid of scan.senderCids) {
         contentParts.push(`sender=${scid}`);
@@ -2572,6 +2724,23 @@ function acquirePidLock() {
             process.exit(0);
         }
     }
+    if (!process.env.AGY_CONFIG_PATH && !process.env.AGY_PID_FILE) {
+        const globalPidFile = path.join(os.homedir(), '.gemini', 'antigravity', 'theme_daemon.pid');
+        try {
+            if (fs.existsSync(globalPidFile)) {
+                const rawGlobal = stripBom(fs.readFileSync(globalPidFile, 'utf8')).trim();
+                const gPid = rawGlobal.startsWith('{') ? JSON.parse(rawGlobal).pid : parseInt(rawGlobal, 10);
+                if (gPid && gPid !== process.pid && isVerifiedDaemonProcess(gPid)) {
+                    log(`Global daemon lock held by PID ${gPid}. Exiting duplicate instance.`);
+                    process.exit(0);
+                }
+            }
+            const gPayload = JSON.stringify({ pid: process.pid, rootDir: ROOT_DIR, startedAt: Date.now() });
+            if (typeof writeFileAtomicSync === 'function') {
+                writeFileAtomicSync(globalPidFile, gPayload, 0o600);
+            }
+        } catch (_) {}
+    }
     fs.writeFileSync(PID_FILE, String(process.pid), { encoding: 'utf8', mode: 0o600 });
     ensurePrivateFileMode(PID_FILE);
 }
@@ -2585,6 +2754,15 @@ function removePidLock() {
             }
         }
     } catch (_) {}
+    if (!process.env.AGY_CONFIG_PATH && !process.env.AGY_PID_FILE) {
+        try {
+            const globalPidFile = path.join(os.homedir(), '.gemini', 'antigravity', 'theme_daemon.pid');
+            if (fs.existsSync(globalPidFile)) {
+                const info = JSON.parse(stripBom(fs.readFileSync(globalPidFile, 'utf8')));
+                if (info && info.pid === process.pid) fs.unlinkSync(globalPidFile);
+            }
+        } catch (_) {}
+    }
 }
 
 function isPlainObject(val) {
@@ -2606,17 +2784,55 @@ function sortKeysDeep(val, depth = 0) {
 }
 
 const LARGE_ASSET_CONFIG_KEYS = new Set(['customWp', 'userAvatar', 'agentAvatar']);
+const FORBIDDEN_PROMPT_KEY_RE = /prompt|instruction|systemmessage/i;
+
+function stripPromptKeysDeep(val, depth = 0) {
+    if (depth > 8 || !val || typeof val !== 'object') return val;
+    if (Array.isArray(val)) return val.map((item) => stripPromptKeysDeep(item, depth + 1));
+    const out = {};
+    for (const k of Object.keys(val)) {
+        if (DANGEROUS_KEYS.has(k) || FORBIDDEN_PROMPT_KEY_RE.test(k)) continue;
+        out[k] = stripPromptKeysDeep(val[k], depth + 1);
+    }
+    return out;
+}
 
 function sanitizeConfigServerSide(raw) {
-    const src = stripProtoKeys(raw);
+    const src = stripPromptKeysDeep(stripProtoKeys(raw));
     if (!isPlainObject(src)) return null;
 
     const clean = {};
     for (const key of Object.keys(src)) {
         if (!/^[a-zA-Z0-9_.-]{1,64}$/.test(key)) continue;
         if (key === '__agyToken' || key === 'authToken' || key === 'token' || key === 'config') continue;
+        if (FORBIDDEN_PROMPT_KEY_RE.test(key)) continue;
         const val = src[key];
         if (val === undefined) continue;
+
+        if (key === 'workspaceProfiles') {
+            if (typeof sanitizeWorkspaceProfilesStrict === 'function') {
+                clean.workspaceProfiles = sanitizeWorkspaceProfilesStrict(val);
+            } else if (isPlainObject(val)) {
+                clean.workspaceProfiles = val;
+            }
+            continue;
+        }
+
+        if (key === 'aiPersonaMode') {
+            if (typeof val === 'string') {
+                const m = val.trim().toLowerCase();
+                if (m === 'off' || m === 'subtle' || m === 'roleplay') {
+                    clean.aiPersonaMode = m;
+                }
+            }
+            continue;
+        }
+        if (key === 'personaTraitId') {
+            if (typeof val === 'string' && /^[a-z0-9_]{1,36}$/.test(val.trim().toLowerCase())) {
+                clean.personaTraitId = val.trim().toLowerCase();
+            }
+            continue;
+        }
 
         if (key === 'activeForgedTheme') {
             if (val === null) {
@@ -2677,11 +2893,16 @@ function readConfig() {
                     }
                     if (candidate === SURVIVAL_BACKUP_FILE && !fs.existsSync(CONFIG_FILE)) {
                         try {
-                            fs.writeFileSync(CONFIG_FILE, JSON.stringify(sortKeysDeep(parsed), null, 2), {
-                                encoding: 'utf8',
-                                mode: 0o600,
-                            });
-                            ensurePrivateFileMode(CONFIG_FILE);
+                            const restoredStr = JSON.stringify(sortKeysDeep(parsed), null, 2);
+                            if (typeof writeFileAtomicSync === 'function') {
+                                writeFileAtomicSync(CONFIG_FILE, restoredStr, 0o600);
+                            } else {
+                                fs.writeFileSync(CONFIG_FILE, restoredStr, { encoding: 'utf8', mode: 0o600 });
+                                ensurePrivateFileMode(CONFIG_FILE);
+                            }
+                            if (typeof syncPersonaRuntimeHint === 'function') {
+                                syncPersonaRuntimeHint(parsed, { rootDir: ROOT_DIR, configPath: CONFIG_FILE });
+                            }
                             log('Restored theme_config.json from immutable backup after update.');
                         } catch (_) {}
                     }
@@ -2716,16 +2937,45 @@ function saveConfig(incoming) {
         const serialized = JSON.stringify(merged, null, 2);
 
         if (prevSerialized === serialized) {
+            if (typeof syncPersonaRuntimeHint === 'function') {
+                try {
+                    syncPersonaRuntimeHint(merged, { rootDir: ROOT_DIR, configPath: CONFIG_FILE });
+                } catch (_) {}
+            }
             return { changed: false, config: merged };
         }
 
-        fs.writeFileSync(CONFIG_FILE, serialized, { encoding: 'utf8', mode: 0o600 });
-        ensurePrivateFileMode(CONFIG_FILE);
+        if (typeof writeFileAtomicSync === 'function') {
+            writeFileAtomicSync(CONFIG_FILE, serialized, 0o600);
+        } else {
+            fs.writeFileSync(CONFIG_FILE, serialized, { encoding: 'utf8', mode: 0o600 });
+            ensurePrivateFileMode(CONFIG_FILE);
+        }
         lastKnownConfigHash = crypto.createHash('sha256').update(serialized, 'utf8').digest('hex');
+        if (typeof syncPersonaRuntimeHint === 'function') {
+            try {
+                const personaFieldsChanged =
+                    merged.themeName !== prevNormalized.themeName ||
+                    merged.bubbleName !== prevNormalized.bubbleName ||
+                    merged.masterPersona !== prevNormalized.masterPersona ||
+                    merged.aiPersonaMode !== prevNormalized.aiPersonaMode ||
+                    merged.focusMode !== prevNormalized.focusMode ||
+                    merged.chibiEnabled !== prevNormalized.chibiEnabled;
+                syncPersonaRuntimeHint(merged, {
+                    rootDir: ROOT_DIR,
+                    configPath: CONFIG_FILE,
+                    directSwitchWorkspaceKey: personaFieldsChanged ? (merged.activeWorkspace || '') : ''
+                });
+            } catch (_) {}
+        }
         try {
-            fs.mkdirSync(path.dirname(SURVIVAL_BACKUP_FILE), { recursive: true, mode: 0o700 });
-            fs.writeFileSync(SURVIVAL_BACKUP_FILE, serialized, { encoding: 'utf8', mode: 0o600 });
-            ensurePrivateFileMode(SURVIVAL_BACKUP_FILE);
+            if (typeof writeFileAtomicSync === 'function') {
+                writeFileAtomicSync(SURVIVAL_BACKUP_FILE, serialized, 0o600);
+            } else {
+                fs.mkdirSync(path.dirname(SURVIVAL_BACKUP_FILE), { recursive: true, mode: 0o700 });
+                fs.writeFileSync(SURVIVAL_BACKUP_FILE, serialized, { encoding: 'utf8', mode: 0o600 });
+                ensurePrivateFileMode(SURVIVAL_BACKUP_FILE);
+            }
         } catch (_) {}
         return { changed: true, config: merged };
     } catch (err) {
@@ -3046,12 +3296,25 @@ function checkExternalConfigUpdate() {
     if (curHash !== lastKnownConfigHash) {
         lastKnownConfigHash = curHash;
         log('Detected external theme_config.json update (MCP / Hook); syncing live delta.');
+        if (typeof syncPersonaRuntimeHint === 'function') {
+            try {
+                syncPersonaRuntimeHint(readConfig(), { rootDir: ROOT_DIR, configPath: CONFIG_FILE });
+            } catch (_) {}
+        }
         scheduleCrossWindowConfigSync(null);
     }
 }
 
 function watchExternalConfig() {
     lastKnownConfigHash = computeCurrentDiskConfigHash();
+    if (typeof syncPersonaRuntimeHint === 'function') {
+        try {
+            const curCfg = readConfig();
+            if (curCfg && Object.keys(curCfg).length > 0) {
+                syncPersonaRuntimeHint(curCfg, { rootDir: ROOT_DIR, configPath: CONFIG_FILE });
+            }
+        } catch (_) {}
+    }
     try {
         const cfgDir = path.dirname(CONFIG_FILE);
         const cfgBase = path.basename(CONFIG_FILE);

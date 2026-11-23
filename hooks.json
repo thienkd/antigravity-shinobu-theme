@@ -6,6 +6,13 @@
         "command": "node ./scripts/session_start_hook.js",
         "timeout": 8
       }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "node ./scripts/pre_invocation_hook.js",
+        "timeout": 5
+      }
     ]
   }
 }

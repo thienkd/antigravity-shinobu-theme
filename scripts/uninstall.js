@@ -723,15 +723,67 @@ async function stopDaemonAndCleanRuntimeFiles(prePid, preVerified) {
     safeUnlink(LOCK_FILE, 'daemon lock file');
     safeUnlink(VBS_FILE, 'VBScript launcher');
 
+    const safeRemoveDirNoSymlink = (dirPath, label) => {
+        try {
+            if (dirPath && fs.existsSync(dirPath)) {
+                const lst = fs.lstatSync(dirPath);
+                if (lst.isDirectory() && !lst.isSymbolicLink()) {
+                    fs.rmSync(dirPath, { recursive: true, force: true });
+                    if (label) console.log(`[uninstall] Purged ${label}: ${dirPath}`);
+                }
+            }
+        } catch (_) {}
+    };
+
+    const backupDir = path.dirname(BACKUP_CONFIG_FILE);
+    const globalPidPath = path.join(backupDir, 'theme_daemon.pid');
+    if (!process.env.AGY_PID_FILE) {
+        try {
+            if (fs.existsSync(globalPidPath) && !fs.lstatSync(globalPidPath).isSymbolicLink()) {
+                const rawG = fs.readFileSync(globalPidPath, 'utf8').replace(/^\uFEFF/, '').trim();
+                const gObj = rawG.startsWith('{') ? JSON.parse(rawG) : { pid: parseInt(rawG, 10) };
+                const gPid = gObj && Number.isFinite(gObj.pid) ? gObj.pid : 0;
+                const sameRoot = gObj && typeof gObj.rootDir === 'string' && path.resolve(gObj.rootDir) === ROOT_DIR;
+                if (!gPid || gPid === prePid || sameRoot || !isPidAlive(gPid)) {
+                    safeUnlink(globalPidPath, 'global daemon PID file');
+                }
+            }
+        } catch (_) {}
+    }
+
     if (PURGE) {
         safeUnlink(CONFIG_FILE, 'theme config');
         safeUnlink(BACKUP_CONFIG_FILE, 'backup theme config');
-        try {
-            if (fs.existsSync(DIST_DIR)) {
-                fs.rmSync(DIST_DIR, { recursive: true, force: true });
-                console.log(`[uninstall] Purged build directory: ${DIST_DIR}`);
-            }
-        } catch (_) {}
+        safeUnlink(path.join(path.dirname(CONFIG_FILE), 'persona_runtime_hint.json'), 'local persona hint');
+        safeUnlink(path.join(backupDir, 'persona_runtime_hint.json'), 'canonical persona hint');
+        safeUnlink(globalPidPath, 'global daemon PID file');
+        if (!process.env.AGY_CONFIG_PATH && !process.env.AGY_BACKUP_CONFIG_PATH) {
+            const effHome = getEffectiveHomedir();
+            safeUnlink(
+                path.join(effHome, '.gemini', 'config', 'plugins', 'antigravity-shinobu-theme', 'persona_runtime_hint.json'),
+                'plugin persona hint'
+            );
+            safeUnlink(
+                path.join(effHome, '.gemini', 'config', 'skills', 'antigravity-custom-theme', 'persona_runtime_hint.json'),
+                'skill persona hint'
+            );
+        }
+        safeRemoveDirNoSymlink(path.join(backupDir, 'persona_state'), 'persona state directory');
+        safeRemoveDirNoSymlink(
+            path.join(backupDir, 'plugin_data', 'antigravity-shinobu-theme', 'persona_state'),
+            'plugin persona state directory'
+        );
+        safeRemoveDirNoSymlink(
+            path.join(backupDir, 'plugin_data', 'antigravity-clean-theme', 'persona_state'),
+            'clean plugin persona state directory'
+        );
+        if (process.env.PLUGIN_DATA) {
+            safeRemoveDirNoSymlink(
+                path.join(path.resolve(process.env.PLUGIN_DATA), 'persona_state'),
+                'active PLUGIN_DATA persona state directory'
+            );
+        }
+        safeRemoveDirNoSymlink(DIST_DIR, 'build directory');
         unpatchWindowsShortcuts();
         unpatchLinuxDesktopLaunchers();
     }

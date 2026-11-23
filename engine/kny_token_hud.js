@@ -20,6 +20,31 @@
   const ECHO_BAR_ID = 'agy-yoriichi-msg-echo';
   const STYLE_ID = 'antigravity-kny-token-hud-style';
   const DEFAULT_CONTEXT_WINDOW = 1048576;
+  const AUTO_COMPACT_STORAGE_KEY = 'agy_auto_compact_380k_v1';
+  const AUTO_COMPACT_THRESHOLD = 380000;
+  const AUTO_COMPACT_REARM_BELOW = 350000;
+  const AUTO_COMPACT_COOLDOWN_MS = 120000;
+  const MANUAL_COMPACT_COOLDOWN_MS = 4000;
+  const AUTO_COMPACT_SETTLE_MS = 1200;
+  const COMPACT_COMMAND = '/compact';
+
+  function readAutoCompactPref() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(AUTO_COMPACT_STORAGE_KEY);
+        if (raw === '0' || raw === 'false') return false;
+      }
+    } catch (_) {}
+    return true;
+  }
+
+  function writeAutoCompactPref(enabled) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(AUTO_COMPACT_STORAGE_KEY, enabled ? '1' : '0');
+      }
+    } catch (_) {}
+  }
 
   const state = {
     composer: null,
@@ -90,6 +115,7 @@
     // Runtime telemetry & live animation state
     cid: '',
     resolvedCid: '',
+    everSawExplicitCid: false,
     lastSessionSig: '',
     lastElemKey: '',
     isWorking: false,
@@ -155,8 +181,30 @@
     workStateItems: [],
     detWorkStateRow: null,
     detWorkStateVal: null,
+    detCompactVal: null,
+
+    // Auto-Compact 380K & Manual Compact (/compact) state
+    autoCompactEnabled: readAutoCompactPref(),
+    autoCompactPending: false,
+    autoCompactDisarmed: false,
+    autoCompactWaitingLiveTurn: false,
+    autoCompactBaselineCtx: 0,
+    autoCompactBaselineTurn: 0,
+    autoCompactBaselineStep: 0,
+    autoCompactTriggeredCtx: 0,
+    autoCompactTriggeredTurn: 0,
+    autoCompactLastAt: 0,
+    manualCompactLastAt: 0,
+    compactInFlight: false,
+    compactLastFailed: false,
+    autoCompactTimer: 0,
+    compactStepTimers: [],
+    suppressNextCompactEchoUntil: 0,
     cleanups: []
   };
+
+  const MAX_COMPACT_HISTORY_CIDS = 20;
+  const compactHistoryByCid = new Map();
 
   /* ==========================================================================
    * SECURITY HELPERS (__AGY_SEC__ INTEGRATION)
@@ -185,13 +233,91 @@
     return '';
   }
 
+  const COMPOSER_ROOT_SEL = '.surface-composer, [data-testid="composer"], form:has(textarea)';
+  const CASCADE_ATTR_SEL = '[data-conversation-id], [data-cascade-id], [data-trajectory-id], [data-session-id]';
+  const SIDEBAR_GUARD_SEL = '[data-sidebar="true"], [data-testid="sidebar-split"], aside, nav, [role="navigation"]';
+
+  function isInsideSidebarNav(el) {
+    if (!el || typeof el.closest !== 'function') return false;
+    try {
+      return Boolean(el.closest(SIDEBAR_GUARD_SEL));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function extractAttrCid(el) {
+    if (!el || typeof el.getAttribute !== 'function') return '';
+    const val = String(
+      el.getAttribute('data-conversation-id') ||
+      el.getAttribute('data-cascade-id') ||
+      el.getAttribute('data-trajectory-id') ||
+      el.getAttribute('data-session-id') ||
+      ''
+    ).trim();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)
+      ? val.toLowerCase()
+      : '';
+  }
+
+  function extractLocationUrlCid() {
+    if (typeof window === 'undefined' || !window.location) return '';
+    const locStr = `${window.location.pathname || ''}${window.location.hash || ''}${window.location.search || ''}`;
+    const mPath = locStr.match(/\/c\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+    if (mPath) return mPath[1].toLowerCase();
+    const mQuery = locStr.match(/[?&](?:conversationId|cascadeId|cid)=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+    return mQuery ? mQuery[1].toLowerCase() : '';
+  }
+
+  function isElementVisiblyLaidOut(el) {
+    if (!el || !el.isConnected) return false;
+    if (typeof el.getBoundingClientRect === 'function') {
+      try {
+        const r = el.getBoundingClientRect();
+        if (r && (r.width > 0 || r.height > 0)) return true;
+        if (r && r.width === 0 && r.height === 0 && el.clientWidth === 0 && el.clientHeight === 0) {
+          return false;
+        }
+      } catch (_) {}
+    }
+    return true;
+  }
+
   function resolveComposerRoot() {
     if (typeof document === 'undefined') return null;
-    return (
-      document.querySelector('.surface-composer') ||
-      document.querySelector('[data-testid="composer"]') ||
-      document.querySelector('form:has(textarea)')
-    );
+    let all = [];
+    try {
+      all = Array.from(document.querySelectorAll('.surface-composer, [data-testid="composer"]'));
+      if (all.length === 0) {
+        const f = document.querySelector('form:has(textarea)');
+        if (f) all = [f];
+      }
+    } catch (_) {
+      const fallback = document.querySelector('.surface-composer') || document.querySelector('[data-testid="composer"]');
+      return fallback || null;
+    }
+    if (all.length === 0) return null;
+    if (all.length === 1) return all[0];
+
+    const visible = all.filter((c) => !isInsideSidebarNav(c) && isElementVisiblyLaidOut(c));
+    const pool = visible.length > 0 ? visible : all;
+
+    const ae = document.activeElement;
+    if (ae) {
+      const focused = pool.find((c) => c === ae || (typeof c.contains === 'function' && c.contains(ae)));
+      if (focused) return focused;
+    }
+
+    const urlCid = extractLocationUrlCid();
+    if (urlCid) {
+      const byUrl = pool.find((c) => {
+        const anc = typeof c.closest === 'function' ? c.closest(CASCADE_ATTR_SEL) : null;
+        return anc && !isInsideSidebarNav(anc) && extractAttrCid(anc) === urlCid;
+      });
+      if (byUrl) return byUrl;
+    }
+
+    return pool[0];
   }
 
   function resolveYoriichiAvatarUrl(themeCfg) {
@@ -607,6 +733,27 @@
         color: #fde047;
         text-shadow: 0 0 8px rgba(239, 68, 68, 0.9);
       }
+      .agy-nichirin-pill[data-compact-ready="1"] {
+        border-color: rgba(251, 191, 36, 0.92);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 14px rgba(249, 115, 22, 0.56);
+      }
+      .agy-nichirin-pill[data-compacting="1"] {
+        border-color: rgba(56, 189, 248, 0.92);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 16px rgba(56, 189, 248, 0.58);
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .agy-nichirin-pill[data-compact-ready="1"]:not([data-compacting="1"]) {
+          animation: agyBladeCompactReadyPulse 2s ease-in-out infinite;
+        }
+      }
+      @keyframes agyBladeCompactReadyPulse {
+        0%, 100% {
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.54), 0 0 10px rgba(251, 191, 36, 0.45);
+        }
+        50% {
+          box-shadow: 0 4px 18px rgba(0, 0, 0, 0.65), 0 0 18px rgba(239, 68, 68, 0.78);
+        }
+      }
 
       /* ======================================================================
        * QUICK UTILITY ICON BUTTONS (KAGURA BELL & UROKODAKI FOX MASK)
@@ -958,12 +1105,6 @@
 
     if (state.bladeBtnEl) {
       state.bladeBtnEl.dataset.tier = tier;
-      const tierNameVi = tier === 'red'
-        ? 'Hách Đao Khai Mở (赫刀)'
-        : tier === 'ember'
-        ? 'Nhiệt Hồng Đao'
-        : 'Hắc Thiết Nhật Luân Đao';
-      state.bladeBtnEl.title = `Rèn Nhật Luân Kiếm: ${tierNameVi} • ${totalHeat}% nhiệt độ`;
     }
 
     if (state.bladeFillRectEl) {
@@ -1005,6 +1146,835 @@
         : `Hắc Thiết Đao (${totalHeat}%)`;
       setTextIfChanged(state.detBladeVal, desc);
     }
+
+    refreshBladeCompactUi();
+  }
+
+  /* ==========================================================================
+   * NICHIRIN BLADE /compact TRIGGER & 380K AUTO-COMPACT ENGINE
+   * ========================================================================== */
+
+  function getTrackableCompactCid() {
+    if (state.resolvedCid && state.resolvedCid !== 'idle' && state.resolvedCid !== 'latest') {
+      return state.resolvedCid;
+    }
+    if (state.cid && state.cid !== 'idle' && state.cid !== 'latest') {
+      return state.cid;
+    }
+    return '';
+  }
+
+  function persistCompactHistory(cidOverride) {
+    const cid = cidOverride || getTrackableCompactCid();
+    if (!cid) return;
+    if (!state.autoCompactDisarmed && !state.autoCompactLastAt && !state.compactLastFailed) {
+      compactHistoryByCid.delete(cid);
+      return;
+    }
+    compactHistoryByCid.delete(cid);
+    compactHistoryByCid.set(cid, {
+      disarmed: Boolean(state.autoCompactDisarmed),
+      lastAutoAt: Number(state.autoCompactLastAt) || 0,
+      triggeredCtx: Number(state.autoCompactTriggeredCtx) || 0,
+      triggeredTurn: Number(state.autoCompactTriggeredTurn) || 0,
+      failed: Boolean(state.compactLastFailed)
+    });
+    while (compactHistoryByCid.size > MAX_COMPACT_HISTORY_CIDS) {
+      const oldestKey = compactHistoryByCid.keys().next().value;
+      if (oldestKey === undefined) break;
+      compactHistoryByCid.delete(oldestKey);
+    }
+  }
+
+  function restoreCompactHistory(cid) {
+    if (!cid || cid === 'idle' || cid === 'latest') return false;
+    const rec = compactHistoryByCid.get(cid);
+    if (!rec) return false;
+    state.autoCompactDisarmed = Boolean(rec.disarmed);
+    state.autoCompactLastAt = Number(rec.lastAutoAt) || 0;
+    state.autoCompactTriggeredCtx = Number(rec.triggeredCtx) || 0;
+    state.autoCompactTriggeredTurn = Number(rec.triggeredTurn) || 0;
+    state.compactLastFailed = Boolean(rec.failed);
+    return true;
+  }
+
+  function clearCompactTimers() {
+    if (state.autoCompactTimer) {
+      clearTimeout(state.autoCompactTimer);
+      state.autoCompactTimer = 0;
+    }
+    if (Array.isArray(state.compactStepTimers)) {
+      while (state.compactStepTimers.length > 0) {
+        const tid = state.compactStepTimers.pop();
+        clearTimeout(tid);
+      }
+    }
+    state.compactInFlight = false;
+  }
+
+  function resetConversationCompactState() {
+    clearCompactTimers();
+    state.autoCompactPending = false;
+    state.autoCompactDisarmed = false;
+    state.autoCompactWaitingLiveTurn = false;
+    state.autoCompactBaselineCtx = 0;
+    state.autoCompactBaselineTurn = 0;
+    state.autoCompactBaselineStep = 0;
+    state.autoCompactTriggeredCtx = 0;
+    state.autoCompactTriggeredTurn = 0;
+    state.autoCompactLastAt = 0;
+    state.manualCompactLastAt = 0;
+    state.compactLastFailed = false;
+    state.suppressNextCompactEchoUntil = 0;
+  }
+
+  function scheduleCompactStep(fn, delayMs, reqEpoch, reqCidEpoch) {
+    let tid = 0;
+    tid = setTimeout(() => {
+      const idx = state.compactStepTimers.indexOf(tid);
+      if (idx >= 0) state.compactStepTimers.splice(idx, 1);
+      if (
+        reqEpoch !== state.mountEpoch ||
+        reqCidEpoch !== state.cidEpoch ||
+        !state.barEl ||
+        !state.barEl.isConnected
+      ) {
+        return;
+      }
+      fn();
+    }, delayMs);
+    state.compactStepTimers.push(tid);
+    return tid;
+  }
+
+  function createDomEvent(type, props, ctorName) {
+    const init = Object.assign({ bubbles: true, cancelable: true }, props || {});
+    if (typeof window !== 'undefined' && ctorName && typeof window[ctorName] === 'function') {
+      try {
+        return new window[ctorName](type, init);
+      } catch (_) {}
+    }
+    if (typeof window !== 'undefined' && typeof window.Event === 'function') {
+      try {
+        const ev = new window.Event(type, { bubbles: init.bubbles, cancelable: init.cancelable });
+        for (const k of Object.keys(init)) {
+          if (k !== 'bubbles' && k !== 'cancelable' && !(k in ev)) {
+            try { ev[k] = init[k]; } catch (_) {}
+          }
+        }
+        return ev;
+      } catch (_) {}
+    }
+    return Object.assign({
+      type: String(type),
+      bubbles: Boolean(init.bubbles),
+      cancelable: Boolean(init.cancelable),
+      defaultPrevented: false,
+      preventDefault() {
+        if (this.cancelable) this.defaultPrevented = true;
+      },
+      stopPropagation() {},
+      stopImmediatePropagation() {}
+    }, init);
+  }
+
+  function findComposerEditor(comp) {
+    if (!comp || typeof comp.querySelectorAll !== 'function') return null;
+    let nodes = [];
+    try {
+      nodes = Array.from(comp.querySelectorAll('textarea, [contenteditable="true"]'));
+    } catch (_) {
+      return null;
+    }
+    const valid = nodes.filter((el) => {
+      if (!el || el.disabled || el.readOnly) return false;
+      if (typeof el.closest === 'function') {
+        if (el.closest(`#${HUD_BAR_ID}`) || el.closest('#agy-shinobu-npc-wrap') || el.closest('agy-hashira-squad')) {
+          return false;
+        }
+      }
+      return true;
+    });
+    if (valid.length === 0) return null;
+    return valid.find((el) => isElementVisiblyLaidOut(el)) || valid[0];
+  }
+
+  function readEditorText(editor) {
+    if (!editor) return '';
+    const tag = String(editor.tagName || '').toUpperCase();
+    const raw = (tag === 'TEXTAREA' || tag === 'INPUT') && typeof editor.value === 'string'
+      ? editor.value
+      : (editor.textContent || '');
+    return raw.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+  }
+
+  function isPopupElementVisible(el) {
+    if (!el || !el.isConnected) return false;
+    if (el.hidden) return false;
+    if (typeof el.getAttribute === 'function' && el.getAttribute('aria-hidden') === 'true') {
+      return false;
+    }
+    try {
+      if (el.style) {
+        if (el.style.display === 'none' || el.style.visibility === 'hidden' || el.style.opacity === '0') {
+          return false;
+        }
+      }
+      if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+        const cs = window.getComputedStyle(el);
+        if (cs && (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0')) {
+          return false;
+        }
+      }
+    } catch (_) {}
+    if (typeof el.getBoundingClientRect === 'function') {
+      try {
+        const r = el.getBoundingClientRect();
+        if (r) {
+          if (r.width > 0 || r.height > 0) return true;
+          if (r.width === 0 && r.height === 0 && el.clientWidth === 0 && el.clientHeight === 0) {
+            return false;
+          }
+        }
+      } catch (_) {}
+    }
+    return el.offsetParent !== null;
+  }
+
+  function findComposerSendButton(comp) {
+    if (!comp || typeof comp.querySelectorAll !== 'function') return null;
+    let buttons = [];
+    try {
+      buttons = Array.from(comp.querySelectorAll('button'));
+    } catch (_) {
+      return null;
+    }
+    const tier1 = [];
+    const tier2 = [];
+    const excludedLabelRe = /\b(?:stop|cancel|attach|upload|model|mode|voice|mic|image|file|mention|menu|add|plus|environment|project|branch|setting|option)\b|dừng|hủy|đính kèm|tải lên/i;
+
+    for (let i = 0; i < buttons.length; i++) {
+      const btn = buttons[i];
+      if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') continue;
+      if (typeof btn.closest === 'function') {
+        if (
+          btn.closest(`#${HUD_BAR_ID}`) ||
+          btn.closest(`#${ECHO_BAR_ID}`) ||
+          btn.closest('#agy-shinobu-npc-wrap') ||
+          btn.closest('agy-hashira-squad') ||
+          btn.closest('agy-chibi-aura') ||
+          btn.classList.contains('agy-chibi-hitbox') ||
+          btn.classList.contains('agy-echo-close')
+        ) {
+          continue;
+        }
+      }
+      if (
+        typeof btn.hasAttribute === 'function' &&
+        (btn.hasAttribute('aria-haspopup') || btn.hasAttribute('aria-expanded'))
+      ) {
+        continue;
+      }
+      const aria = String(btn.getAttribute('aria-label') || btn.title || '').trim().toLowerCase();
+      const tid = String(btn.getAttribute('data-testid') || '').trim().toLowerCase();
+      if (tid === 'input-cancel-button' || excludedLabelRe.test(aria) || excludedLabelRe.test(tid)) {
+        continue;
+      }
+
+      const isTier1 =
+        /\b(?:send|submit)\b/.test(tid) ||
+        /\b(?:send|submit)\b/.test(aria) ||
+        /^(?:gửi)(?:\b|\s|$)|gửi\s+(?:tin\s+nhắn|lệnh)/i.test(aria);
+      if (isTier1) {
+        tier1.push(btn);
+        continue;
+      }
+
+      const explicitType = typeof btn.getAttribute === 'function'
+        ? String(btn.getAttribute('type') || '').trim().toLowerCase()
+        : '';
+      if (explicitType === 'submit') {
+        tier2.push(btn);
+      }
+    }
+
+    if (tier1.length > 0) {
+      return tier1.find((b) => isElementVisiblyLaidOut(b)) || tier1[0];
+    }
+    if (tier2.length > 0) {
+      return tier2.find((b) => isElementVisiblyLaidOut(b)) || tier2[0];
+    }
+    return null;
+  }
+
+  function hasVisibleSlashOrPopupMenu() {
+    if (typeof document === 'undefined') return false;
+    try {
+      const menus = document.querySelectorAll('[role="listbox"], [role="menu"], [data-radix-popper-content-wrapper]');
+      for (let i = 0; i < menus.length; i++) {
+        const m = menus[i];
+        if (m && isPopupElementVisible(m) && !(typeof m.closest === 'function' && m.closest(`#${HUD_BAR_ID}`))) {
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  function findVisibleSlashCompactOption() {
+    if (typeof document === 'undefined') return null;
+    try {
+      const menus = document.querySelectorAll('[role="listbox"], [role="menu"], [data-radix-popper-content-wrapper], [cmdk-list]');
+      for (let i = 0; i < menus.length; i++) {
+        const menu = menus[i];
+        if (!menu || !isPopupElementVisible(menu) || (typeof menu.closest === 'function' && menu.closest(`#${HUD_BAR_ID}`))) continue;
+        const items = menu.querySelectorAll('[role="option"], [role="menuitem"], [cmdk-item], button, li');
+        for (let j = 0; j < items.length; j++) {
+          const item = items[j];
+          const val = String(item.getAttribute('data-value') || '').trim();
+          const txt = String(item.textContent || '').trim();
+          if (/^\/?compact$/i.test(val) || /(?:^|\s)\/compact(?:\s|$)/i.test(txt)) {
+            return item;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function insertCommandIntoEditor(editor, cmdText) {
+    if (!editor) return false;
+    try {
+      if (typeof editor.focus === 'function') editor.focus();
+    } catch (_) {}
+
+    const tag = String(editor.tagName || '').toUpperCase();
+    if (tag === 'TEXTAREA' || tag === 'INPUT') {
+      try {
+        const proto = tag === 'TEXTAREA'
+          ? (typeof HTMLTextAreaElement !== 'undefined' ? HTMLTextAreaElement.prototype : null)
+          : (typeof HTMLInputElement !== 'undefined' ? HTMLInputElement.prototype : null);
+        const desc = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : null;
+        if (desc && typeof desc.set === 'function') {
+          desc.set.call(editor, cmdText);
+        } else {
+          editor.value = cmdText;
+        }
+      } catch (_) {
+        editor.value = cmdText;
+      }
+      editor.dispatchEvent(createDomEvent('input', { inputType: 'insertText', data: cmdText }, 'InputEvent'));
+      editor.dispatchEvent(createDomEvent('change', {}, 'Event'));
+      return true;
+    }
+
+    if (typeof window !== 'undefined' && typeof window.getSelection === 'function' && typeof document.createRange === 'function') {
+      try {
+        const sel = window.getSelection();
+        if (sel) {
+          const range = document.createRange();
+          range.selectNodeContents(editor);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      } catch (_) {}
+    }
+
+    let inserted = false;
+    if (typeof document !== 'undefined' && typeof document.execCommand === 'function') {
+      try {
+        inserted = Boolean(document.execCommand('insertText', false, cmdText));
+      } catch (_) {
+        inserted = false;
+      }
+    }
+
+    if (!inserted || readEditorText(editor) !== cmdText) {
+      editor.dispatchEvent(createDomEvent('beforeinput', { inputType: 'insertText', data: cmdText }, 'InputEvent'));
+      if (
+        readEditorText(editor) !== cmdText &&
+        typeof window !== 'undefined' &&
+        typeof window.ClipboardEvent === 'function' &&
+        typeof window.DataTransfer === 'function'
+      ) {
+        try {
+          const dt = new window.DataTransfer();
+          dt.setData('text/plain', cmdText);
+          editor.dispatchEvent(new window.ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }));
+        } catch (_) {}
+      }
+      if (readEditorText(editor) !== cmdText) {
+        editor.textContent = cmdText;
+        if (typeof window !== 'undefined' && typeof window.getSelection === 'function' && typeof document.createRange === 'function') {
+          try {
+            const sel = window.getSelection();
+            if (sel) {
+              const range = document.createRange();
+              range.selectNodeContents(editor);
+              range.collapse(false);
+              sel.removeAllRanges();
+              sel.addRange(range);
+            }
+          } catch (_) {}
+        }
+        editor.dispatchEvent(createDomEvent('input', { inputType: 'insertText', data: cmdText }, 'InputEvent'));
+      }
+    }
+    return true;
+  }
+
+  function dispatchEnterKey(editor) {
+    if (!editor) return;
+    const keyProps = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+    editor.dispatchEvent(createDomEvent('keydown', keyProps, 'KeyboardEvent'));
+    editor.dispatchEvent(createDomEvent('keypress', keyProps, 'KeyboardEvent'));
+    editor.dispatchEvent(createDomEvent('keyup', keyProps, 'KeyboardEvent'));
+  }
+
+  function refreshBladeCompactUi() {
+    if (state.bladeBtnEl) {
+      state.bladeBtnEl.dataset.autoCompact = state.autoCompactEnabled ? '1' : '0';
+      if (state.compactInFlight) {
+        state.bladeBtnEl.dataset.compacting = '1';
+      } else {
+        delete state.bladeBtnEl.dataset.compacting;
+      }
+      const ctxNow = Math.max(0, Math.round(state.serverCtxTokens || 0));
+      const ready380k = !state.compactInFlight && state.hasTelemetry && ctxNow >= AUTO_COMPACT_THRESHOLD && !state.autoCompactDisarmed;
+      if (ready380k) {
+        state.bladeBtnEl.dataset.compactReady = '1';
+      } else {
+        delete state.bladeBtnEl.dataset.compactReady;
+      }
+
+      const tier = state.bladeTier || 'black';
+      const totalHeat = Math.max(0, Math.round(state.bladeHeat || 0));
+      const tierNameVi = tier === 'red'
+        ? 'Hách Đao Khai Mở (赫刀)'
+        : tier === 'ember'
+        ? 'Nhiệt Hồng Đao'
+        : 'Hắc Thiết Nhật Luân Đao';
+      const autoTxt = state.autoCompactEnabled ? 'Bật' : 'Tắt';
+      let compactHint = `Tự nén 380K: ${autoTxt}`;
+      if (state.compactInFlight) {
+        compactHint = 'Đang nén phiên (/compact)...';
+      } else if (state.compactLastFailed && ctxNow >= AUTO_COMPACT_THRESHOLD) {
+        compactHint = 'Cần nhấn Enter để hoàn tất /compact';
+      } else if (ready380k) {
+        compactHint = state.autoCompactEnabled && !state.autoCompactWaitingLiveTurn
+          ? 'Ngữ cảnh ≥ 380K • Sắp tự nén (/compact)'
+          : 'Ngữ cảnh ≥ 380K • Nhấn để nén (/compact)';
+      }
+      const nextTitle = `Rèn Nhật Luân Kiếm: ${tierNameVi} (${totalHeat}%) • ${compactHint} • Nhấn: Nén ngay /compact • Shift+Click hoặc Chuột phải: Bật/Tắt tự nén`;
+      if (state.bladeBtnEl.title !== nextTitle) {
+        state.bladeBtnEl.title = nextTitle;
+      }
+      if (state.bladeBtnEl.getAttribute('aria-label') !== nextTitle) {
+        state.bladeBtnEl.setAttribute('aria-label', nextTitle);
+      }
+    }
+
+    if (state.detCompactVal) {
+      const ctxNow = Math.max(0, Math.round(state.serverCtxTokens || 0));
+      let statusTxt = state.autoCompactEnabled
+        ? `Tự nén 380K: Đang bật (${formatCompactTokens(ctxNow)}/380K)`
+        : 'Tự nén 380K: Đang tắt (Nhấn thanh kiếm để nén tay)';
+      if (state.compactInFlight) {
+        statusTxt = 'Đang gửi lệnh nén /compact...';
+      } else if (state.compactLastFailed && ctxNow >= AUTO_COMPACT_THRESHOLD) {
+        statusTxt = 'Cần nhấn Enter để hoàn tất /compact';
+      } else if (state.autoCompactPending && ctxNow >= AUTO_COMPACT_THRESHOLD) {
+        statusTxt = state.autoCompactEnabled
+          ? 'Đã đạt 380K — Chờ rảnh để tự nén (/compact)'
+          : 'Đã đạt 380K — Nhấn thanh kiếm để nén (/compact)';
+      } else if (state.autoCompactDisarmed && ctxNow >= AUTO_COMPACT_THRESHOLD) {
+        statusTxt = 'Đã kích hoạt nén 380K trong chu kỳ này';
+      }
+      setTextIfChanged(state.detCompactVal, statusTxt);
+    }
+  }
+
+  function finishCompactDispatch(opts = {}) {
+    const failed = Boolean(opts && opts.failed);
+    const disarmOnSuccess = Boolean(opts && opts.disarmOnSuccess);
+    clearCompactTimers();
+    state.compactLastFailed = failed;
+    if (failed) {
+      state.autoCompactDisarmed = false;
+    } else if (disarmOnSuccess) {
+      state.autoCompactDisarmed = true;
+      state.autoCompactLastAt = Date.now();
+      state.autoCompactTriggeredCtx = Math.max(0, Math.round(state.serverCtxTokens || 0));
+      state.autoCompactTriggeredTurn = state.serverTurnCount || 0;
+    }
+    persistCompactHistory();
+    refreshBladeCompactUi();
+    renderDomValues();
+  }
+
+  function triggerCompactSession(opts = {}) {
+    const source = opts && opts.source === 'auto' ? 'auto' : 'manual';
+    const isAuto = source === 'auto';
+
+    if (!state.barEl || !state.barEl.isConnected) {
+      return { ok: false, reason: 'not_mounted' };
+    }
+    const comp = state.composer || resolveComposerRoot();
+    if (!comp || !comp.isConnected) {
+      return { ok: false, reason: 'no_composer' };
+    }
+    if (state.compactInFlight) {
+      return { ok: false, reason: 'in_flight' };
+    }
+
+    const now = Date.now();
+    const liveSig = extractLivePageSignals(comp);
+    const workingNow = Boolean(liveSig.isWorking || state.isWorking || state.serverIsWorking);
+    if (workingNow) {
+      if (!isAuto) {
+        showUserMessageEcho('AI đang xử lý — vui lòng chờ hoàn tất rồi bấm nén (/compact)');
+      }
+      return { ok: false, reason: 'working' };
+    }
+
+    const showcaseRunning = Boolean(
+      typeof window !== 'undefined' &&
+      window.__AGY_CINEMA_DIRECTOR__ &&
+      typeof window.__AGY_CINEMA_DIRECTOR__.isShowcaseRunning === 'function' &&
+      window.__AGY_CINEMA_DIRECTOR__.isShowcaseRunning()
+    );
+    if (isAuto) {
+      if (typeof document !== 'undefined' && document.hidden) return { ok: false, reason: 'hidden' };
+      if (!state.autoCompactEnabled) return { ok: false, reason: 'disabled' };
+      if (state.cid === 'idle') return { ok: false, reason: 'idle' };
+      if (showcaseRunning) return { ok: false, reason: 'showcase' };
+      if (hasVisibleSlashOrPopupMenu()) return { ok: false, reason: 'menu_open' };
+      if (state.autoCompactLastAt > 0 && (now - state.autoCompactLastAt) < AUTO_COMPACT_COOLDOWN_MS) {
+        return { ok: false, reason: 'cooldown' };
+      }
+    } else if (state.manualCompactLastAt > 0 && (now - state.manualCompactLastAt) < MANUAL_COMPACT_COOLDOWN_MS) {
+      return { ok: false, reason: 'cooldown' };
+    }
+
+    const editor = findComposerEditor(comp);
+    if (!editor) {
+      if (!isAuto) {
+        showUserMessageEcho('Không tìm thấy khung nhập để gửi lệnh /compact');
+      }
+      return { ok: false, reason: 'no_editor' };
+    }
+
+    const existingText = readEditorText(editor);
+    if (existingText && existingText !== COMPACT_COMMAND) {
+      if (!isAuto) {
+        showUserMessageEcho('Ô chat đang có nội dung nháp — hãy gửi hoặc xóa trước khi nén (/compact)');
+      }
+      return { ok: false, reason: 'has_draft' };
+    }
+
+    if (state.autoCompactTimer) {
+      clearTimeout(state.autoCompactTimer);
+      state.autoCompactTimer = 0;
+    }
+    state.autoCompactPending = false;
+    state.compactLastFailed = false;
+    state.compactInFlight = true;
+
+    if (isAuto) {
+      state.autoCompactDisarmed = true;
+      state.autoCompactLastAt = now;
+      state.autoCompactTriggeredCtx = Math.max(0, Math.round(state.serverCtxTokens || 0));
+      state.autoCompactTriggeredTurn = state.serverTurnCount || 0;
+    } else {
+      state.manualCompactLastAt = now;
+    }
+    persistCompactHistory();
+
+    state.suppressNextCompactEchoUntil = now + 900;
+    showUserMessageEcho(
+      isAuto
+        ? `Tự động nén phiên (/compact) — Ngữ cảnh đạt ${formatCompactTokens(state.serverCtxTokens)} / 380K`
+        : 'Đang nén phiên (/compact) theo lệnh Chủ nhân...'
+    );
+    refreshBladeCompactUi();
+
+    const reqEpoch = state.mountEpoch;
+    const reqCidEpoch = state.cidEpoch;
+    if (existingText === COMPACT_COMMAND) {
+      try {
+        if (typeof editor.focus === 'function') editor.focus();
+      } catch (_) {}
+    } else {
+      insertCommandIntoEditor(editor, COMPACT_COMMAND);
+    }
+
+    let submittedVia = '';
+    let clickedSendBtn = null;
+    const shouldDisarmManual = !isAuto && state.hasTelemetry && Math.round(state.serverCtxTokens || 0) >= AUTO_COMPACT_THRESHOLD;
+
+    scheduleCompactStep(() => {
+      const curComp = state.composer || resolveComposerRoot() || comp;
+      const curSig = curComp ? extractLivePageSignals(curComp) : { isWorking: false };
+      if (!readEditorText(editor) || state.isWorking || state.serverIsWorking || curSig.isWorking) {
+        finishCompactDispatch({ failed: false, disarmOnSuccess: shouldDisarmManual });
+        return;
+      }
+      const optEl = findVisibleSlashCompactOption();
+      if (optEl && typeof optEl.click === 'function') {
+        submittedVia = 'slash_opt';
+        optEl.click();
+        return;
+      }
+      const sendBtn = findComposerSendButton(curComp);
+      if (sendBtn && typeof sendBtn.click === 'function') {
+        submittedVia = 'send_btn';
+        clickedSendBtn = sendBtn;
+        sendBtn.click();
+        return;
+      }
+      submittedVia = 'enter';
+      dispatchEnterKey(editor);
+    }, 80, reqEpoch, reqCidEpoch);
+
+    scheduleCompactStep(() => {
+      if (!state.compactInFlight) return;
+      const curComp = state.composer || resolveComposerRoot() || comp;
+      const curSig = curComp ? extractLivePageSignals(curComp) : { isWorking: false };
+      if (!readEditorText(editor) || state.isWorking || state.serverIsWorking || curSig.isWorking) {
+        finishCompactDispatch({ failed: false, disarmOnSuccess: shouldDisarmManual });
+        return;
+      }
+      if (submittedVia === 'slash_opt') {
+        if (hasVisibleSlashOrPopupMenu()) return;
+        const sendBtn = findComposerSendButton(curComp);
+        if (sendBtn && typeof sendBtn.click === 'function') {
+          clickedSendBtn = sendBtn;
+          sendBtn.click();
+        } else {
+          const anyComposerSubmit = curComp && typeof curComp.querySelector === 'function'
+            ? curComp.querySelector('button[aria-label*="send" i], button[aria-label*="submit" i], button[data-testid*="send" i], button[data-testid*="submit" i]')
+            : null;
+          if (!anyComposerSubmit) {
+            dispatchEnterKey(editor);
+          }
+        }
+      } else if (submittedVia === 'send_btn') {
+        const canRetryEnter = Boolean(
+          clickedSendBtn &&
+          clickedSendBtn.isConnected &&
+          !clickedSendBtn.disabled &&
+          clickedSendBtn.getAttribute('aria-disabled') !== 'true'
+        );
+        if (canRetryEnter) {
+          dispatchEnterKey(editor);
+        }
+      } else if (submittedVia === 'enter') {
+        const sendBtn = findComposerSendButton(curComp);
+        if (sendBtn && typeof sendBtn.click === 'function') {
+          clickedSendBtn = sendBtn;
+          sendBtn.click();
+        }
+      }
+    }, 320, reqEpoch, reqCidEpoch);
+
+    scheduleCompactStep(() => {
+      if (!state.compactInFlight) return;
+      const curComp = state.composer || resolveComposerRoot() || comp;
+      const curSig = curComp ? extractLivePageSignals(curComp) : { isWorking: false };
+      const workingAfter = Boolean(state.isWorking || state.serverIsWorking || curSig.isWorking);
+      const stillStuck = !workingAfter && readEditorText(editor) === COMPACT_COMMAND;
+      finishCompactDispatch({ failed: stillStuck, disarmOnSuccess: !stillStuck && shouldDisarmManual });
+      if (stillStuck) {
+        showUserMessageEcho('Chưa thể tự gửi /compact — vui lòng nhấn Enter trong ô chat để nén phiên');
+      }
+    }, 720, reqEpoch, reqCidEpoch);
+
+    return { ok: true, source, threshold: AUTO_COMPACT_THRESHOLD };
+  }
+
+  function evaluateAutoCompact(opts = {}) {
+    if (!state.barEl || !state.barEl.isConnected || !state.hasTelemetry || !state.cid || state.cid === 'idle') {
+      return;
+    }
+
+    const comp = state.composer || resolveComposerRoot();
+    const liveSig = comp ? extractLivePageSignals(comp) : { isWorking: false, draftText: '' };
+    const editor = comp ? findComposerEditor(comp) : null;
+    const liveDraft = editor ? readEditorText(editor) : (liveSig.draftText || '');
+
+    if (state.compactLastFailed && liveDraft !== COMPACT_COMMAND) {
+      state.compactLastFailed = false;
+      persistCompactHistory();
+    }
+
+    const ctx = Math.max(0, Math.round(state.serverCtxTokens || 0));
+    if (ctx < AUTO_COMPACT_REARM_BELOW) {
+      state.autoCompactDisarmed = false;
+      state.autoCompactWaitingLiveTurn = false;
+      state.autoCompactPending = false;
+      state.compactLastFailed = false;
+      if (state.autoCompactTimer) {
+        clearTimeout(state.autoCompactTimer);
+        state.autoCompactTimer = 0;
+      }
+      persistCompactHistory();
+      refreshBladeCompactUi();
+      return;
+    }
+
+    if (ctx < AUTO_COMPACT_THRESHOLD) {
+      state.autoCompactPending = false;
+      if (state.autoCompactTimer) {
+        clearTimeout(state.autoCompactTimer);
+        state.autoCompactTimer = 0;
+      }
+      refreshBladeCompactUi();
+      return;
+    }
+
+    if (opts && opts.firstSync) {
+      if (!state.isWorking && !state.serverIsWorking) {
+        state.autoCompactWaitingLiveTurn = true;
+        state.autoCompactBaselineCtx = ctx;
+        state.autoCompactBaselineTurn = state.serverTurnCount || 0;
+        state.autoCompactBaselineStep = state.serverStepCount || 0;
+        state.autoCompactPending = false;
+        if (state.autoCompactTimer) {
+          clearTimeout(state.autoCompactTimer);
+          state.autoCompactTimer = 0;
+        }
+        refreshBladeCompactUi();
+        return;
+      }
+      state.autoCompactWaitingLiveTurn = false;
+    }
+
+    if (state.autoCompactWaitingLiveTurn) {
+      const unlocked = Boolean(
+        state.isWorking ||
+        state.serverIsWorking ||
+        (state.serverTurnCount || 0) > state.autoCompactBaselineTurn ||
+        (state.serverStepCount || 0) > state.autoCompactBaselineStep ||
+        ctx > state.autoCompactBaselineCtx
+      );
+      if (!unlocked) {
+        refreshBladeCompactUi();
+        return;
+      }
+      state.autoCompactWaitingLiveTurn = false;
+    }
+
+    if (state.autoCompactDisarmed) {
+      const canEmergencyRearm =
+        (Date.now() - state.autoCompactLastAt) >= AUTO_COMPACT_COOLDOWN_MS &&
+        (state.serverTurnCount || 0) > state.autoCompactTriggeredTurn &&
+        ctx >= (state.autoCompactTriggeredCtx + 15000);
+      if (!canEmergencyRearm) {
+        state.autoCompactPending = false;
+        if (state.autoCompactTimer) {
+          clearTimeout(state.autoCompactTimer);
+          state.autoCompactTimer = 0;
+        }
+        refreshBladeCompactUi();
+        return;
+      }
+      state.autoCompactDisarmed = false;
+      persistCompactHistory();
+    }
+
+    if (state.compactLastFailed && state.autoCompactLastAt > 0 && (Date.now() - state.autoCompactLastAt) < AUTO_COMPACT_COOLDOWN_MS) {
+      state.autoCompactPending = false;
+      if (state.autoCompactTimer) {
+        clearTimeout(state.autoCompactTimer);
+        state.autoCompactTimer = 0;
+      }
+      refreshBladeCompactUi();
+      return;
+    }
+
+    if (!state.autoCompactEnabled) {
+      state.autoCompactPending = false;
+      if (state.autoCompactTimer) {
+        clearTimeout(state.autoCompactTimer);
+        state.autoCompactTimer = 0;
+      }
+      refreshBladeCompactUi();
+      return;
+    }
+
+    const isDocHidden = typeof document !== 'undefined' && Boolean(document.hidden);
+    const workingNow = Boolean(state.isWorking || state.serverIsWorking || liveSig.isWorking);
+    const showcaseRunning = Boolean(
+      typeof window !== 'undefined' &&
+      window.__AGY_CINEMA_DIRECTOR__ &&
+      typeof window.__AGY_CINEMA_DIRECTOR__.isShowcaseRunning === 'function' &&
+      window.__AGY_CINEMA_DIRECTOR__.isShowcaseRunning()
+    );
+    const menuOpen = hasVisibleSlashOrPopupMenu();
+
+    if (isDocHidden || workingNow || liveDraft.length > 0 || showcaseRunning || menuOpen) {
+      state.autoCompactPending = true;
+      if (state.autoCompactTimer) {
+        clearTimeout(state.autoCompactTimer);
+        state.autoCompactTimer = 0;
+      }
+      refreshBladeCompactUi();
+      return;
+    }
+
+    state.autoCompactPending = true;
+    refreshBladeCompactUi();
+
+    if (!state.compactInFlight && !state.autoCompactTimer) {
+      const reqEpoch = state.mountEpoch;
+      const reqCidEpoch = state.cidEpoch;
+      state.autoCompactTimer = setTimeout(() => {
+        state.autoCompactTimer = 0;
+        if (
+          reqEpoch !== state.mountEpoch ||
+          reqCidEpoch !== state.cidEpoch ||
+          !state.barEl ||
+          !state.barEl.isConnected
+        ) {
+          return;
+        }
+        if (!state.autoCompactEnabled || state.autoCompactDisarmed || state.autoCompactWaitingLiveTurn) {
+          return;
+        }
+        if (Math.round(state.serverCtxTokens || 0) < AUTO_COMPACT_THRESHOLD) {
+          return;
+        }
+        triggerCompactSession({ source: 'auto' });
+      }, AUTO_COMPACT_SETTLE_MS);
+    }
+  }
+
+  function setAutoCompactEnabled(nextEnabled, opts = {}) {
+    const enabled = Boolean(nextEnabled);
+    state.autoCompactEnabled = enabled;
+    writeAutoCompactPref(enabled);
+    if (!enabled) {
+      state.autoCompactPending = false;
+      if (state.autoCompactTimer) {
+        clearTimeout(state.autoCompactTimer);
+        state.autoCompactTimer = 0;
+      }
+    } else {
+      evaluateAutoCompact({ firstSync: false });
+    }
+    refreshBladeCompactUi();
+    if (!opts.silent) {
+      showUserMessageEcho(
+        enabled
+          ? 'Đã bật tự động nén phiên (/compact) ở 380K'
+          : 'Đã tắt tự động nén 380K (vẫn nhấn thanh kiếm để nén tay)'
+      );
+    }
+    return enabled;
+  }
+
+  function toggleAutoCompactMode() {
+    return setAutoCompactEnabled(!state.autoCompactEnabled);
   }
 
   function applyCrisisVisual(isCrisis) {
@@ -1118,6 +2088,7 @@
 
   function ingestTelemetrySnapshot(snap) {
     if (!snap || typeof snap !== 'object' || snap.ok === false) return;
+    if (state.cid === 'idle') return;
     if (snap.cid && state.cid && state.cid !== 'latest' && snap.cid !== state.cid) return;
 
     if (snap.cid) {
@@ -1127,6 +2098,8 @@
         state.lastSlashSeq = -1;
         state.lastServerStepIdx = -1;
         state.bladeBonusHeat = 0;
+        state.workStateItems = [];
+        resetConversationCompactState();
         applyCrisisVisual(false);
         if (
           typeof window !== 'undefined' &&
@@ -1135,9 +2108,17 @@
         ) {
           try { window.__AGY_SQUAD_RAID__.resetConversation(snap.cid); } catch (_) {}
         }
+        if (
+          typeof window !== 'undefined' &&
+          window.__AGY_BIO_AUDIO__ &&
+          typeof window.__AGY_BIO_AUDIO__.resetConversation === 'function'
+        ) {
+          try { window.__AGY_BIO_AUDIO__.resetConversation(snap.cid); } catch (_) {}
+        }
       }
       if (snap.cid !== state.resolvedCid) {
         state.resolvedCid = snap.cid;
+        restoreCompactHistory(snap.cid);
         refreshSessionAndElementIcons();
       }
     }
@@ -1214,6 +2195,7 @@
     }
 
     computeAndApplyBladeHeat();
+    evaluateAutoCompact({ firstSync });
 
     // Forward live snapshot to Hashira Squad Raid & Bio-Acoustic Kagura Audio
     if (typeof window !== 'undefined') {
@@ -1267,7 +2249,7 @@
   }
 
   async function connectTelemetryStream(cid) {
-    if (!cid || !state.barEl || !state.barEl.isConnected) return;
+    if (!cid || cid === 'idle' || !state.barEl || !state.barEl.isConnected) return;
     if (state.streamAbort && state.streamCid === cid) return;
 
     abortActiveStream();
@@ -1395,7 +2377,7 @@
   }
 
   async function fetchDaemonTelemetry(cid) {
-    if (!cid || state.fetchInFlight || !state.barEl || !state.barEl.isConnected) return;
+    if (!cid || cid === 'idle' || state.fetchInFlight || !state.barEl || !state.barEl.isConnected) return;
     const base = getSecureAssetBase();
     if (!base || !/^https?:\/\/127\.0\.0\.1:\d+/.test(base)) return;
 
@@ -1439,6 +2421,35 @@
 
   const UUID_EXACT_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const URL_CID_RE = /\/c\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+  const BLANK_ROUTE_RE = /^\/(?:launchpad|new|welcome)(?:\/|$)/i;
+
+  function resolveConversationPaneRoot(comp) {
+    if (!comp) return typeof document !== 'undefined' ? document.querySelector('[data-main-content-body="true"]') : null;
+    if (typeof comp.closest === 'function') {
+      const byCascade = comp.closest(CASCADE_ATTR_SEL);
+      if (byCascade && !isInsideSidebarNav(byCascade)) return byCascade;
+      const byMain = comp.closest('[data-main-content-body="true"], .agy-inset-shell, main');
+      if (byMain && !isInsideSidebarNav(byMain)) return byMain;
+    }
+    let col = comp.parentElement;
+    while (col && col.parentElement && col.clientHeight < 260) {
+      col = col.parentElement;
+    }
+    return col || comp;
+  }
+
+  function hasConversationMessagesInPane(comp) {
+    if (typeof document === 'undefined') return false;
+    const pane = resolveConversationPaneRoot(comp);
+    const scope = pane || document;
+    try {
+      const nodes = scope.querySelectorAll('[data-testid="user-message"], .agy-user-bubble-frame, [data-testid="agent-response"]');
+      for (let i = 0; i < nodes.length; i++) {
+        if (!isInsideSidebarNav(nodes[i])) return true;
+      }
+    } catch (_) {}
+    return false;
+  }
 
   function extractLivePageSignals(composerEl) {
     let explicitCid = '';
@@ -1446,28 +2457,40 @@
     let modelLabel = '';
     let quotaPct = null;
 
-    if (typeof window !== 'undefined' && window.location) {
-      const locStr = `${window.location.pathname || ''}${window.location.hash || ''}`;
-      const m = locStr.match(URL_CID_RE);
-      if (m) explicitCid = m[1].toLowerCase();
+    const comp = composerEl || state.composer;
+
+    // 1. Highest priority: direct cascade/conversation container of THIS composer (Split-View safe!)
+    if (comp && typeof comp.closest === 'function') {
+      try {
+        const ancestorAttrEl = comp.closest(CASCADE_ATTR_SEL);
+        if (ancestorAttrEl && !isInsideSidebarNav(ancestorAttrEl)) {
+          explicitCid = extractAttrCid(ancestorAttrEl);
+        }
+      } catch (_) {}
     }
 
-    const comp = composerEl || state.composer;
-    const inspectFiberChain = (rootNode) => {
+    const inspectFiberChain = (rootNode, allowIsWorking) => {
       if (!rootNode) return;
       try {
         const fk = Object.keys(rootNode).find((k) => k.startsWith('__reactFiber$'));
         if (!fk) return;
         let cur = rootNode[fk];
         let depth = 0;
-        while (cur && depth < 45) {
+        while (cur && depth < 48) {
           const p = cur.memoizedProps;
           if (p && typeof p === 'object') {
-            if (typeof p.isRunning === 'boolean' && p.isRunning) {
+            if (allowIsWorking && typeof p.isRunning === 'boolean' && p.isRunning) {
               isWorking = true;
             }
             if (!explicitCid) {
-              const rawCand = p.conversationId || p.cascadeId || p.trajectoryId || p.sessionId;
+              const rawCand =
+                p.conversationId ||
+                p.cascadeId ||
+                p.effectiveCascadeId ||
+                p.trajectoryId ||
+                p.sessionId ||
+                p['data-cascade-id'] ||
+                p['data-conversation-id'];
               if (typeof rawCand === 'string' && UUID_EXACT_RE.test(rawCand.trim())) {
                 explicitCid = rawCand.trim().toLowerCase();
               }
@@ -1488,41 +2511,45 @@
       } catch (_) {}
     };
 
-    if (comp) inspectFiberChain(comp);
-    if (!explicitCid && typeof document !== 'undefined') {
-      const mainBody = document.querySelector('[data-main-content-body="true"]');
-      if (mainBody && mainBody !== comp) inspectFiberChain(mainBody);
+    // 2. React Fiber chain of THIS composer
+    if (comp) inspectFiberChain(comp, true);
+
+    // 3. Window URL route (/c/<uuid> or ?conversationId=<uuid>) when single-pane or composer has no own tag
+    if (!explicitCid) {
+      explicitCid = extractLocationUrlCid();
     }
 
+    // 4. Main content container ONLY when it encloses this composer (NEVER scan sidebar history items!)
     if (!explicitCid && typeof document !== 'undefined') {
+      const mainBody = document.querySelector('[data-main-content-body="true"]');
+      if (mainBody && mainBody !== comp && (!comp || (typeof mainBody.contains === 'function' && mainBody.contains(comp)))) {
+        inspectFiberChain(mainBody, true);
+      }
+    }
+
+    if (!explicitCid && comp && typeof document !== 'undefined') {
       try {
-        const attrSel = '[data-conversation-id], [data-cascade-id], [data-trajectory-id], [data-session-id]';
-        const ancestorAttrEl = comp && comp.closest ? comp.closest(attrSel) : null;
-        const attrCandidates = ancestorAttrEl
-          ? [ancestorAttrEl]
-          : Array.from(document.querySelectorAll(attrSel));
-        for (let i = 0; i < attrCandidates.length; i++) {
-          const el = attrCandidates[i];
-          const val = (
-            el.getAttribute('data-conversation-id') ||
-            el.getAttribute('data-cascade-id') ||
-            el.getAttribute('data-trajectory-id') ||
-            el.getAttribute('data-session-id') ||
-            ''
-          ).trim();
-          if (UUID_EXACT_RE.test(val)) {
-            explicitCid = val.toLowerCase();
-            break;
+        const candidates = Array.from(document.querySelectorAll(CASCADE_ATTR_SEL));
+        for (let i = 0; i < candidates.length; i++) {
+          const el = candidates[i];
+          if (isInsideSidebarNav(el)) continue;
+          if (typeof el.contains === 'function' && el.contains(comp)) {
+            const val = extractAttrCid(el);
+            if (val) {
+              explicitCid = val;
+              break;
+            }
           }
         }
       } catch (_) {}
     }
 
-    if (!explicitCid && typeof document !== 'undefined') {
+    // 5. Strict aria-current="page" link (only when not on a blank launchpad/new route)
+    const pathname = (typeof window !== 'undefined' && window.location && window.location.pathname) || '';
+    const isBlankRoute = BLANK_ROUTE_RE.test(pathname);
+    if (!explicitCid && !isBlankRoute && typeof document !== 'undefined') {
       try {
-        const activeLink = document.querySelector(
-          'a[href*="/c/"][aria-current="page"], a[href*="/c/"][data-active="true"], a[href*="/c/"][data-state="active"], a[href*="/c/"].active, a[href*="/c/"].selected'
-        );
+        const activeLink = document.querySelector('a[href*="/c/"][aria-current="page"]');
         if (activeLink) {
           const href = String(activeLink.getAttribute('href') || '');
           const m = href.match(URL_CID_RE);
@@ -1531,8 +2558,13 @@
       } catch (_) {}
     }
 
+    if (explicitCid) {
+      state.everSawExplicitCid = true;
+    }
+
     if (!isWorking && typeof document !== 'undefined') {
-      const cancelBtn = document.querySelector('[data-testid="input-cancel-button"], button[aria-label="Stop execution"]');
+      const paneScope = resolveConversationPaneRoot(comp) || document;
+      const cancelBtn = paneScope.querySelector('[data-testid="input-cancel-button"], button[aria-label="Stop execution"]');
       if (cancelBtn && cancelBtn.offsetParent !== null) {
         isWorking = true;
       }
@@ -1540,26 +2572,39 @@
 
     let draftText = '';
     if (comp) {
-      const editor = comp.querySelector('textarea, [contenteditable="true"]');
+      const editor = findComposerEditor(comp) || comp.querySelector('textarea, [contenteditable="true"]');
       if (editor) {
-        draftText = (typeof editor.value === 'string' ? editor.value : (editor.textContent || '')).trim();
+        draftText = readEditorText(editor);
       }
     }
     const draftTokens = draftText.length > 0 ? Math.max(1, Math.round(draftText.length / 3.6)) : 0;
-    const cid = explicitCid || 'latest';
+
+    let cid = explicitCid;
+    if (!cid) {
+      let hasMultiSessionUi = state.everSawExplicitCid;
+      if (!hasMultiSessionUi && typeof document !== 'undefined') {
+        try {
+          hasMultiSessionUi = Boolean(
+            document.querySelector('[data-sidebar="true"] [data-cascade-id], aside [data-cascade-id], a[href*="/c/"]')
+          );
+        } catch (_) {}
+      }
+      if (isBlankRoute || (hasMultiSessionUi && !hasConversationMessagesInPane(comp))) {
+        cid = 'idle';
+      } else {
+        cid = 'latest';
+      }
+    }
 
     return { cid, explicitCid, isWorking, modelLabel, quotaPct, draftTokens, draftText };
   }
 
   function measureConversationDomChars() {
-    if (typeof document === 'undefined') return 0;
+    if (typeof document === 'undefined' || state.cid === 'idle') return 0;
     const comp = state.composer || resolveComposerRoot();
-    if (comp) {
-      let col = comp.parentElement;
-      while (col && col.parentElement && col.clientHeight < 260) {
-        col = col.parentElement;
-      }
-      if (col) return (col.textContent || '').length;
+    const pane = resolveConversationPaneRoot(comp);
+    if (pane && !isInsideSidebarNav(pane)) {
+      return (pane.textContent || '').length;
     }
     const main = document.querySelector('[data-main-content-body="true"]');
     return main ? (main.textContent || '').length : 0;
@@ -1570,7 +2615,7 @@
     if (!ic || !state.barEl) return;
 
     const docTitle = typeof document !== 'undefined' ? (document.title || '') : '';
-    const displayCid = state.resolvedCid || (state.cid !== 'latest' ? state.cid : '');
+    const displayCid = state.resolvedCid || (state.cid !== 'latest' && state.cid !== 'idle' ? state.cid : '');
     const sessionSig = `${docTitle}|${displayCid}`;
     if (sessionSig !== state.lastSessionSig) {
       state.lastSessionSig = sessionSig;
@@ -1605,21 +2650,34 @@
 
   function switchActiveConversation(nextCid) {
     if (!nextCid || nextCid === state.cid) return;
-    if (state.cid === 'latest' && nextCid !== 'latest' && state.resolvedCid === nextCid) {
+    if (state.cid === 'latest' && nextCid !== 'latest' && nextCid !== 'idle' && state.resolvedCid === nextCid) {
       // Seamless promotion from 'latest' fallback to exact verified UUID of the same conversation
       abortActiveStream();
       state.cid = nextCid;
+      if (
+        typeof window !== 'undefined' &&
+        window.__AGY_SQUAD_RAID__ &&
+        typeof window.__AGY_SQUAD_RAID__.lockActiveCid === 'function'
+      ) {
+        try { window.__AGY_SQUAD_RAID__.lockActiveCid(nextCid); } catch (_) {}
+      }
       connectTelemetryStream(nextCid);
       return;
     }
 
     abortActiveStream();
+    hideUserMessageEcho();
+    resetConversationCompactState();
     state.cidEpoch++;
     state.fetchInFlight = false;
     state.cid = nextCid;
-    state.resolvedCid = nextCid !== 'latest' ? nextCid : '';
+    state.resolvedCid = (nextCid !== 'latest' && nextCid !== 'idle') ? nextCid : '';
+    restoreCompactHistory(getTrackableCompactCid());
     state.hasTelemetry = false;
     state.serverIsWorking = null;
+    state.isWorking = false;
+    state.wasWorking = false;
+    state.pollWasWorking = false;
     state.serverCtxTokens = 0;
     state.serverCacheTokens = 0;
     state.serverTurnTokens = 0;
@@ -1627,13 +2685,20 @@
     state.serverTurnSteps = 0;
     state.serverTurnCount = 0;
     state.serverStepCount = 0;
+    state.serverTurnCtxDelta = 0;
     state.serverModelName = '';
     state.dispCtxTokens = 0;
     state.dispTurnTokens = 0;
+    state.targetCtxTokens = 0;
+    state.targetTurnTokens = 0;
+    state.liveDomTurnEst = 0;
+    state.workStateItems = [];
     state.lastServerStepIdx = -1;
     state.lastSlashSeq = -1;
     state.bladeBonusHeat = 0;
     state.typingHeatPulse = 0;
+    state.lastRenderedBladeHeat = -1;
+    state.lastRenderedBladeTier = '';
     state.forceSignalSample = true;
 
     if (
@@ -1643,13 +2708,23 @@
     ) {
       try { window.__AGY_SQUAD_RAID__.resetConversation(nextCid); } catch (_) {}
     }
+    if (
+      typeof window !== 'undefined' &&
+      window.__AGY_BIO_AUDIO__ &&
+      typeof window.__AGY_BIO_AUDIO__.resetConversation === 'function'
+    ) {
+      try { window.__AGY_BIO_AUDIO__.resetConversation(nextCid); } catch (_) {}
+    }
 
     applyCrisisVisual(false);
     refreshSessionAndElementIcons();
     computeAndApplyBladeHeat();
+    renderDomValues();
 
-    connectTelemetryStream(nextCid);
-    fetchDaemonTelemetry(nextCid);
+    if (nextCid !== 'idle') {
+      connectTelemetryStream(nextCid);
+      fetchDaemonTelemetry(nextCid);
+    }
   }
 
   function recomputeTargets(nowMs) {
@@ -1669,10 +2744,9 @@
     const sig = state.cachedSignals;
     const domChars = state.cachedDomChars;
 
-    if (sig.explicitCid && sig.explicitCid !== state.cid) {
-      switchActiveConversation(sig.explicitCid);
-    } else if (!state.cid) {
-      switchActiveConversation(sig.cid || 'latest');
+    const desiredCid = sig.explicitCid || sig.cid || 'idle';
+    if (desiredCid !== state.cid) {
+      switchActiveConversation(desiredCid);
     }
 
     state.isWorking = Boolean(sig.isWorking || state.serverIsWorking);
@@ -1698,6 +2772,7 @@
       if (state.cid && !state.streamConnected) fetchDaemonTelemetry(state.cid);
     } else if (!state.isWorking && state.wasWorking) {
       computeAndApplyBladeHeat();
+      evaluateAutoCompact({ firstSync: false });
       if (state.cid && !state.streamConnected) fetchDaemonTelemetry(state.cid);
     }
     state.wasWorking = state.isWorking;
@@ -1727,6 +2802,12 @@
 
       state.targetTurnTokens = liveTurn;
       state.targetCtxTokens = liveCtx;
+    } else if (state.cid === 'idle') {
+      state.targetCtxTokens = state.draftTokens;
+      state.targetTurnTokens = 0;
+      if (shouldSampleDom) {
+        computeAndApplyBladeHeat();
+      }
     } else {
       const estCtx = Math.max(240, Math.round(domChars / 3.7));
       state.targetCtxTokens = estCtx + state.draftTokens;
@@ -1829,6 +2910,7 @@
         setTextIfChanged(state.detTurnVal, `+${formatExactInt(turnRounded)} token${stepsTxt}`);
       }
       computeAndApplyBladeHeat();
+      refreshBladeCompactUi();
       if (state.detDraftVal) {
         setTextIfChanged(state.detDraftVal, state.draftTokens > 0 ? `+${formatExactInt(state.draftTokens)} token` : '0 token');
       }
@@ -1847,6 +2929,7 @@
         const items = Array.isArray(state.workStateItems) ? state.workStateItems : [];
         if (items.length === 0) {
           state.detWorkStateRow.style.display = 'none';
+          setTextIfChanged(state.detWorkStateVal, '');
         } else {
           state.detWorkStateRow.style.display = 'flex';
           const doneCnt = items.filter((x) => x.status === 'done').length;
@@ -2112,7 +3195,7 @@
       return existing;
     }
 
-    teardown();
+    teardownInternal(true);
     state.mountEpoch++;
 
     state.composer = composer;
@@ -2246,13 +3329,14 @@
     const rCache = createIconRow(ic ? ic.getFuncSvg('kv_cache', 13) : '', 'Bộ nhớ đệm (KV):');
     const rTurn = createIconRow('', 'Token lượt hiện tại:');
     const rBlade = createIconRow(ic ? ic.getFuncSvg('katana_cast', 13) : '', 'Nhiệt độ Nhật Luân Đao:');
+    const rCompact = createIconRow(ic ? ic.getFuncSvg('katana_cast', 13) : '', 'Nén phiên (/compact):');
     const rDraft = createIconRow(ic ? ic.getFuncSvg('draft_brush', 13) : '', 'Đang gõ trong ô chat:');
     const rSession = createIconRow(ic ? ic.getFuncSvg('session_sum', 13) : '', 'Tổng sinh ra cả phiên:');
     const rModel = createIconRow(ic ? ic.getFuncSvg('model_quota', 13) : '', 'Mô hình & Hạn mức:');
     const rTasks = createIconRow(ic ? ic.getFuncSvg('breathing_forms', 13) : '', 'Tiến độ nhiệm vụ:');
     rTasks.row.style.display = 'none';
 
-    [rCtx, rCache, rTurn, rBlade, rDraft, rSession, rModel, rTasks].forEach((r) => rows.appendChild(r.row));
+    [rCtx, rCache, rTurn, rBlade, rCompact, rDraft, rSession, rModel, rTasks].forEach((r) => rows.appendChild(r.row));
 
     pop.appendChild(hdr);
     pop.appendChild(meterWrap);
@@ -2337,6 +3421,7 @@
     state.detTurnIcon = rTurn.icoEl;
     state.detTurnVal = rTurn.valEl;
     state.detBladeVal = rBlade.valEl;
+    state.detCompactVal = rCompact.valEl;
     state.detDraftVal = rDraft.valEl;
     state.detSessionVal = rSession.valEl;
     state.detModelVal = rModel.valEl;
@@ -2347,6 +3432,7 @@
     state.lastElemKey = '';
     applyThemeColors(bar, themeCfg, themeName);
     computeAndApplyBladeHeat();
+    refreshBladeCompactUi();
 
     // Observe composer.clientWidth directly for Split-View narrow columns (MacBook 13" 2-pane / 3-pane)
     const syncCompactTier = () => {
@@ -2387,7 +3473,24 @@
     };
     ctxBtn.addEventListener('click', onTogglePopover);
     turnBtn.addEventListener('click', onTogglePopover);
-    bladeBtn.addEventListener('click', onTogglePopover);
+
+    bladeBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (ev.shiftKey) {
+        toggleAutoCompactMode();
+        return;
+      }
+      if (state.popoverOpen) {
+        setPopoverOpen(false);
+      }
+      triggerCompactSession({ source: 'manual' });
+    });
+
+    bladeBtn.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggleAutoCompactMode();
+    });
 
     const quickToggleBioAudio = () => {
       const bio = typeof window !== 'undefined' ? window.__AGY_BIO_AUDIO__ : null;
@@ -2465,20 +3568,41 @@
       quickTogglePrivacyShield();
     });
 
+    const onManualCompactSubmitted = (trimmedText) => {
+      if (trimmedText !== COMPACT_COMMAND) return false;
+      const wasSuppressed = Date.now() <= state.suppressNextCompactEchoUntil;
+      if (!wasSuppressed) {
+        if (state.autoCompactTimer) {
+          clearTimeout(state.autoCompactTimer);
+          state.autoCompactTimer = 0;
+        }
+        state.autoCompactPending = false;
+        state.compactLastFailed = false;
+        if (state.hasTelemetry && Math.round(state.serverCtxTokens || 0) >= AUTO_COMPACT_THRESHOLD) {
+          state.autoCompactDisarmed = true;
+          state.autoCompactLastAt = Date.now();
+          state.autoCompactTriggeredCtx = Math.round(state.serverCtxTokens || 0);
+          state.autoCompactTriggeredTurn = state.serverTurnCount || 0;
+        }
+        persistCompactHistory();
+        refreshBladeCompactUi();
+      }
+      return wasSuppressed;
+    };
+
     // Capture Enter key & Send button click BEFORE React clears the editor so user's message always shows!
     const onCaptureKeyDown = (ev) => {
       if (ev.isComposing || ev.keyCode === 229) return;
       if (ev.key !== 'Enter' || ev.shiftKey || ev.altKey || ev.ctrlKey || ev.metaKey) return;
       const target = ev.target;
       if (!target || (target.closest && target.closest('#agy-shinobu-npc-wrap'))) return;
-      const editor = composer.querySelector('textarea, [contenteditable="true"]');
+      const editor = findComposerEditor(composer) || composer.querySelector('textarea, [contenteditable="true"]');
       if (!editor || (target !== editor && !(editor.contains && editor.contains(target)))) return;
-      const hasMenu = document.querySelector('[role="listbox"], [data-radix-popper-content-wrapper]');
-      if (hasMenu && hasMenu.offsetParent !== null) return;
+      if (hasVisibleSlashOrPopupMenu()) return;
 
-      const raw = typeof editor.value === 'string' ? editor.value : (editor.textContent || '');
-      if (raw && raw.trim()) {
-        showUserMessageEcho(raw.trim());
+      const trimmedRaw = readEditorText(editor);
+      if (trimmedRaw && !onManualCompactSubmitted(trimmedRaw)) {
+        showUserMessageEcho(trimmedRaw);
       }
     };
 
@@ -2487,19 +3611,23 @@
       if (!btn || !composer.contains(btn)) return;
       if (
         btn.closest(`#${HUD_BAR_ID}`) ||
+        btn.closest(`#${ECHO_BAR_ID}`) ||
         btn.closest('#agy-shinobu-npc-wrap') ||
         btn.closest('agy-hashira-squad') ||
-        btn.classList.contains('agy-chibi-hitbox')
+        btn.closest('agy-chibi-aura') ||
+        btn.classList.contains('agy-chibi-hitbox') ||
+        btn.classList.contains('agy-echo-close')
       ) {
         return;
       }
       const aria = String(btn.getAttribute('aria-label') || btn.title || '').toLowerCase();
       const tid = String(btn.getAttribute('data-testid') || '').toLowerCase();
-      if (btn.type === 'submit' || /send|submit|gửi/.test(aria) || /send|submit/.test(tid)) {
-        const editor = composer.querySelector('textarea, [contenteditable="true"]');
-        const raw = editor ? (typeof editor.value === 'string' ? editor.value : (editor.textContent || '')) : '';
-        if (raw && raw.trim()) {
-          showUserMessageEcho(raw.trim());
+      const explicitSubmit = typeof btn.getAttribute === 'function' && String(btn.getAttribute('type') || '').trim().toLowerCase() === 'submit';
+      if (explicitSubmit || /\b(?:send|submit)\b/.test(aria) || /\b(?:send|submit)\b/.test(tid) || /^(?:gửi)(?:\b|\s|$)|gửi\s+(?:tin\s+nhắn|lệnh)/i.test(aria)) {
+        const editor = findComposerEditor(composer) || composer.querySelector('textarea, [contenteditable="true"]');
+        const trimmedRaw = editor ? readEditorText(editor) : '';
+        if (trimmedRaw && !onManualCompactSubmitted(trimmedRaw)) {
+          showUserMessageEcho(trimmedRaw);
         }
       }
     };
@@ -2525,6 +3653,17 @@
       state.lastActivityAt = Date.now();
       state.typingHeatPulse = Math.min(14, +(state.typingHeatPulse + 2.4).toFixed(2));
       computeAndApplyBladeHeat();
+      if (state.compactLastFailed) {
+        const ed = findComposerEditor(composer);
+        if (!ed || readEditorText(ed) !== COMPACT_COMMAND) {
+          state.compactLastFailed = false;
+          persistCompactHistory();
+          refreshBladeCompactUi();
+        }
+      }
+      if (state.autoCompactPending) {
+        evaluateAutoCompact({ firstSync: false });
+      }
       ensureOdometerRunning();
     };
     const onVis = () => {
@@ -2534,13 +3673,26 @@
           connectTelemetryStream(state.cid);
           fetchDaemonTelemetry(state.cid);
         }
+        if (state.autoCompactPending) {
+          evaluateAutoCompact({ firstSync: false });
+        }
         ensureOdometerRunning();
+      }
+    };
+
+    const onSplitPaneFocusIn = (ev) => {
+      const t = ev && ev.target;
+      if (!t || typeof t.closest !== 'function' || !state.barEl || !state.barEl.isConnected) return;
+      const focusedComp = t.closest('.surface-composer, [data-testid="composer"]');
+      if (focusedComp && focusedComp !== state.composer && !isInsideSidebarNav(focusedComp) && isElementVisiblyLaidOut(focusedComp)) {
+        mountTokenHud(focusedComp, state.themeCfg || {}, state.themeKeyHint);
       }
     };
 
     composer.addEventListener('keydown', onCaptureKeyDown, true);
     composer.addEventListener('click', onCaptureSendClick, true);
     document.addEventListener('click', onOutside, true);
+    document.addEventListener('focusin', onSplitPaneFocusIn, true);
     document.addEventListener('keydown', onKey);
     composer.addEventListener('input', onComposerInput);
     document.addEventListener('visibilitychange', onVis);
@@ -2548,6 +3700,7 @@
     state.cleanups.push(() => composer.removeEventListener('keydown', onCaptureKeyDown, true));
     state.cleanups.push(() => composer.removeEventListener('click', onCaptureSendClick, true));
     state.cleanups.push(() => document.removeEventListener('click', onOutside, true));
+    state.cleanups.push(() => document.removeEventListener('focusin', onSplitPaneFocusIn, true));
     state.cleanups.push(() => document.removeEventListener('keydown', onKey));
     state.cleanups.push(() => composer.removeEventListener('input', onComposerInput));
     state.cleanups.push(() => document.removeEventListener('visibilitychange', onVis));
@@ -2558,7 +3711,13 @@
       if (!state.barEl || !state.barEl.isConnected || (state.composer && !state.composer.isConnected)) {
         clearInterval(state.pollTimer);
         state.pollTimer = 0;
+        clearCompactTimers();
         abortActiveStream();
+        return;
+      }
+      const bestComp = resolveComposerRoot();
+      if (bestComp && bestComp !== state.composer && bestComp.isConnected) {
+        mountTokenHud(bestComp, state.themeCfg || {}, state.themeKeyHint);
         return;
       }
       refreshUtilityButtonStates();
@@ -2566,12 +3725,9 @@
       state.cachedSignals = sig;
       state.lastSignalSampleAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
-      if (sig.explicitCid && sig.explicitCid !== state.cid) {
-        switchActiveConversation(sig.explicitCid);
-        ensureOdometerRunning();
-        return;
-      } else if (!state.cid) {
-        switchActiveConversation(sig.cid || 'latest');
+      const desiredCid = sig.explicitCid || sig.cid || 'idle';
+      if (desiredCid !== state.cid) {
+        switchActiveConversation(desiredCid);
         ensureOdometerRunning();
         return;
       }
@@ -2604,14 +3760,21 @@
       }
       state.pollWasWorking = curWorking;
 
-      if (decayBladeHeatWhenIdle(now) || curWorking !== state.isWorking) {
+      const workChanged = curWorking !== state.isWorking;
+      if (workChanged) {
+        state.isWorking = curWorking;
+      }
+      if (decayBladeHeatWhenIdle(now) || workChanged) {
         computeAndApplyBladeHeat();
+      }
+      if ((workChanged && !curWorking) || state.autoCompactPending) {
+        evaluateAutoCompact({ firstSync: false });
       }
 
       const isHiddenOrUnfocused =
         typeof document !== 'undefined' && (document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus()));
 
-      if (!state.streamConnected && state.cid) {
+      if (!state.streamConnected && state.cid && state.cid !== 'idle') {
         const minGap = isHiddenOrUnfocused ? Math.max(2800, state.fallbackBackoffMs) : state.fallbackBackoffMs;
         if (now >= state.nextFallbackAt || (sig.isWorking && !isHiddenOrUnfocused && now - (state.nextFallbackAt - state.fallbackBackoffMs) >= minGap)) {
           fetchDaemonTelemetry(state.cid);
@@ -2624,6 +3787,16 @@
     }, 850);
 
     const nowInit = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const initSig = extractLivePageSignals(composer);
+    state.cachedSignals = initSig;
+    state.lastSignalSampleAt = nowInit;
+    state.cid = initSig.cid || 'idle';
+    state.resolvedCid = initSig.explicitCid || '';
+    restoreCompactHistory(getTrackableCompactCid());
+    refreshBladeCompactUi();
+    state.wasWorking = initSig.isWorking;
+    state.pollWasWorking = initSig.isWorking;
+
     const initChars = measureConversationDomChars();
     state.turnBaselineDomChars = initChars;
     state.stepBaselineDomChars = initChars;
@@ -2632,27 +3805,61 @@
     state.lastStepSeenAt = nowInit;
     state.lastHeatDecayAt = Date.now();
 
-    const initSig = extractLivePageSignals(composer);
-    state.cachedSignals = initSig;
-    state.lastSignalSampleAt = nowInit;
-    state.cid = initSig.cid || 'latest';
-    state.resolvedCid = initSig.explicitCid || '';
-    state.wasWorking = initSig.isWorking;
-    state.pollWasWorking = initSig.isWorking;
-    if (state.cid) {
+    if (
+      typeof window !== 'undefined' &&
+      window.__AGY_SQUAD_RAID__ &&
+      typeof window.__AGY_SQUAD_RAID__.resetConversation === 'function'
+    ) {
+      try { window.__AGY_SQUAD_RAID__.resetConversation(state.cid); } catch (_) {}
+    }
+
+    if (state.cid && state.cid !== 'idle') {
       connectTelemetryStream(state.cid);
       fetchDaemonTelemetry(state.cid).then(() => ensureOdometerRunning());
+    } else {
+      renderDomValues();
     }
     ensureOdometerRunning();
 
     return bar;
   }
 
-  function teardown() {
+  function teardownInternal(preserveSessionHistory) {
     state.mountEpoch++;
     state.cidEpoch++;
     state.fetchInFlight = false;
     abortActiveStream();
+    resetConversationCompactState();
+    if (!preserveSessionHistory) {
+      state.everSawExplicitCid = false;
+      compactHistoryByCid.clear();
+    }
+    state.cid = '';
+    state.resolvedCid = '';
+    state.hasTelemetry = false;
+    state.serverIsWorking = null;
+    state.isWorking = false;
+    state.wasWorking = false;
+    state.pollWasWorking = false;
+    state.serverCtxTokens = 0;
+    state.serverCacheTokens = 0;
+    state.serverTurnTokens = 0;
+    state.serverTotalOutTokens = 0;
+    state.serverTurnSteps = 0;
+    state.serverTurnCount = 0;
+    state.serverStepCount = 0;
+    state.serverTurnCtxDelta = 0;
+    state.serverModelName = '';
+    state.dispCtxTokens = 0;
+    state.dispTurnTokens = 0;
+    state.targetCtxTokens = 0;
+    state.targetTurnTokens = 0;
+    state.liveDomTurnEst = 0;
+    state.workStateItems = [];
+    state.lastServerStepIdx = -1;
+    state.lastSlashSeq = -1;
+    state.bladeBonusHeat = 0;
+    state.typingHeatPulse = 0;
     if (state.composerRo) {
       try { state.composerRo.disconnect(); } catch (_) {}
       state.composerRo = null;
@@ -2728,12 +3935,19 @@
     state.detTurnIcon = null;
     state.detTurnVal = null;
     state.detBladeVal = null;
+    state.detCompactVal = null;
     state.detDraftVal = null;
     state.detSessionVal = null;
     state.detModelVal = null;
+    state.detWorkStateRow = null;
+    state.detWorkStateVal = null;
     state.detStatusBadge = null;
     state.cachedSignals = null;
     state.popoverOpen = false;
+  }
+
+  function teardown() {
+    teardownInternal(false);
   }
 
   const api = {
@@ -2751,6 +3965,20 @@
       state.bonusHoldUntil = Date.now() + 18000;
       computeAndApplyBladeHeat();
     },
+    triggerCompact: (opts) => triggerCompactSession(opts),
+    isAutoCompactEnabled: () => Boolean(state.autoCompactEnabled),
+    setAutoCompactEnabled: (enabled, opts) => setAutoCompactEnabled(enabled, opts),
+    getAutoCompactThreshold: () => AUTO_COMPACT_THRESHOLD,
+    getCompactState: () => ({
+      enabled: Boolean(state.autoCompactEnabled),
+      threshold: AUTO_COMPACT_THRESHOLD,
+      rearmBelow: AUTO_COMPACT_REARM_BELOW,
+      pending: Boolean(state.autoCompactPending),
+      disarmed: Boolean(state.autoCompactDisarmed),
+      inFlight: Boolean(state.compactInFlight),
+      failed: Boolean(state.compactLastFailed),
+      waitingLiveTurn: Boolean(state.autoCompactWaitingLiveTurn)
+    }),
     triggerCrisisSlashDemo: (reason) => {
       executeDemonSlayCelebration(Date.now(), reason || 'Ác Quỷ Diệt Sát • Toàn bộ kiểm thử Exit 0!');
     },

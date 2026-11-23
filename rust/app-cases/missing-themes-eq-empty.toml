@@ -1,0 +1,4 @@
+bin.name = "build_payload"
+args = ["--themes="]
+status.code = 2
+fs.sandbox = true

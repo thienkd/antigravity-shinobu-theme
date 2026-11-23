@@ -156,6 +156,7 @@
     headerCountEl: null,
     unitsWrapEl: null,
     activeCid: '',
+    lockedCid: '',
     unitsById: new Map(),           // subId -> unit record
     assignedHeroBySubId: new Map(), // subId -> heroKey (bounded <= 150)
     seenCompletedIds: new Set(),
@@ -187,11 +188,41 @@
 
   function resolveComposer() {
     if (typeof document === 'undefined') return null;
-    return (
-      document.querySelector('.surface-composer') ||
-      document.querySelector('[data-testid="composer"]') ||
-      document.querySelector('form:has(textarea)')
-    );
+    let all = [];
+    try {
+      all = Array.from(document.querySelectorAll('.surface-composer, [data-testid="composer"]'));
+      if (all.length === 0) {
+        const f = document.querySelector('form:has(textarea)');
+        if (f) all = [f];
+      }
+    } catch (_) {
+      return document.querySelector('.surface-composer') || document.querySelector('[data-testid="composer"]');
+    }
+    if (all.length === 0) return null;
+    if (all.length === 1) return all[0];
+
+    const ae = document.activeElement;
+    if (ae) {
+      const focused = all.find((c) => c === ae || (typeof c.contains === 'function' && c.contains(ae)));
+      if (focused) return focused;
+    }
+    if (typeof window !== 'undefined' && window.location) {
+      const locStr = `${window.location.pathname || ''}${window.location.hash || ''}${window.location.search || ''}`;
+      const m = locStr.match(/\/c\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+      if (m) {
+        const urlCid = m[1].toLowerCase();
+        const byUrl = all.find((c) => {
+          const anc = typeof c.closest === 'function'
+            ? c.closest('[data-conversation-id], [data-cascade-id], [data-trajectory-id], [data-session-id]')
+            : null;
+          if (!anc) return false;
+          const v = String(anc.getAttribute('data-conversation-id') || anc.getAttribute('data-cascade-id') || '').trim().toLowerCase();
+          return v === urlCid;
+        });
+        if (byUrl) return byUrl;
+      }
+    }
+    return all[0];
   }
 
   function getHostCharId() {
@@ -1100,9 +1131,16 @@
     refreshSquadVisibility();
   }
 
+  function lockActiveCid(nextCid) {
+    const normCid = typeof nextCid === 'string' ? nextCid.trim() : '';
+    state.activeCid = normCid;
+    state.lockedCid = (normCid && normCid !== 'latest') ? normCid : '';
+  }
+
   function resetConversation(nextCid) {
     const normCid = typeof nextCid === 'string' ? nextCid.trim() : '';
     state.activeCid = normCid;
+    state.lockedCid = (normCid && normCid !== 'latest') ? normCid : '';
     state.seenCompletedIds.clear();
     state.lastSlashSeqHandled = 0;
 
@@ -1201,11 +1239,15 @@
     if (!snap || typeof snap !== 'object') return;
     const isSimSync = Boolean(snap.__fromSim);
 
-    if (!isSimSync && snap.cid) {
-      if (state.activeCid && state.activeCid !== 'latest' && snap.cid !== state.activeCid) {
-        resetConversation(snap.cid);
-      } else if (!state.activeCid || state.activeCid === 'latest') {
-        state.activeCid = snap.cid;
+    if (!isSimSync) {
+      if (state.activeCid === 'idle' || state.lockedCid === 'idle') return;
+      if (state.lockedCid && snap.cid && snap.cid !== state.lockedCid) return;
+      if (snap.cid) {
+        if (state.activeCid && state.activeCid !== 'latest' && snap.cid !== state.activeCid) {
+          resetConversation(snap.cid);
+        } else if (!state.activeCid || state.activeCid === 'latest') {
+          state.activeCid = snap.cid;
+        }
       }
     }
 
@@ -1453,6 +1495,7 @@
     state.simActive = false;
     state.lastSlashSeqHandled = 0;
     state.activeCid = '';
+    state.lockedCid = '';
 
     if (typeof document !== 'undefined') {
       document.querySelectorAll(SQUAD_TAG).forEach((el) => el.remove());
@@ -1473,6 +1516,7 @@
     mount: ensureMounted,
     sync,
     resetConversation,
+    lockActiveCid,
     simulateRaid,
     stopSimulation,
     triggerVictoryStamp,

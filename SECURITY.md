@@ -29,6 +29,7 @@ Because **Antigravity Custom Theme Engine** integrates with the desktop IDE via 
 ### 4. Renderer XSS, CSS & Indirect-Prompt-Injection Prevention
 - **Untrusted Telemetry Isolation**: Conversation titles, user echoes, and subagent `Role` / `toolSummary` fields parsed from `transcript.jsonl` are rendered strictly via `.textContent` (never `.innerHTML`), neutralizing indirect prompt injection payloads.
 - **Theme & `.agytheme` Sanitizer**: Imported JSON/`.agytheme` packages block prototype-pollution keys (`__proto__`, `constructor`, `prototype`), enforce strict CSS URL/value allowlists, and strip executable elements/handlers (`<script>`, `<foreignObject>`, `on*=`, `javascript:`) from custom SVGs both at build time and import time.
+- **LLM Hook Indirect-Prompt-Injection Immunity (`PreInvocation`)**: Dynamic theme persona synchronization resolves strictly through a closed, immutable enum allowlist (`themes/personas.json`). Untrusted strings from `.agytheme` packages or `theme_config.json` (`themeName`, `concept`, `npc.dialogs`, or arbitrary `*Prompt*` keys) are stripped and **never** interpolated into `systemMessage` outputs, preventing 1-click prompt injection and auto-muting immediately whenever `Privacy Shield` (`Alt+Shift+P`) or `Deep Focus Mode` is active.
 
 ### 5. Privacy, Log Redaction & Local Trust Boundary
 - **Automatic PII Redaction**: `daemon.log` automatically masks the OS home directory (`~`) and redacts conversation/project UUIDs, written with `0600` user-only permissions on POSIX systems.
