@@ -1402,8 +1402,11 @@ describe('F15 (CLI) — Bộ công cụ scripts/* & Hợp đồng verify_cdp.js'
                 }
             );
 
-            // 2. Tạo cấu trúc thư mục & file .lnk cô lập hoàn toàn trong os.tmpdir()
-            const tmp = makeTempDir('agy-test-lnk-unicode-');
+            // 2. Tạo cấu trúc thư mục & file .lnk cô lập hoàn toàn trong os.tmpdir() (chuẩn hóa đường dẫn 8.3 RUNNER~1 trên Windows CI)
+            const rawTmp = makeTempDir('agy-test-lnk-unicode-');
+            const tmp = (fs.realpathSync && typeof fs.realpathSync.native === 'function')
+                ? fs.realpathSync.native(rawTmp)
+                : fs.realpathSync(rawTmp);
             const asciiDir = path.join(tmp, 'AsciiDir');
             const unicodeRoot = path.join(tmp, 'Th\u1eed Nghi\u1ec7m Ti\u1ebfng Vi\u1ec7t');
             const unicodeSubDir = path.join(unicodeRoot, "O'Brien");

@@ -44,17 +44,23 @@ const DAEMON_ARG_RE = new RegExp('(?:^|[\\s"\'\\\\/])theme_daemon\\.js(?=$|[\\s"
 const UNINSTALL_SCRIPT_TOKEN_RE = /(?:^|[\\/])uninstall\.js$/i;
 
 function normalizePathForCompare(p) {
-    const resolved = path.resolve(String(p || ''));
+    let resolved = path.resolve(String(p || ''));
+    try {
+        resolved = resolved.normalize('NFC');
+    } catch (_) {}
     return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
 
 function resolveCanonicalPath(p) {
     const resolved = path.resolve(String(p || ''));
     try {
-        const real = fs.realpathSync(resolved);
+        let real = fs.realpathSync(resolved);
+        try { real = real.normalize('NFC'); } catch (_) {}
         return process.platform === 'win32' ? real.toLowerCase() : real;
     } catch (_) {
-        return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+        let fallback = resolved;
+        try { fallback = fallback.normalize('NFC'); } catch (__) {}
+        return process.platform === 'win32' ? fallback.toLowerCase() : fallback;
     }
 }
 
@@ -200,18 +206,29 @@ function isTargetDaemonCommand(cmdLine, procHint = '', options = {}) {
         return false;
     }
 
-    const targetVariants = [RESOLVED_DAEMON_JS];
+    const targetVariantsSet = new Set([RESOLVED_DAEMON_JS]);
     try {
         const real = fs.realpathSync(RESOLVED_DAEMON_JS);
-        if (real && real !== RESOLVED_DAEMON_JS) targetVariants.push(real);
+        if (real) targetVariantsSet.add(real);
     } catch (_) {}
+    for (const v of Array.from(targetVariantsSet)) {
+        if (v.startsWith('/private/var/')) targetVariantsSet.add(v.slice('/private'.length));
+        else if (v.startsWith('/var/')) targetVariantsSet.add('/private' + v);
+    }
+    for (const v of Array.from(targetVariantsSet)) {
+        try { targetVariantsSet.add(v.normalize('NFC')); } catch (_) {}
+        try { targetVariantsSet.add(v.normalize('NFD')); } catch (_) {}
+    }
+    const targetVariants = Array.from(targetVariantsSet);
     const flags = process.platform === 'win32' ? 'i' : '';
+    let normalizedCmdLine = cmdLine;
+    try { normalizedCmdLine = cmdLine.normalize('NFC'); } catch (_) {}
     for (const variant of targetVariants) {
         const sepPattern = process.platform === 'win32'
             ? escapeRegExp(variant).replace(/\\\\/g, '[\\\\/]')
             : escapeRegExp(variant);
         const exactBoundaryRe = new RegExp(`(?:^|\\s)${sepPattern}(?=$|\\s)`, flags);
-        if (exactBoundaryRe.test(cmdLine)) return true;
+        if (exactBoundaryRe.test(cmdLine) || exactBoundaryRe.test(normalizedCmdLine)) return true;
     }
     return false;
 }
@@ -340,9 +357,11 @@ function isVerifiedDaemonProcess(pid, options = {}) {
         }
     }
 
+    const utf8PsEnv = { ...process.env, LC_ALL: 'en_US.UTF-8', LANG: 'en_US.UTF-8' };
     try {
         const cmdline = execFileSync('ps', ['-ww', '-p', String(pid), '-o', 'command='], {
             encoding: 'utf8',
+            env: utf8PsEnv,
             timeout: 3000,
             stdio: ['ignore', 'pipe', 'ignore'],
         }).trim();
@@ -626,9 +645,11 @@ function findOrphanDaemonPids(excludePids = new Set()) {
         }
     }
 
+    const utf8PsEnv = { ...process.env, LC_ALL: 'en_US.UTF-8', LANG: 'en_US.UTF-8' };
     try {
-        const psOut = execFileSync('ps', ['-ax', '-o', 'pid=,command='], {
+        const psOut = execFileSync('ps', ['-ax', '-ww', '-o', 'pid=,command='], {
             encoding: 'utf8',
+            env: utf8PsEnv,
             timeout: 3000,
             stdio: ['ignore', 'pipe', 'ignore'],
         });
