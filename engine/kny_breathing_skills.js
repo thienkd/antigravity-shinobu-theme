@@ -3171,6 +3171,36 @@
     return k && typeof k === 'object' ? k : null;
   }
 
+  function getChibi3dEngine() {
+    const winC3d = typeof window !== 'undefined' && window ? window.__AGY_KNY_CHIBI_3D__ : null;
+    if (winC3d && typeof winC3d.renderStageChibi3D === 'function') return winC3d;
+    const scC3d = ROOT_SCOPE && ROOT_SCOPE.__AGY_KNY_CHIBI_3D__;
+    if (scC3d && typeof scC3d.renderStageChibi3D === 'function') return scC3d;
+    const v = get3DVfxKernel();
+    return v && v.chibi3d && typeof v.chibi3d.renderStageChibi3D === 'function' ? v.chibi3d : null;
+  }
+
+  function isStageChibi3dEnabled(opts, charId) {
+    const c3d = getChibi3dEngine();
+    if (!c3d) return false;
+    const o = opts || {};
+    if (o.chibi3dEnabled === false) return false;
+    if (o.themeCfg && (o.themeCfg.chibi3dEnabled === false || o.themeCfg.isMultiversePreset)) return false;
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage.getItem('agy_chibi_3d_v1') === 'false') {
+        return false;
+      }
+    } catch (_) {}
+    if (o.allowProcedural3d === true || (o.themeCfg && o.themeCfg.allowProcedural3d === true)) {
+      return true;
+    }
+    const cid = charId || o.charId || (o.themeCfg && (o.themeCfg.fxMode || o.themeCfg.charId)) || 'shinobu';
+    if (typeof c3d.hasRealGlbModel === 'function') {
+      return Boolean(c3d.hasRealGlbModel(cid));
+    }
+    return false;
+  }
+
   function finiteNum(val, fallback) {
     const n = Number(val);
     return Number.isFinite(n) ? n : fallback;
@@ -3452,6 +3482,9 @@
     const sRgb = hexToRgb(skill.secondaryColor);
     const aRgb = hexToRgb(skill.accentColor);
     const pScale = clamp(finiteNum(actor.pScale, 1), 0.45, 2.35);
+    const use3dStage = isStageChibi3dEnabled(rOpts, skill && skill.charId);
+    const c3d = use3dStage ? getChibi3dEngine() : null;
+    const allowProc3d = Boolean((rOpts && rOpts.allowProcedural3d) || (rOpts && rOpts.themeCfg && rOpts.themeCfg.allowProcedural3d));
 
     // 1. Shunpo vanish burst at home corner on launch & landing ring on return
     if (rawP < 0.18) {
@@ -3488,7 +3521,27 @@
           gAlpha * 1.25
         );
 
-        if (spriteEntry && spriteEntry.loaded && !spriteEntry.failed) {
+        if (c3d && g <= 2) {
+          const chromaShift = g * 2.2 * (ghost.facing >= 0 ? -1 : 1);
+          ctx.save();
+          ctx.globalAlpha = gAlpha * 0.42 * depthTaper;
+          c3d.renderStageChibi3D(
+            ctx,
+            w,
+            h,
+            {
+              ...ghost,
+              charId: skill.charId,
+              sx: ghost.x + chromaShift,
+              sy: ghost.y,
+              size: ghost.size * depthTaper
+            },
+            skill,
+            Math.max(0, rawP - g * 0.02),
+            { dpr: 1, reducedMotion: false, allowProcedural3d: allowProc3d }
+          );
+          ctx.restore();
+        } else if (!c3d && spriteEntry && spriteEntry.loaded && !spriteEntry.failed) {
           const chromaShift = g * 2.2 * (ghost.facing >= 0 ? -1 : 1);
           ctx.save();
           ctx.translate(ghost.x + chromaShift, ghost.y);
@@ -3553,8 +3606,32 @@
     }
     ctx.restore();
 
-    // 4. 2.5D Layered Billboard Chibi Sprite (<id>_action.png) — pure radial & rim-light compositing!
-    if (spriteEntry && spriteEntry.loaded && !spriteEntry.failed) {
+    // 4. Full-Body Real 3D Cel-Shaded Chibi (preferred) or 2.5D Layered Billboard Sprite fallback
+    if (c3d) {
+      c3d.renderStageChibi3D(
+        ctx,
+        w,
+        h,
+        {
+          ...actor,
+          charId: skill.charId,
+          sx: finiteNum(actor.sx, actor.x),
+          sy: finiteNum(actor.sy, actor.y)
+        },
+        skill,
+        rawP,
+        { dpr: (rOpts && rOpts.dpr) || 1, reducedMotion: isReduced, allowProcedural3d: allowProc3d }
+      );
+      if (actor.slashing > 0.35) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const gx = actor.x + rimDx * s * 0.34;
+        const gy = actor.y + rimDy * s * 0.24;
+        drawGlowLine(ctx, gx - 12 * pScale, gy, gx + 12 * pScale, gy, 2.2 * pScale, skill.accentColor, '#ffffff', 0.78 * rimAlpha);
+        drawGlowLine(ctx, gx, gy - 12 * pScale, gx, gy + 12 * pScale, 2.2 * pScale, skill.primaryColor, '#ffffff', 0.78 * rimAlpha);
+        ctx.restore();
+      }
+    } else if (spriteEntry && spriteEntry.loaded && !spriteEntry.failed) {
       ctx.save();
       ctx.translate(actor.x, actor.y);
 
@@ -3655,7 +3732,7 @@
     return actor;
   }
 
-  function renderFallbackImpactFrame(ctx, w, h, actor, skill, spriteEntry, flashProgress) {
+  function renderFallbackImpactFrame(ctx, w, h, actor, skill, spriteEntry, flashProgress, opts) {
     const fp = clamp(finiteNum(flashProgress, 0), 0, 1);
     const invertPolar = fp < 0.5;
     const cx = finiteNum(actor && actor.sx, w * 0.5);
@@ -3695,8 +3772,21 @@
     const dy = Math.sin(slashAng) * maxR;
     drawGlowLine(ctx, cx - dx, cy - dy, cx + dx, cy + dy, 16, '#ef4444', invertPolar ? '#ffffff' : '#090b10', 0.98);
 
-    // Stark silhouette stamp at strike center
-    if (actor && spriteEntry && spriteEntry.loaded && !spriteEntry.failed) {
+    // Stark 3D silhouette stamp at strike center (or 2D sprite fallback)
+    if (actor && isStageChibi3dEnabled(opts, skill && skill.charId)) {
+      const c3d = getChibi3dEngine();
+      if (c3d) {
+        c3d.renderStageChibi3D(
+          ctx,
+          w,
+          h,
+          { ...actor, charId: skill.charId, sx: cx, sy: cy },
+          skill,
+          0.345,
+          { impactSilhouette: true, reducedMotion: Boolean(opts && opts.reducedMotion), dpr: (opts && opts.dpr) || 1, allowProcedural3d: Boolean((opts && opts.allowProcedural3d) || (opts && opts.themeCfg && opts.themeCfg.allowProcedural3d)) }
+        );
+      }
+    } else if (actor && spriteEntry && spriteEntry.loaded && !spriteEntry.failed) {
       const s = actor.size * 1.06;
       ctx.save();
       ctx.translate(cx, cy);
@@ -4315,7 +4405,7 @@
 
     // Respect prefers-reduced-motion: render serene static Z-Sandwich illumination frame, zero shake/flash, clean teardown
     if (isReduced) {
-      const staticOpts = { dpr, origin, profile3D: skillProfile3D, reducedMotion: true, hitStopActive: false, impactFrameActive: false };
+      const staticOpts = { dpr, origin, profile3D: skillProfile3D, reducedMotion: true, hitStopActive: false, impactFrameActive: false, themeCfg: opts.themeCfg || null, chibi3dEnabled: opts.chibi3dEnabled, allowProcedural3d: Boolean(opts.allowProcedural3d || (opts.themeCfg && opts.themeCfg.allowProcedural3d)) };
       const staticActor = resolveStageActor3D(vw, vh, 0.48, 0.48, skill, origin, spriteHeroKey, staticOpts);
       const vfx3dStatic = get3DVfxKernel();
       const has3DStatic = Boolean(vfx3dStatic && typeof vfx3dStatic.renderBackPass === 'function');
@@ -4439,7 +4529,10 @@
         impactFlashProgress,
         rawP: p,
         effectiveP: effectiveRawP,
-        reducedMotion: curReduced
+        reducedMotion: curReduced,
+        themeCfg: opts.themeCfg || null,
+        chibi3dEnabled: opts.chibi3dEnabled,
+        allowProcedural3d: Boolean(opts.allowProcedural3d || (opts.themeCfg && opts.themeCfg.allowProcedural3d))
       };
       const actor3D = resolveStageActor3D(vw, vh, effectiveRawP, p, skill, origin, spriteHeroKey, renderOpts);
 
@@ -4492,13 +4585,13 @@
         let handledBy3D = false;
         if (vfx3d && typeof vfx3d.renderImpactFrame === 'function') {
           try {
-            handledBy3D = vfx3d.renderImpactFrame(ctx, vw, vh, actor3D, skill, spriteEntry) !== false;
+            handledBy3D = vfx3d.renderImpactFrame(ctx, vw, vh, actor3D, skill, spriteEntry, renderOpts) !== false;
           } catch (_) {
             handledBy3D = false;
           }
         }
         if (!handledBy3D) {
-          renderFallbackImpactFrame(ctx, vw, vh, actor3D, skill, spriteEntry, impactFlashProgress);
+          renderFallbackImpactFrame(ctx, vw, vh, actor3D, skill, spriteEntry, impactFlashProgress, renderOpts);
         }
       }
 

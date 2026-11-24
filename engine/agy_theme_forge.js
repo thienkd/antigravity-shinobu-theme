@@ -1143,9 +1143,11 @@
       let activePersonaId = (forgeOpts && typeof forgeOpts.personaId === 'string' && forgeOpts.personaId.trim())
         ? forgeOpts.personaId.trim()
         : '';
-      if (!activePersonaId && typeof localStorage !== 'undefined') {
+      if (!activePersonaId) {
         try {
-          activePersonaId = String(localStorage.getItem('agy_master_persona_v1') || '').trim();
+          if (typeof localStorage !== 'undefined') {
+            activePersonaId = String(localStorage.getItem('agy_master_persona_v1') || '').trim();
+          }
         } catch (_) {}
       }
       if (!activePersonaId) activePersonaId = 'yoriichi';
@@ -1538,7 +1540,13 @@
     safeDef.isForged = true;
 
     let quotaExceeded = false;
-    if (typeof localStorage !== 'undefined') {
+    let canAccessLs = false;
+    try {
+      canAccessLs = typeof localStorage !== 'undefined' && Boolean(localStorage);
+    } catch (_) {
+      canAccessLs = false;
+    }
+    if (canAccessLs) {
       const current = loadPersistedThemes();
       // Refresh LRU insertion order so safeName is newest
       if (hasOwn(current, safeName)) delete current[safeName];

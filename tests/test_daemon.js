@@ -675,6 +675,26 @@ describe('F01 — Daemon HTTP Asset Server, Host Pinning & Ephemeral Token 256-b
             assert.equal(rNull.status, 200);
             await ctx.cleanup();
         });
+
+        it('F01-T1-07: Phục vụ tệp mô hình 3D /assets/*.glb và *.vrm với MIME model/gltf-binary & header bảo mật', async () => {
+            const ctx = await startIsolatedDaemon();
+            const dummyGlb = Buffer.from('glTF\x02\x00\x00\x00\x0c\x00\x00\x00');
+            fs.writeFileSync(path.join(ctx.assetsDir, 'sample.glb'), dummyGlb);
+            fs.writeFileSync(path.join(ctx.assetsDir, 'sample.vrm'), dummyGlb);
+
+            const resGlb = await rawHttpRequest({ port: ctx.assetPort, path: '/assets/sample.glb' });
+            assert.equal(resGlb.status, 200);
+            assert.equal(resGlb.headers['content-type'], 'model/gltf-binary');
+            assert.equal(resGlb.headers['cross-origin-resource-policy'], 'cross-origin');
+            assert.equal(resGlb.headers['x-content-type-options'], 'nosniff');
+
+            const resVrm = await rawHttpRequest({ port: ctx.assetPort, path: '/assets/sample.vrm' });
+            assert.equal(resVrm.status, 200);
+            assert.equal(resVrm.headers['content-type'], 'model/gltf-binary');
+            assert.equal(resVrm.headers['cross-origin-resource-policy'], 'cross-origin');
+            assert.equal(resVrm.headers['x-content-type-options'], 'nosniff');
+            await ctx.cleanup();
+        });
     });
 
     describe('Tier 2 — Biên & Bảo Mật F01', () => {

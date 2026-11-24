@@ -22,6 +22,7 @@ const SUITES = [
     'test_persona_engine.js',
     'test_mcp_studio_3tier.js',
     'test_live_e2e_cdp.js',
+    'test_visual_ui_buttons_e2e.js',
 ];
 
 function main() {

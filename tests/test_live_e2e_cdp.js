@@ -246,13 +246,53 @@ describe('F19 — Gói Bundle Thật & Kiểm Thử Live E2E CDP Không Xâm L�
 
                         const leakedKeys = Object.keys(window).filter((k) => /__AGY_INJECT_BOOT__|EPHEMERAL_TOKEN/i.test(k));
 
+                        const hitSelectors = [
+                            ['sidebarBtn', '#agy-custom-theme-sidebar-btn'],
+                            ['yoriichiBtn', '.agy-yoriichi-crest-btn'],
+                            ['ctxPill', '.agy-tok-ctx-pill'],
+                            ['turnPill', '.agy-tok-turn-pill'],
+                            ['nichirinPill', '.agy-nichirin-pill'],
+                            ['kaguraBell', '.agy-kagura-bell-btn'],
+                            ['cinemaMask', '.agy-cinema-mask-btn'],
+                            ['chibiHitbox', '.surface-composer .agy-chibi-hitbox'],
+                            ['npcBadge', '.agy-npc-badge']
+                        ];
+                        const blockedButtons = [];
+                        for (const [name, sel] of hitSelectors) {
+                            const el = document.querySelector(sel);
+                            if (!el) continue;
+                            const r = el.getBoundingClientRect();
+                            const cs = getComputedStyle(el);
+                            if (name === 'npcBadge' && cs.display === 'none') {
+                                const pop = document.querySelector('#agy-shinobu-npc-wrap .agy-npc-popover');
+                                if (pop && getComputedStyle(pop).display !== 'none') continue;
+                            }
+                            if (r.width <= 0 || r.height <= 0 || cs.display === 'none' || cs.visibility === 'hidden' || cs.pointerEvents === 'none') {
+                                blockedButtons.push(name + ':hidden_or_zero');
+                                continue;
+                            }
+                            const cx = Math.round(r.left + r.width / 2);
+                            const cy = Math.round(r.top + r.height / 2);
+                            if (cx >= 0 && cy >= 0 && cx < innerWidth && cy < innerHeight) {
+                                const hit = document.elementFromPoint(cx, cy);
+                                const ok = Boolean(hit && (hit === el || el.contains(hit) || (hit.closest && hit.closest(sel) === el)));
+                                if (!ok) {
+                                    blockedButtons.push(name + ':covered_by_' + (hit ? hit.tagName : 'null'));
+                                }
+                            }
+                        }
+
                         return {
                             isThemedAgy: true,
                             mods,
                             popoverCycleOk,
                             skillBarRemoved: !document.getElementById('agy-chibi-skill-bar'),
                             emptyDirectChildren,
-                            leakedTokenCount: leakedKeys.length
+                            leakedTokenCount: leakedKeys.length,
+                            blockedButtons,
+                            autoCompactOff: window.__AGY_TOKEN_HUD__ && typeof window.__AGY_TOKEN_HUD__.isAutoCompactEnabled === 'function'
+                                ? window.__AGY_TOKEN_HUD__.isAutoCompactEnabled() === false
+                                : true
                         };
                     })()`
                 );
@@ -269,6 +309,8 @@ describe('F19 — Gói Bundle Thật & Kiểm Thử Live E2E CDP Không Xâm L�
             assert.equal(probe.skillBarRemoved, true, 'Không được xuất hiện lại #agy-chibi-skill-bar');
             assert.equal(probe.emptyDirectChildren, 0, 'Mọi phần tử con trực tiếp của .agy-user-bubble-frame không được :empty');
             assert.equal(probe.leakedTokenCount, 0, 'Không được lộ khóa xác thực trên window');
+            assert.deepEqual(probe.blockedButtons, [], `Phát hiện nút bấm trên cửa sổ Antigravity thật bị che khuất hoặc 0x0: ${(probe.blockedButtons || []).join(', ')}`);
+            assert.equal(probe.autoCompactOff, true, 'Tự động nén 380K trên cửa sổ Antigravity sống phải tắt hoàn toàn');
         }
 
         if (verifiedCount === 0) {

@@ -142,8 +142,11 @@
       html[data-agy-privacy-shield="1"] [data-testid="branch-pill-trigger"],
       html[data-agy-privacy-shield="1"] .window-title,
       html[data-agy-privacy-shield="1"] [data-testid*="conversation-list"] a,
+      html[data-agy-privacy-shield="1"] [data-testid="conversation-list-sidebar"] [data-cascade-id],
+      html[data-agy-privacy-shield="1"] [data-testid="project-header"],
       html[data-agy-privacy-shield="1"] [data-testid*="conversation-item"],
       html[data-agy-privacy-shield="1"] .sidebar-conv-list,
+      html[data-agy-privacy-shield="1"] .sidebar-conv-item,
       html[data-agy-privacy-shield="1"] .bg-sidebar .conv-item,
       html[data-agy-privacy-shield="1"] .agy-tok-pop-title,
       html[data-agy-privacy-shield="1"] aside nav a:not(#agy-custom-theme-sidebar-btn),
@@ -509,9 +512,11 @@
     }
   }
 
+  const SHIELD_CANDIDATE_SELECTOR = 'code, pre, a, .monaco-icon-label-container, [title]';
+
   function scanAndTagSensitiveInlineNodes(sweepAllAsync = false) {
     if (typeof document === 'undefined' || !state.shieldActive || state.destroyed) return;
-    const candidates = document.querySelectorAll('code, a, .monaco-icon-label-container, [title]');
+    const candidates = document.querySelectorAll(SHIELD_CANDIDATE_SELECTOR);
     const len = candidates.length;
     if (len === 0) return;
 
@@ -551,7 +556,7 @@
       const runChunk = () => {
         state.shieldChunkTimer = 0;
         if (!state.shieldActive || state.destroyed || typeof document === 'undefined') return;
-        const liveList = document.querySelectorAll('code, a, .monaco-icon-label-container, [title]');
+        const liveList = document.querySelectorAll(SHIELD_CANDIDATE_SELECTOR);
         const limit = Math.min(liveList.length, chunkPos + CHUNK);
         for (let i = chunkPos; i < limit; i++) {
           inspectAndMaskCandidate(liveList[i]);
@@ -606,11 +611,11 @@
           for (let i = 0; i < pending.length; i++) {
             const node = pending[i];
             if (!node || !node.isConnected) continue;
-            if (typeof node.matches === 'function' && node.matches('code, a, .monaco-icon-label-container, [title]')) {
+            if (typeof node.matches === 'function' && node.matches(SHIELD_CANDIDATE_SELECTOR)) {
               inspectAndMaskCandidate(node);
             }
             if (typeof node.querySelectorAll === 'function') {
-              const sub = node.querySelectorAll('code, a, .monaco-icon-label-container, [title]');
+              const sub = node.querySelectorAll(SHIELD_CANDIDATE_SELECTOR);
               for (let k = 0; k < sub.length && k < 120; k++) {
                 inspectAndMaskCandidate(sub[k]);
               }
@@ -985,10 +990,13 @@
     const snap = (core && typeof core.getSnapshot === 'function') ? core.getSnapshot() : null;
     state.savedSnapshot = snap ? { ...snap } : null;
     state.lastRestoredSnapshot = snap ? { ...snap } : null;
+    const safeLsGet = (k) => {
+      try { return typeof localStorage !== 'undefined' ? localStorage.getItem(k) : ''; } catch (_) { return ''; }
+    };
     state.savedThemeName = (state.savedSnapshot && state.savedSnapshot.themeName) ||
-      (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_THEME)) || '';
+      safeLsGet(STORAGE_THEME) || '';
     state.savedBubbleName = (state.savedSnapshot && state.savedSnapshot.bubbleName) ||
-      (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_BUBBLE)) || state.savedThemeName;
+      safeLsGet(STORAGE_BUBBLE) || state.savedThemeName;
     state.savedShieldBeforeShowcase = state.shieldActive;
 
     const hud = ROOT.__AGY_TOKEN_HUD__;

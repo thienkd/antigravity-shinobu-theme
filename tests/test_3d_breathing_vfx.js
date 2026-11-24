@@ -739,3 +739,585 @@ describe('F20 — Động Cơ Thi Triển Hơi Thở 3D Siêu Nhẹ (`kny_3d_vfx
         env.skills.destroy();
     });
 });
+
+function createChibi3dVm(opts = {}) {
+    const KERNEL_FILE_SRC = KERNEL_SRC;
+    const SKILLS_FILE_SRC = SKILLS_SRC;
+    const AURA_FILE_SRC = fs.readFileSync(path.join(REPO_ROOT, 'engine', 'kny_chibi_aura.js'), 'utf8');
+
+    let texCreated = 0, texDeleted = 0;
+    let bufCreated = 0, bufDeleted = 0;
+    let progCreated = 0, progDeleted = 0;
+    let drawElementsCalled = 0;
+    let cullDisabledCount = 0;
+    const drawElementsTypes = [];
+    const cullModes = [];
+    const createdCanvases = [];
+    let nowClock = 2000;
+    const timers = new Map();
+    let nextTimerId = 1;
+    const rafs = new Map();
+    let nextRafId = 1;
+    const storage = new Map();
+
+    function createFullGl() {
+        return {
+            VERTEX_SHADER: 0x8b31, FRAGMENT_SHADER: 0x8b30,
+            COMPILE_STATUS: 0x8b81, LINK_STATUS: 0x8b82,
+            ARRAY_BUFFER: 0x8892, ELEMENT_ARRAY_BUFFER: 0x8893,
+            DYNAMIC_DRAW: 0x88e8, STATIC_DRAW: 0x88e4,
+            FLOAT: 0x1406, UNSIGNED_SHORT: 0x1403, UNSIGNED_INT: 0x1405, UNSIGNED_BYTE: 0x1401,
+            RGBA: 0x1908, TEXTURE_2D: 0x0de1, TEXTURE0: 0x84c0,
+            TEXTURE_MIN_FILTER: 0x2801, TEXTURE_MAG_FILTER: 0x2800,
+            TEXTURE_WRAP_S: 0x2802, TEXTURE_WRAP_T: 0x2803,
+            LINEAR: 0x2601, CLAMP_TO_EDGE: 0x812f, REPEAT: 0x2901, MIRRORED_REPEAT: 0x8370,
+            UNPACK_FLIP_Y_WEBGL: 0x9240,
+            DEPTH_TEST: 0x0b71, LEQUAL: 0x0203, BLEND: 0x0be2,
+            ONE: 1, ONE_MINUS_SRC_ALPHA: 0x0303,
+            COLOR_BUFFER_BIT: 0x4000, DEPTH_BUFFER_BIT: 0x0100,
+            TRIANGLE_STRIP: 0x0005, TRIANGLES: 0x0004,
+            CULL_FACE: 0x0b44, FRONT: 0x0404, BACK: 0x0405, SCISSOR_TEST: 0x0c11,
+            RENDERER: 0x1f01, VERSION: 0x1f02,
+            getExtension(name) {
+                if (name === 'WEBGL_debug_renderer_info') return { UNMASKED_RENDERER_WEBGL: 0x9246 };
+                if (name === 'WEBGL_lose_context') return { loseContext: () => {} };
+                if (name === 'OES_element_index_uint') return {};
+                return null;
+            },
+            getParameter(p) {
+                if (p === 0x9246 || p === 0x1f01) return 'ANGLE (AMD, Radeon Pro 5500M Direct3D11)';
+                return 'WebGL 2.0';
+            },
+            createShader: () => ({}),
+            shaderSource: () => {},
+            compileShader: () => {},
+            getShaderParameter: () => true,
+            getShaderInfoLog: () => '',
+            deleteShader: () => {},
+            createProgram: () => { progCreated++; return {}; },
+            bindAttribLocation: () => {},
+            attachShader: () => {},
+            linkProgram: () => {},
+            getProgramParameter: () => true,
+            getProgramInfoLog: () => '',
+            deleteProgram: () => { progDeleted++; },
+            useProgram: () => {},
+            getUniformLocation: (_p, n) => ({ n }),
+            createBuffer: () => { bufCreated++; return {}; },
+            bindBuffer: () => {},
+            bufferData: () => {},
+            bufferSubData: () => {},
+            deleteBuffer: () => { bufDeleted++; },
+            createTexture: () => { texCreated++; return {}; },
+            deleteTexture: () => { texDeleted++; },
+            bindTexture: () => {},
+            texParameteri: () => {},
+            texImage2D: () => {},
+            activeTexture: () => {},
+            createVertexArray: () => ({}),
+            bindVertexArray: () => {},
+            deleteVertexArray: () => {},
+            enableVertexAttribArray: () => {},
+            disableVertexAttribArray: () => {},
+            vertexAttribPointer: () => {},
+            pixelStorei: () => {},
+            viewport: () => {},
+            scissor: () => {},
+            enable: () => {},
+            disable: (cap) => { if (cap === 0x0b44) cullDisabledCount++; },
+            cullFace: (m) => { cullModes.push(m); },
+            depthFunc: () => {},
+            depthMask: () => {},
+            blendFunc: () => {},
+            clearColor: () => {},
+            clear: () => {},
+            uniform1f: () => {},
+            uniform1i: () => {},
+            uniform3f: () => {},
+            uniformMatrix3fv: () => {},
+            uniformMatrix4fv: () => {},
+            drawArrays: () => {},
+            drawElements: (_m, _c, t) => { drawElementsCalled++; if (t !== undefined) drawElementsTypes.push(t); },
+        };
+    }
+
+    const docNodes = [];
+    function attachDomHelpers(el) {
+        const lMap = new Map();
+        el._listeners = lMap;
+        el.children = [];
+        el.parentElement = null;
+        el.isConnected = true;
+        el.attributes = new Map();
+        el.dataset = {};
+        el.style = { setProperty: () => {}, removeProperty: () => {} };
+        el.classList = {
+            add: (...cls) => { el.className = (el.className ? el.className + ' ' : '') + cls.join(' '); },
+            remove: () => {},
+            contains: (c) => String(el.className || '').split(/\s+/).includes(c),
+        };
+        el.setAttribute = (k, v) => el.attributes.set(k, String(v));
+        el.getAttribute = (k) => (el.attributes.has(k) ? el.attributes.get(k) : null);
+        el.removeAttribute = (k) => el.attributes.delete(k);
+        el.appendChild = (ch) => {
+            ch.parentElement = el;
+            el.children.push(ch);
+            docNodes.push(ch);
+            return ch;
+        };
+        el.insertBefore = (ch, ref) => {
+            ch.parentElement = el;
+            const idx = el.children.indexOf(ref);
+            if (idx >= 0) el.children.splice(idx, 0, ch);
+            else el.children.push(ch);
+            docNodes.push(ch);
+            return ch;
+        };
+        el.remove = () => {
+            if (el.parentElement) {
+                const idx = el.parentElement.children.indexOf(el);
+                if (idx >= 0) el.parentElement.children.splice(idx, 1);
+            }
+            el.isConnected = false;
+        };
+        el.closest = (sel) => {
+            const cls = sel.startsWith('.') ? sel.slice(1) : '';
+            let cur = el;
+            while (cur) {
+                if (cls && String(cur.className || '').split(/\s+/).includes(cls)) return cur;
+                cur = cur.parentElement;
+            }
+            return null;
+        };
+        const matchesSimple = (n, sel) => {
+            if (!sel) return false;
+            if (sel === 'canvas') return n.tagName === 'CANVAS';
+            if (sel.startsWith('.')) return String(n.className || '').split(/\s+/).includes(sel.slice(1));
+            if (sel.startsWith('#')) return n.id === sel.slice(1);
+            const attrMatch = sel.match(/^\[data-npc-act="([^"]+)"\]$/);
+            if (attrMatch) return Boolean(n.dataset && n.dataset.npcAct === attrMatch[1]);
+            return n.tagName && n.tagName.toLowerCase() === sel.toLowerCase();
+        };
+        el.querySelector = (sel) => {
+            for (const c of el.children) {
+                if (matchesSimple(c, sel)) return c;
+                if (typeof c.querySelector === 'function') {
+                    const deep = c.querySelector(sel);
+                    if (deep) return deep;
+                }
+            }
+            return null;
+        };
+        el.querySelectorAll = (sel) => {
+            const out = [];
+            for (const c of el.children) {
+                if (matchesSimple(c, sel)) out.push(c);
+                if (typeof c.querySelectorAll === 'function') out.push(...c.querySelectorAll(sel));
+            }
+            return out;
+        };
+        el.getBoundingClientRect = () => ({ left: 1000, top: 760, width: 162, height: 84 });
+        el.addEventListener = (type, fn, capOpts) => {
+            const cap = typeof capOpts === 'boolean' ? capOpts : Boolean(capOpts && capOpts.capture);
+            if (!lMap.has(type)) lMap.set(type, []);
+            lMap.get(type).push({ fn, cap });
+        };
+        el.removeEventListener = (type, fn, capOpts) => {
+            const cap = typeof capOpts === 'boolean' ? capOpts : Boolean(capOpts && capOpts.capture);
+            const arr = lMap.get(type);
+            if (!arr) return;
+            for (let i = arr.length - 1; i >= 0; i--) {
+                if (arr[i].fn === fn && arr[i].cap === cap) arr.splice(i, 1);
+            }
+        };
+        el.dispatchEvent = (ev) => {
+            const e = { target: el, currentTarget: el, button: 0, pointerType: 'mouse', clientX: 0, clientY: 0, preventDefault: () => {}, stopPropagation: () => {}, ...ev };
+            const chain = [];
+            let cur = el;
+            while (cur) { chain.unshift(cur); cur = cur.parentElement; }
+            for (const node of chain) {
+                const arr = (node._listeners && node._listeners.get(e.type)) || [];
+                for (const h of [...arr]) h.fn(e);
+            }
+        };
+        return el;
+    }
+
+    function makeEl(tag) {
+        const el = attachDomHelpers({ tagName: String(tag || 'div').toUpperCase(), id: '', className: '', textContent: '' });
+        if (el.tagName === 'CANVAS') {
+            el.width = 300;
+            el.height = 150;
+            el.getContext = (kind) => {
+                if (kind === '2d') return createMockCtx2d(true);
+                if (opts.enableWebGl && (kind === 'webgl2' || kind === 'webgl')) return createFullGl();
+                return null;
+            };
+            createdCanvases.push(el);
+        }
+        return el;
+    }
+
+    const docListenersMap = new Map();
+    const doc = {
+        hidden: false,
+        visibilityState: 'visible',
+        head: makeEl('head'),
+        body: makeEl('body'),
+        documentElement: makeEl('html'),
+        createElement: (t) => makeEl(t),
+        getElementById: (id) => docNodes.find((n) => n.id === id) || null,
+        querySelector: (sel) => (sel.startsWith('#') ? docNodes.find((n) => n.id === sel.slice(1)) || null : null),
+        querySelectorAll: (sel) => docNodes.filter((n) => n.tagName.toLowerCase() === sel.toLowerCase() || (sel.startsWith('.') && String(n.className || '').split(/\s+/).includes(sel.slice(1)))),
+        addEventListener(type, fn, capOpts) {
+            const cap = typeof capOpts === 'boolean' ? capOpts : Boolean(capOpts && capOpts.capture);
+            if (!docListenersMap.has(type)) docListenersMap.set(type, []);
+            docListenersMap.get(type).push({ fn, cap });
+        },
+        removeEventListener(type, fn, capOpts) {
+            const cap = typeof capOpts === 'boolean' ? capOpts : Boolean(capOpts && capOpts.capture);
+            const arr = docListenersMap.get(type);
+            if (!arr) return;
+            for (let i = arr.length - 1; i >= 0; i--) {
+                if (arr[i].fn === fn && arr[i].cap === cap) arr.splice(i, 1);
+            }
+        },
+        dispatchEvent(ev) {
+            const arr = docListenersMap.get(ev.type) || [];
+            for (const h of [...arr]) h.fn(ev);
+        },
+    };
+
+    const win = {
+        document: doc,
+        devicePixelRatio: opts.dpr || 1,
+        innerWidth: 1440,
+        innerHeight: 900,
+        localStorage: {
+            getItem: (k) => (storage.has(k) ? storage.get(k) : null),
+            setItem: (k, v) => storage.set(k, String(v)),
+            removeItem: (k) => storage.delete(k),
+        },
+        performance: { now: () => nowClock },
+        setTimeout: (fn, ms) => { const id = nextTimerId++; timers.set(id, { fn, at: nowClock + (Number(ms) || 0) }); return id; },
+        clearTimeout: (id) => { timers.delete(id); },
+        setInterval: (fn, ms) => { const id = nextTimerId++; timers.set(id, { fn, at: nowClock + (Number(ms) || 0) }); return id; },
+        clearInterval: (id) => { timers.delete(id); },
+        requestAnimationFrame: (fn) => { const id = nextRafId++; rafs.set(id, fn); return id; },
+        cancelAnimationFrame: (id) => { rafs.delete(id); },
+        matchMedia: () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} }),
+        addEventListener: () => {},
+        removeEventListener: () => {},
+    };
+    if (opts.enableWebGl) {
+        win.WebGLRenderingContext = function WebGLRenderingContext() {};
+        win.WebGL2RenderingContext = function WebGL2RenderingContext() {};
+    }
+
+    const ctx = vm.createContext({
+        window: win, globalThis: win, document: doc, performance: win.performance,
+        localStorage: win.localStorage, WebGLRenderingContext: win.WebGLRenderingContext,
+        WebGL2RenderingContext: win.WebGL2RenderingContext,
+        requestAnimationFrame: win.requestAnimationFrame, cancelAnimationFrame: win.cancelAnimationFrame,
+        setTimeout: win.setTimeout, clearTimeout: win.clearTimeout,
+        setInterval: win.setInterval, clearInterval: win.clearInterval,
+        Math, Number, String, Boolean, Object, Array, Float32Array, Uint16Array,
+        Int32Array, Uint8Array, Uint32Array, Int8Array, Int16Array, DataView, ArrayBuffer,
+        TextDecoder, TextEncoder, Map, Set, RegExp, Date, Promise, Error, console,
+    });
+    vm.runInContext(KERNEL_FILE_SRC, ctx);
+    vm.runInContext(SKILLS_FILE_SRC, ctx);
+    vm.runInContext(AURA_FILE_SRC, ctx);
+
+    return {
+        win, doc, makeEl,
+        chibi3d: win.__AGY_KNY_CHIBI_3D__,
+        vfx: win.__AGY_KNY_3D_VFX__,
+        skills: win.__AGY_KNY_SKILLS__,
+        aura: win.__AGY_KNY_CHIBI_AURA__,
+        stepRaf(dtMs = 16) {
+            nowClock += dtMs;
+            const batch = [...rafs.values()];
+            rafs.clear();
+            for (const fn of batch) fn(nowClock);
+        },
+        getMetrics: () => ({
+            texCreated, texDeleted, bufCreated, bufDeleted, progCreated, progDeleted,
+            drawElementsCalled, drawElementsTypes: [...drawElementsTypes], cullDisabledCount, cullModes: [...cullModes],
+            pendingTimers: timers.size, pendingRafs: rafs.size,
+            docListeners: [...docListenersMap.values()].reduce((s, a) => s + a.length, 0),
+        }),
+    };
+}
+
+function buildMinimalGlbArrayBuffer(meshCount = 1, vertsPerMesh = 3, extraOpts = {}) {
+    const rawCoords = [0, 0, 0, 1, 0, 0, 0.5, 2, 0];
+    const posLen = vertsPerMesh * 12;
+    const withColor0 = Boolean(extraOpts && extraOpts.withColor0);
+    const colLen = withColor0 ? vertsPerMesh * 12 : 0;
+    const binLen = posLen + colLen;
+    const binBuf = Buffer.alloc(binLen);
+    for (let i = 0; i < Math.min(vertsPerMesh, 3); i++) {
+        binBuf.writeFloatLE(rawCoords[i * 3], i * 12);
+        binBuf.writeFloatLE(rawCoords[i * 3 + 1], i * 12 + 4);
+        binBuf.writeFloatLE(rawCoords[i * 3 + 2], i * 12 + 8);
+    }
+    if (withColor0) {
+        const rgb = extraOpts.color0 || [0.95, 0.55, 0.8];
+        for (let i = 0; i < vertsPerMesh; i++) {
+            const off = posLen + i * 12;
+            binBuf.writeFloatLE(rgb[0], off);
+            binBuf.writeFloatLE(rgb[1], off + 4);
+            binBuf.writeFloatLE(rgb[2], off + 8);
+        }
+    }
+    const attrs = withColor0 ? { POSITION: 0, COLOR_0: 1 } : { POSITION: 0 };
+    const meshes = [];
+    for (let m = 0; m < meshCount; m++) {
+        meshes.push({ primitives: [{ attributes: attrs, material: 0 }] });
+    }
+    const bufferViews = [{ buffer: 0, byteOffset: 0, byteLength: posLen }];
+    const accessors = [{ bufferView: 0, componentType: 5126, count: vertsPerMesh, type: 'VEC3' }];
+    if (withColor0) {
+        bufferViews.push({ buffer: 0, byteOffset: posLen, byteLength: colLen });
+        accessors.push({ bufferView: 1, componentType: 5126, count: vertsPerMesh, type: 'VEC3' });
+    }
+    const mat0 = { pbrMetallicRoughness: { baseColorFactor: [0.92, 0.42, 0.74, 1.0] } };
+    if (extraOpts && extraOpts.doubleSided) mat0.doubleSided = true;
+    if (extraOpts && extraOpts.alphaMode) mat0.alphaMode = extraOpts.alphaMode;
+    if (extraOpts && Number.isFinite(extraOpts.alphaCutoff)) mat0.alphaCutoff = extraOpts.alphaCutoff;
+    const jsonObj = {
+        asset: { version: '2.0' },
+        buffers: [{ byteLength: binLen }],
+        bufferViews,
+        accessors,
+        materials: [mat0],
+        meshes,
+    };
+    let jsonStr = JSON.stringify(jsonObj);
+    while (Buffer.byteLength(jsonStr, 'utf8') % 4 !== 0) jsonStr += ' ';
+    const jsonBuf = Buffer.from(jsonStr, 'utf8');
+    const totalLen = 12 + 8 + jsonBuf.length + 8 + binBuf.length;
+    const out = Buffer.alloc(totalLen);
+    out.writeUInt32LE(0x46546C67, 0);
+    out.writeUInt32LE(2, 4);
+    out.writeUInt32LE(totalLen, 8);
+    out.writeUInt32LE(jsonBuf.length, 12);
+    out.writeUInt32LE(0x4E4F534A, 16);
+    jsonBuf.copy(out, 20);
+    const binOff = 20 + jsonBuf.length;
+    out.writeUInt32LE(binBuf.length, binOff);
+    out.writeUInt32LE(0x004E4942, binOff + 4);
+    binBuf.copy(out, binOff + 8);
+    return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
+}
+
+describe('F23 — Nhân vật Chibi 3D Cel-Shaded (WebGL2 & Canvas2D Fallback), Bộ nạp .glb & Tích hợp Sân khấu', () => {
+    it('F23-T1-01: Phủ đủ 15 anh hùng Kimetsu no Yaiba + alias moon, dựng 3D composer & stage 0 NaN trên WebGL2 lẫn Canvas2D fallback', () => {
+        const glEnv = createChibi3dVm({ enableWebGl: true });
+        const swEnv = createChibi3dVm({ enableWebGl: false });
+        assert.equal(glEnv.chibi3d.CHARACTER_IDS.length, 15, 'Phải có đủ 15 anh hùng Chibi 3D');
+        assert.equal(glEnv.chibi3d.CHIBI_PROFILES.moon.id, 'obanai', 'Alias moon phải trỏ về obanai');
+
+        const ctxGl2d = createMockCtx2d(true);
+        const ctxSw2d = createMockCtx2d(true);
+        for (const cid of glEnv.chibi3d.CHARACTER_IDS) {
+            assert.equal(glEnv.chibi3d.CHIBI_PROFILES[cid].id, cid);
+            const pose = glEnv.chibi3d.computeChibiPose('composer', cid, { timeSec: 1.2, reaction: 'happy', blinkAmt: 0.4, orbitYaw: 1.5 });
+            assert.equal(Number.isFinite(pose.rootY) && Number.isFinite(pose.headYaw), true);
+
+            const r1 = glEnv.chibi3d.renderChibiTo2D(ctxGl2d, 136, 112, cid, { timeSec: 1.2, lookYaw: 0.2 }, { dpr: 1 });
+            assert.equal(r1.ok, true);
+            assert.equal(r1.mode, 'webgl2');
+
+            const r2 = swEnv.chibi3d.renderChibiTo2D(ctxSw2d, 136, 112, cid, { timeSec: 1.2, lookYaw: 0.2 }, { force2dFallback: true });
+            assert.equal(r2.ok, true);
+            assert.equal(r2.mode, 'canvas2d-3d');
+
+            const okStageGl = glEnv.chibi3d.renderStageChibi3D(ctxGl2d, 1440, 900, { sx: 720, sy: 450, size: 220, phase: 'slash', slashing: 1, facing: 1 }, { id: `${cid}_1`, charId: cid }, 0.42, { dpr: 1 });
+            const okStageSw = swEnv.chibi3d.renderStageChibi3D(ctxSw2d, 1440, 900, { sx: 720, sy: 450, size: 220, phase: 'charge', charging: 1, facing: -1 }, { id: `${cid}_2`, charId: cid }, 0.14, { reducedMotion: true });
+            assert.equal(okStageGl, true);
+            assert.equal(okStageSw, true);
+        }
+        assert.ok(ctxSw2d.ops.some((o) => o.fn === 'fill'), 'Nhánh Canvas2D 3D fallback phải tô đa giác chiều sâu');
+        glEnv.vfx.destroy();
+        swEnv.vfx.destroy();
+    });
+
+    it('F23-T1-02: Render 2-pass Toon + Inverted-Hull Outline (FRONT + BACK), Face Texture cache <= 32 & thu hồi 100% VRAM', () => {
+        const env = createChibi3dVm({ enableWebGl: true });
+        const ctx2d = createMockCtx2d();
+        for (const cid of env.chibi3d.CHARACTER_IDS) {
+            for (const expr of ['idle', 'happy', 'focus', 'attack']) {
+                env.chibi3d.renderChibiTo2D(ctx2d, 136, 112, cid, { timeSec: 0.5, reaction: expr, blinkAmt: 0 }, { dpr: 1 });
+            }
+        }
+        const m = env.getMetrics();
+        assert.ok(m.cullModes.includes(0x0404) && m.cullModes.includes(0x0405), 'Phải vẽ cả pass viền mực (FRONT) và pass Toon shading (BACK)');
+        assert.ok(env.chibi3d.getDiagnostics().faceCacheCount <= 32, 'LRU cache khuôn mặt không được vượt ngưỡng 32');
+
+        env.vfx.destroy();
+        const after = env.getMetrics();
+        assert.equal(after.texDeleted, after.texCreated, 'Toàn bộ WebGL texture phải được delete khi destroy()');
+        assert.equal(after.bufDeleted, after.bufCreated, 'Toàn bộ VBO/IBO phải được delete khi destroy()');
+        assert.equal(after.progDeleted, after.progCreated, 'Toàn bộ shader program phải được delete khi destroy()');
+    });
+
+    it('F23-T1-03: Parse binary glTF 2.0 / VRM (.glb / .vrm) tới 250.000 đỉnh (Uint32, COLOR_0, doubleSided, MASK) & render custom model', async () => {
+        const env = createChibi3dVm({ enableWebGl: true });
+        assert.equal(env.chibi3d.hasRealGlbModel('shinobu'), false);
+        assert.equal(env.chibi3d.hasRealGlbModel('moon'), false);
+
+        const glbBuf = buildMinimalGlbArrayBuffer(1, 3);
+        const parsed = env.chibi3d.parseGlbArrayBuffer(glbBuf, { fileName: 'mini_chibi.glb' });
+        assert.equal(parsed.vertexCount, 3);
+        assert.equal(parsed.bounds.minY, 0);
+        assert.ok(Math.abs(parsed.bounds.height - 1.68) < 1e-4, 'Chiều cao model .glb phải được chuẩn hóa về 1.68');
+        assert.equal(parsed.primitives[0].vertices.length, 3 * 11, 'Stride đỉnh .glb phải là 11 float (pos+norm+uv+col)');
+
+        // Hỗ trợ .vrm + COLOR_0 + doubleSided + alphaMode: 'MASK'
+        const vrmBuf = buildMinimalGlbArrayBuffer(1, 3, {
+            withColor0: true,
+            color0: [0.95, 0.55, 0.8],
+            doubleSided: true,
+            alphaMode: 'MASK',
+            alphaCutoff: 0.45,
+        });
+        const parsedVrm = env.chibi3d.parseGlbArrayBuffer(vrmBuf, { fileName: 'mitsuri.vrm' });
+        assert.equal(parsedVrm.primitives[0].doubleSided, true);
+        assert.ok(Math.abs(parsedVrm.primitives[0].alphaCutoff - 0.45) < 1e-4);
+        assert.ok(Math.abs(parsedVrm.primitives[0].vertices[8] - 0.95) < 1e-4, 'Phải đọc COLOR_0 vào offset float +8');
+
+        const loadedVrm = await env.chibi3d.setCustomGlbModel('mitsuri', vrmBuf, { fileName: 'mitsuri.vrm' });
+        assert.equal(loadedVrm.charId, 'mitsuri');
+        assert.equal(env.chibi3d.hasRealGlbModel('mitsuri'), true);
+        assert.equal(env.chibi3d.getCustomGlbInfo('mitsuri').loaded, true);
+
+        const ctx2d = createMockCtx2d(true);
+        const cullCountBefore = env.getMetrics().cullModes.length;
+        const vrmGlRes = env.chibi3d.renderChibiTo2D(ctx2d, 136, 112, 'mitsuri', { timeSec: 0.2 }, { dpr: 1 });
+        assert.equal(vrmGlRes.ok, true);
+        assert.equal(vrmGlRes.customGlb, true);
+        assert.ok(env.getMetrics().cullDisabledCount >= 1, 'Primitive doubleSided phải tắt CULL_FACE');
+        assert.equal(env.getMetrics().cullModes.slice(cullCountBefore).includes(0x0404), false, 'Model .glb/.vrm không được chạy pass Inverted-Hull FRONT');
+
+        // Alias moon -> obanai đồng bộ trạng thái mô hình
+        await env.chibi3d.setCustomGlbModel('moon', glbBuf, { fileName: 'obanai.glb' });
+        assert.equal(env.chibi3d.hasRealGlbModel('moon'), true);
+        assert.equal(env.chibi3d.hasRealGlbModel('obanai'), true);
+        await env.chibi3d.clearCustomGlbModel('obanai');
+        assert.equal(env.chibi3d.hasRealGlbModel('moon'), false);
+
+        // Hỗ trợ > 65.535 đỉnh (ví dụ 80.000 đỉnh dùng Uint32Array + UNSIGNED_INT)
+        const glb80k = buildMinimalGlbArrayBuffer(2, 40000);
+        const parsed80k = env.chibi3d.parseGlbArrayBuffer(glb80k, { fileName: 'dense_80k.glb' });
+        assert.equal(parsed80k.vertexCount, 80000);
+        assert.ok(parsed80k.primitives[0].indices instanceof Uint32Array, 'Model > 65.535 đỉnh phải dùng Uint32Array');
+        await env.chibi3d.setCustomGlbModel('shinobu', glb80k, { fileName: 'dense_80k.glb' });
+        const denseRes = env.chibi3d.renderChibiTo2D(ctx2d, 136, 112, 'shinobu', { timeSec: 0.2 }, { dpr: 1 });
+        assert.equal(denseRes.ok, true);
+        assert.equal(denseRes.customGlb, true);
+        assert.ok(env.getMetrics().drawElementsTypes.includes(0x1405), 'Phải vẽ bằng gl.UNSIGNED_INT cho mesh > 65.535 đỉnh');
+
+        const swRes = env.chibi3d.renderChibiTo2D(ctx2d, 136, 112, 'shinobu', { timeSec: 0.2 }, { force2dFallback: true });
+        assert.equal(swRes.ok, true);
+        assert.equal(swRes.mode, 'canvas2d-3d');
+        assert.equal(swRes.customGlb, true, 'Nhánh Canvas2D fallback cũng phải render được model .glb/.vrm tùy chỉnh');
+
+        await env.chibi3d.clearCustomGlbModel('mitsuri');
+        await env.chibi3d.clearCustomGlbModel('shinobu');
+        assert.equal(env.chibi3d.hasRealGlbModel('shinobu'), false);
+        assert.equal(env.chibi3d.getCustomGlbInfo('shinobu').loaded, false);
+
+        assert.throws(() => env.chibi3d.parseGlbArrayBuffer(new ArrayBuffer(4)), /Kích thước tệp \.glb/);
+        const badMagic = new Uint8Array(24);
+        assert.throws(() => env.chibi3d.parseGlbArrayBuffer(badMagic.buffer), /Header glTF 2\.0/);
+        const hugeGlb = buildMinimalGlbArrayBuffer(4, 70000);
+        assert.throws(() => env.chibi3d.parseGlbArrayBuffer(hugeGlb), /250\.000 đỉnh/);
+
+        env.vfx.destroy();
+    });
+
+    it('F23-T1-04: Mặc định 2D sắc nét khi thiếu .glb/.vrm, tự bật 3D khi nạp .glb, nút chuyển 2D/3D & không rò rỉ', async () => {
+        const env = createChibi3dVm({ enableWebGl: true, dpr: 1 });
+        const composer = env.makeEl('div');
+        composer.className = 'surface-composer';
+        const hitbox = env.makeEl('button');
+        hitbox.className = 'agy-chibi-hitbox';
+        composer.appendChild(hitbox);
+        env.doc.body.appendChild(composer);
+
+        // A. Khi chưa có .glb/.vrm và không opt-in allowProcedural3d -> chỉ giữ canvas aura 162x84, hiển thị ảnh 2D gốc
+        const host2d = env.aura.mountChibiAura(composer, { fxMode: 'shinobu', chibi3dEnabled: true }, 'shinobu');
+        assert.ok(host2d, 'mountChibiAura vẫn phải gắn <agy-chibi-aura> cho vòng khí');
+        assert.equal(host2d.children.length, 1, 'Chưa có .glb/.vrm thì chỉ được gắn 1 canvas aura 162x84, dùng ảnh 2D gốc');
+        assert.equal(composer.dataset.chibi3dActive, undefined);
+        assert.equal(env.aura.getChibi3dState().active, false);
+
+        // B. Khi nạp tệp .glb thật cho shinobu -> tự kích hoạt Chibi 3D (.agy-chibi-3d-canvas) giữ nguyên canvas đầu 162x84
+        await env.chibi3d.setCustomGlbModel('shinobu', buildMinimalGlbArrayBuffer(1, 3), { fileName: 'shinobu.glb' });
+        const host = env.aura.mountChibiAura(composer, { fxMode: 'shinobu', chibi3dEnabled: true }, 'shinobu');
+        assert.ok(host, 'mountChibiAura phải gắn <agy-chibi-aura>');
+        assert.equal(host.children.length, 2, 'Khi có .glb phải có 2 canvas: aura (162x84) và .agy-chibi-3d-canvas');
+        assert.equal(host.querySelector('canvas').width, 162, 'Canvas đầu tiên phải giữ nguyên width=162');
+        assert.equal(host.querySelector('canvas').height, 84, 'Canvas đầu tiên phải giữ nguyên height=84');
+        assert.equal(host.children[1].className, 'agy-chibi-3d-canvas');
+        assert.equal(composer.dataset.chibi3dActive, '1');
+
+        env.stepRaf(16);
+        assert.ok(env.aura.getChibi3dState().active);
+        assert.equal(env.aura.getChibi3dState().mode, 'webgl2');
+
+        // Kéo xoay 360° trên hitbox >= 6px -> kích hoạt orbitYaw & khóa click nhầm
+        hitbox.dispatchEvent({ type: 'pointerdown', clientX: 50, clientY: 50, button: 0, pointerType: 'mouse' });
+        env.doc.dispatchEvent({ type: 'pointermove', clientX: 110, clientY: 55 });
+        assert.equal(composer.dataset.chibi3dDragging, '1');
+        assert.ok(Math.abs(env.aura.getChibi3dState().orbitYaw) > 0.5, 'Kéo ngang phải xoay orbitYaw 3D');
+        env.doc.dispatchEvent({ type: 'pointerup' });
+
+        // Double-click reset góc xoay về 0 + biểu cảm happy
+        hitbox.dispatchEvent({ type: 'dblclick' });
+        assert.equal(env.aura.getChibi3dState().orbitYaw, 0);
+        assert.equal(env.aura.getChibi3dState().reaction, 'happy');
+
+        // Thi triển chiêu thức lên sân khấu khi có .glb -> phải gọi 3D Stage Chibi
+        const beforeDraws = env.getMetrics().drawElementsCalled;
+        const castRes = env.skills.castSkill('shinobu', 0, { composerEl: composer, chibi3dEnabled: true });
+        assert.equal(castRes.ok, true);
+        env.stepRaf(16);
+        env.stepRaf(20);
+        assert.ok(env.getMetrics().drawElementsCalled > beforeDraws, 'Sân khấu phải vẽ nhân vật Chibi 3D qua WebGL2 drawElements khi có .glb');
+
+        // C. Nút chuyển nhanh trên NPC Popover (.agy-npc-mode-pill) cho phép bật về 2D ngay kể cả khi đang có .glb
+        const npcWrap = env.makeEl('div');
+        npcWrap.id = 'agy-shinobu-npc-wrap';
+        const popover = env.makeEl('div');
+        popover.className = 'agy-npc-popover';
+        const pillsRow = env.makeEl('div');
+        pillsRow.className = 'agy-npc-pills';
+        const chatOpenBtn = env.makeEl('button');
+        chatOpenBtn.dataset.npcAct = 'chat-open';
+        pillsRow.appendChild(chatOpenBtn);
+        popover.appendChild(pillsRow);
+        npcWrap.appendChild(popover);
+        env.doc.body.appendChild(npcWrap);
+
+        env.aura.mountSkillTriggerUi(composer, npcWrap, { fxMode: 'shinobu', chibi3dEnabled: true }, 'shinobu');
+        const modePill = npcWrap.querySelector('.agy-npc-mode-pill');
+        assert.ok(modePill, 'Phải gắn nút chuyển chế độ .agy-npc-mode-pill vào NPC popover');
+        assert.equal(modePill.dataset.mode, '3d');
+        modePill.dispatchEvent({ type: 'click' });
+        assert.equal(modePill.dataset.mode, '2d');
+        assert.equal(env.win.localStorage.getItem('agy_chibi_3d_v1'), 'false');
+        assert.equal(composer.dataset.chibi3dActive, undefined, 'Bấm chuyển về 2D phải gỡ Chibi 3D để hiển thị ảnh 2D gốc');
+
+        env.aura.teardown();
+        env.skills.destroy();
+        env.vfx.destroy();
+        assert.equal(composer.dataset.chibi3dActive, undefined);
+        const mEnd = env.getMetrics();
+        assert.equal(mEnd.pendingTimers, 0, 'Không được rò rỉ timer sau teardown toàn hệ thống');
+        assert.equal(mEnd.pendingRafs, 0, 'Không được rò rỉ rAF sau teardown toàn hệ thống');
+        assert.equal(mEnd.docListeners, 0, 'Không được rò rỉ document listener sau teardown');
+    });
+});

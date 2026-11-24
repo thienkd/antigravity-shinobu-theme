@@ -32,16 +32,18 @@
     try {
       if (typeof localStorage !== 'undefined') {
         const raw = localStorage.getItem(AUTO_COMPACT_STORAGE_KEY);
-        if (raw === '0' || raw === 'false') return false;
+        if (raw !== '0') {
+          localStorage.setItem(AUTO_COMPACT_STORAGE_KEY, '0');
+        }
       }
     } catch (_) {}
-    return true;
+    return false;
   }
 
-  function writeAutoCompactPref(enabled) {
+  function writeAutoCompactPref() {
     try {
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(AUTO_COMPACT_STORAGE_KEY, enabled ? '1' : '0');
+        localStorage.setItem(AUTO_COMPACT_STORAGE_KEY, '0');
       }
     } catch (_) {}
   }
@@ -235,12 +237,26 @@
 
   const COMPOSER_ROOT_SEL = '.surface-composer, [data-testid="composer"], form:has(textarea)';
   const CASCADE_ATTR_SEL = '[data-conversation-id], [data-cascade-id], [data-trajectory-id], [data-session-id]';
-  const SIDEBAR_GUARD_SEL = '[data-sidebar="true"], [data-testid="sidebar-split"], aside, nav, [role="navigation"]';
+  const SIDEBAR_GUARD_SEL = '[data-sidebar="true"], [data-testid="conversation-list-sidebar"], [data-testid="sidebar-navigation-items"], aside, nav, [role="navigation"]';
 
   function isInsideSidebarNav(el) {
     if (!el || typeof el.closest !== 'function') return false;
     try {
-      return Boolean(el.closest(SIDEBAR_GUARD_SEL));
+      if (el.closest(SIDEBAR_GUARD_SEL)) return true;
+      const split = el.closest('[data-testid="sidebar-split"]');
+      if (split && split !== el && split.children && split.children.length > 1) {
+        for (let i = 0; i < split.children.length; i++) {
+          const pane = split.children[i];
+          if (pane && typeof pane.contains === 'function' && pane.contains(el)) {
+            const hasMainContent = typeof pane.querySelector === 'function' && Boolean(
+              pane.querySelector('.surface-composer, [data-testid="composer"], [data-testid="conversation-view"], [data-main-content-body="true"], form:has(textarea)')
+            );
+            if (!hasMainContent && i === 0) return true;
+            break;
+          }
+        }
+      }
+      return false;
     } catch (_) {
       return false;
     }
@@ -1610,19 +1626,13 @@
 
   function refreshBladeCompactUi() {
     if (state.bladeBtnEl) {
-      state.bladeBtnEl.dataset.autoCompact = state.autoCompactEnabled ? '1' : '0';
+      state.bladeBtnEl.dataset.autoCompact = '0';
       if (state.compactInFlight) {
         state.bladeBtnEl.dataset.compacting = '1';
       } else {
         delete state.bladeBtnEl.dataset.compacting;
       }
-      const ctxNow = Math.max(0, Math.round(state.serverCtxTokens || 0));
-      const ready380k = !state.compactInFlight && state.hasTelemetry && ctxNow >= AUTO_COMPACT_THRESHOLD && !state.autoCompactDisarmed;
-      if (ready380k) {
-        state.bladeBtnEl.dataset.compactReady = '1';
-      } else {
-        delete state.bladeBtnEl.dataset.compactReady;
-      }
+      delete state.bladeBtnEl.dataset.compactReady;
 
       const tier = state.bladeTier || 'black';
       const totalHeat = Math.max(0, Math.round(state.bladeHeat || 0));
@@ -1631,18 +1641,13 @@
         : tier === 'ember'
         ? 'Nhiệt Hồng Đao'
         : 'Hắc Thiết Nhật Luân Đao';
-      const autoTxt = state.autoCompactEnabled ? 'Bật' : 'Tắt';
-      let compactHint = `Tự nén 380K: ${autoTxt}`;
+      let compactHint = 'Tự động nén: Đã tắt';
       if (state.compactInFlight) {
         compactHint = 'Đang nén phiên (/compact)...';
-      } else if (state.compactLastFailed && ctxNow >= AUTO_COMPACT_THRESHOLD) {
+      } else if (state.compactLastFailed) {
         compactHint = 'Cần nhấn Enter để hoàn tất /compact';
-      } else if (ready380k) {
-        compactHint = state.autoCompactEnabled && !state.autoCompactWaitingLiveTurn
-          ? 'Ngữ cảnh ≥ 380K • Sắp tự nén (/compact)'
-          : 'Ngữ cảnh ≥ 380K • Nhấn để nén (/compact)';
       }
-      const nextTitle = `Rèn Nhật Luân Kiếm: ${tierNameVi} (${totalHeat}%) • ${compactHint} • Nhấn: Nén ngay /compact • Shift+Click hoặc Chuột phải: Bật/Tắt tự nén`;
+      const nextTitle = `Rèn Nhật Luân Kiếm: ${tierNameVi} (${totalHeat}%) • ${compactHint} • Nhấn: Nén tay /compact`;
       if (state.bladeBtnEl.title !== nextTitle) {
         state.bladeBtnEl.title = nextTitle;
       }
@@ -1652,20 +1657,11 @@
     }
 
     if (state.detCompactVal) {
-      const ctxNow = Math.max(0, Math.round(state.serverCtxTokens || 0));
-      let statusTxt = state.autoCompactEnabled
-        ? `Tự nén 380K: Đang bật (${formatCompactTokens(ctxNow)}/380K)`
-        : 'Tự nén 380K: Đang tắt (Nhấn thanh kiếm để nén tay)';
+      let statusTxt = 'Tự động nén: Đã tắt (Nhấn thanh kiếm để nén tay)';
       if (state.compactInFlight) {
         statusTxt = 'Đang gửi lệnh nén /compact...';
-      } else if (state.compactLastFailed && ctxNow >= AUTO_COMPACT_THRESHOLD) {
+      } else if (state.compactLastFailed) {
         statusTxt = 'Cần nhấn Enter để hoàn tất /compact';
-      } else if (state.autoCompactPending && ctxNow >= AUTO_COMPACT_THRESHOLD) {
-        statusTxt = state.autoCompactEnabled
-          ? 'Đã đạt 380K — Chờ rảnh để tự nén (/compact)'
-          : 'Đã đạt 380K — Nhấn thanh kiếm để nén (/compact)';
-      } else if (state.autoCompactDisarmed && ctxNow >= AUTO_COMPACT_THRESHOLD) {
-        statusTxt = 'Đã kích hoạt nén 380K trong chu kỳ này';
       }
       setTextIfChanged(state.detCompactVal, statusTxt);
     }
@@ -1692,6 +1688,9 @@
   function triggerCompactSession(opts = {}) {
     const source = opts && opts.source === 'auto' ? 'auto' : 'manual';
     const isAuto = source === 'auto';
+    if (isAuto) {
+      return { ok: false, reason: 'disabled' };
+    }
 
     if (!state.barEl || !state.barEl.isConnected) {
       return { ok: false, reason: 'not_mounted' };
@@ -1708,44 +1707,23 @@
     const liveSig = extractLivePageSignals(comp);
     const workingNow = Boolean(liveSig.isWorking || state.isWorking || state.serverIsWorking);
     if (workingNow) {
-      if (!isAuto) {
-        showUserMessageEcho('AI đang xử lý — vui lòng chờ hoàn tất rồi bấm nén (/compact)');
-      }
+      showUserMessageEcho('AI đang xử lý — vui lòng chờ hoàn tất rồi bấm nén (/compact)');
       return { ok: false, reason: 'working' };
     }
 
-    const showcaseRunning = Boolean(
-      typeof window !== 'undefined' &&
-      window.__AGY_CINEMA_DIRECTOR__ &&
-      typeof window.__AGY_CINEMA_DIRECTOR__.isShowcaseRunning === 'function' &&
-      window.__AGY_CINEMA_DIRECTOR__.isShowcaseRunning()
-    );
-    if (isAuto) {
-      if (typeof document !== 'undefined' && document.hidden) return { ok: false, reason: 'hidden' };
-      if (!state.autoCompactEnabled) return { ok: false, reason: 'disabled' };
-      if (state.cid === 'idle') return { ok: false, reason: 'idle' };
-      if (showcaseRunning) return { ok: false, reason: 'showcase' };
-      if (hasVisibleSlashOrPopupMenu()) return { ok: false, reason: 'menu_open' };
-      if (state.autoCompactLastAt > 0 && (now - state.autoCompactLastAt) < AUTO_COMPACT_COOLDOWN_MS) {
-        return { ok: false, reason: 'cooldown' };
-      }
-    } else if (state.manualCompactLastAt > 0 && (now - state.manualCompactLastAt) < MANUAL_COMPACT_COOLDOWN_MS) {
+    if (state.manualCompactLastAt > 0 && (now - state.manualCompactLastAt) < MANUAL_COMPACT_COOLDOWN_MS) {
       return { ok: false, reason: 'cooldown' };
     }
 
     const editor = findComposerEditor(comp);
     if (!editor) {
-      if (!isAuto) {
-        showUserMessageEcho('Không tìm thấy khung nhập để gửi lệnh /compact');
-      }
+      showUserMessageEcho('Không tìm thấy khung nhập để gửi lệnh /compact');
       return { ok: false, reason: 'no_editor' };
     }
 
     const existingText = readEditorText(editor);
     if (existingText && existingText !== COMPACT_COMMAND) {
-      if (!isAuto) {
-        showUserMessageEcho('Ô chat đang có nội dung nháp — hãy gửi hoặc xóa trước khi nén (/compact)');
-      }
+      showUserMessageEcho('Ô chat đang có nội dung nháp — hãy gửi hoặc xóa trước khi nén (/compact)');
       return { ok: false, reason: 'has_draft' };
     }
 
@@ -1756,23 +1734,11 @@
     state.autoCompactPending = false;
     state.compactLastFailed = false;
     state.compactInFlight = true;
-
-    if (isAuto) {
-      state.autoCompactDisarmed = true;
-      state.autoCompactLastAt = now;
-      state.autoCompactTriggeredCtx = Math.max(0, Math.round(state.serverCtxTokens || 0));
-      state.autoCompactTriggeredTurn = state.serverTurnCount || 0;
-    } else {
-      state.manualCompactLastAt = now;
-    }
+    state.manualCompactLastAt = now;
     persistCompactHistory();
 
     state.suppressNextCompactEchoUntil = now + 900;
-    showUserMessageEcho(
-      isAuto
-        ? `Tự động nén phiên (/compact) — Ngữ cảnh đạt ${formatCompactTokens(state.serverCtxTokens)} / 380K`
-        : 'Đang nén phiên (/compact) theo lệnh Chủ nhân...'
-    );
+    showUserMessageEcho('Đang nén phiên (/compact) theo lệnh Chủ nhân...');
     refreshBladeCompactUi();
 
     const reqEpoch = state.mountEpoch;
@@ -1783,7 +1749,7 @@
 
     let submittedVia = '';
     let clickedSendBtn = null;
-    const shouldDisarmManual = !isAuto && state.hasTelemetry && Math.round(state.serverCtxTokens || 0) >= AUTO_COMPACT_THRESHOLD;
+    const shouldDisarmManual = false;
 
     scheduleCompactStep(() => {
       if (!state.compactInFlight) return;
@@ -1899,189 +1865,48 @@
     return { ok: true, source, threshold: AUTO_COMPACT_THRESHOLD };
   }
 
-  function evaluateAutoCompact(opts = {}) {
-    if (!state.barEl || !state.barEl.isConnected || !state.hasTelemetry || !state.cid || state.cid === 'idle') {
-      return;
+  function evaluateAutoCompact() {
+    if (state.autoCompactTimer) {
+      clearTimeout(state.autoCompactTimer);
+      state.autoCompactTimer = 0;
     }
+    state.autoCompactEnabled = false;
+    state.autoCompactPending = false;
+    state.autoCompactDisarmed = false;
+    state.autoCompactWaitingLiveTurn = false;
 
-    const comp = state.composer || resolveComposerRoot();
-    const liveSig = comp ? extractLivePageSignals(comp) : { isWorking: false, draftText: '' };
-    const editor = comp ? findComposerEditor(comp) : null;
-    const liveDraft = editor ? readEditorText(editor) : (liveSig.draftText || '');
-
-    if (state.compactLastFailed && liveDraft !== COMPACT_COMMAND) {
-      state.compactLastFailed = false;
-      persistCompactHistory();
-    }
-
-    const ctx = Math.max(0, Math.round(state.serverCtxTokens || 0));
-    if (ctx < AUTO_COMPACT_REARM_BELOW) {
-      state.autoCompactDisarmed = false;
-      state.autoCompactWaitingLiveTurn = false;
-      state.autoCompactPending = false;
-      state.compactLastFailed = false;
-      if (state.autoCompactTimer) {
-        clearTimeout(state.autoCompactTimer);
-        state.autoCompactTimer = 0;
+    if (state.compactLastFailed && state.barEl && state.barEl.isConnected) {
+      const comp = state.composer || resolveComposerRoot();
+      const editor = comp ? findComposerEditor(comp) : null;
+      const liveDraft = editor ? readEditorText(editor) : '';
+      if (liveDraft !== COMPACT_COMMAND) {
+        state.compactLastFailed = false;
+        persistCompactHistory();
       }
-      persistCompactHistory();
-      refreshBladeCompactUi();
-      return;
     }
 
-    if (ctx < AUTO_COMPACT_THRESHOLD) {
-      state.autoCompactPending = false;
-      if (state.autoCompactTimer) {
-        clearTimeout(state.autoCompactTimer);
-        state.autoCompactTimer = 0;
-      }
-      refreshBladeCompactUi();
-      return;
-    }
-
-    if (opts && opts.firstSync) {
-      if (!state.isWorking && !state.serverIsWorking) {
-        state.autoCompactWaitingLiveTurn = true;
-        state.autoCompactBaselineCtx = ctx;
-        state.autoCompactBaselineTurn = state.serverTurnCount || 0;
-        state.autoCompactBaselineStep = state.serverStepCount || 0;
-        state.autoCompactPending = false;
-        if (state.autoCompactTimer) {
-          clearTimeout(state.autoCompactTimer);
-          state.autoCompactTimer = 0;
-        }
-        refreshBladeCompactUi();
-        return;
-      }
-      state.autoCompactWaitingLiveTurn = false;
-    }
-
-    if (state.autoCompactWaitingLiveTurn) {
-      const unlocked = Boolean(
-        state.isWorking ||
-        state.serverIsWorking ||
-        (state.serverTurnCount || 0) > state.autoCompactBaselineTurn ||
-        (state.serverStepCount || 0) > state.autoCompactBaselineStep ||
-        ctx > state.autoCompactBaselineCtx
-      );
-      if (!unlocked) {
-        refreshBladeCompactUi();
-        return;
-      }
-      state.autoCompactWaitingLiveTurn = false;
-    }
-
-    if (state.autoCompactDisarmed) {
-      const canEmergencyRearm =
-        (Date.now() - state.autoCompactLastAt) >= AUTO_COMPACT_COOLDOWN_MS &&
-        (state.serverTurnCount || 0) > state.autoCompactTriggeredTurn &&
-        ctx >= (state.autoCompactTriggeredCtx + 15000);
-      if (!canEmergencyRearm) {
-        state.autoCompactPending = false;
-        if (state.autoCompactTimer) {
-          clearTimeout(state.autoCompactTimer);
-          state.autoCompactTimer = 0;
-        }
-        refreshBladeCompactUi();
-        return;
-      }
-      state.autoCompactDisarmed = false;
-      persistCompactHistory();
-    }
-
-    if (state.compactLastFailed && state.autoCompactLastAt > 0 && (Date.now() - state.autoCompactLastAt) < AUTO_COMPACT_COOLDOWN_MS) {
-      state.autoCompactPending = false;
-      if (state.autoCompactTimer) {
-        clearTimeout(state.autoCompactTimer);
-        state.autoCompactTimer = 0;
-      }
-      refreshBladeCompactUi();
-      return;
-    }
-
-    if (!state.autoCompactEnabled) {
-      state.autoCompactPending = false;
-      if (state.autoCompactTimer) {
-        clearTimeout(state.autoCompactTimer);
-        state.autoCompactTimer = 0;
-      }
-      refreshBladeCompactUi();
-      return;
-    }
-
-    const isDocHidden = typeof document !== 'undefined' && Boolean(document.hidden);
-    const workingNow = Boolean(state.isWorking || state.serverIsWorking || liveSig.isWorking);
-    const showcaseRunning = Boolean(
-      typeof window !== 'undefined' &&
-      window.__AGY_CINEMA_DIRECTOR__ &&
-      typeof window.__AGY_CINEMA_DIRECTOR__.isShowcaseRunning === 'function' &&
-      window.__AGY_CINEMA_DIRECTOR__.isShowcaseRunning()
-    );
-    const menuOpen = hasVisibleSlashOrPopupMenu();
-
-    if (isDocHidden || workingNow || liveDraft.length > 0 || showcaseRunning || menuOpen) {
-      state.autoCompactPending = true;
-      if (state.autoCompactTimer) {
-        clearTimeout(state.autoCompactTimer);
-        state.autoCompactTimer = 0;
-      }
-      refreshBladeCompactUi();
-      return;
-    }
-
-    state.autoCompactPending = true;
     refreshBladeCompactUi();
-
-    if (!state.compactInFlight && !state.autoCompactTimer) {
-      const reqEpoch = state.mountEpoch;
-      const reqCidEpoch = state.cidEpoch;
-      state.autoCompactTimer = setTimeout(() => {
-        state.autoCompactTimer = 0;
-        if (
-          reqEpoch !== state.mountEpoch ||
-          reqCidEpoch !== state.cidEpoch ||
-          !state.barEl ||
-          !state.barEl.isConnected
-        ) {
-          return;
-        }
-        if (!state.autoCompactEnabled || state.autoCompactDisarmed || state.autoCompactWaitingLiveTurn) {
-          return;
-        }
-        if (Math.round(state.serverCtxTokens || 0) < AUTO_COMPACT_THRESHOLD) {
-          return;
-        }
-        triggerCompactSession({ source: 'auto' });
-      }, AUTO_COMPACT_SETTLE_MS);
-    }
   }
 
   function setAutoCompactEnabled(nextEnabled, opts = {}) {
-    const enabled = Boolean(nextEnabled);
-    state.autoCompactEnabled = enabled;
-    writeAutoCompactPref(enabled);
-    if (!enabled) {
-      state.autoCompactPending = false;
-      if (state.autoCompactTimer) {
-        clearTimeout(state.autoCompactTimer);
-        state.autoCompactTimer = 0;
-      }
-    } else {
-      evaluateAutoCompact({ firstSync: false });
+    state.autoCompactEnabled = false;
+    writeAutoCompactPref(false);
+    state.autoCompactPending = false;
+    state.autoCompactDisarmed = false;
+    state.autoCompactWaitingLiveTurn = false;
+    if (state.autoCompactTimer) {
+      clearTimeout(state.autoCompactTimer);
+      state.autoCompactTimer = 0;
     }
     refreshBladeCompactUi();
-    if (!opts.silent) {
-      showUserMessageEcho(
-        enabled
-          ? 'Đã bật tự động nén phiên (/compact) ở 380K'
-          : 'Đã tắt tự động nén 380K (vẫn nhấn thanh kiếm để nén tay)'
-      );
+    if (!(opts && opts.silent)) {
+      showUserMessageEcho('Tự động nén phiên đã được tắt (nhấn thanh kiếm nếu muốn nén tay)');
     }
-    return enabled;
+    return false;
   }
 
   function toggleAutoCompactMode() {
-    return setAutoCompactEnabled(!state.autoCompactEnabled);
+    return setAutoCompactEnabled(false);
   }
 
   function applyCrisisVisual(isCrisis) {
@@ -2320,11 +2145,17 @@
 
     refreshUtilityButtonStates();
 
-    if (typeof document !== 'undefined' && document.hidden) {
+    const unfocusedOrHidden =
+      typeof document !== 'undefined' &&
+      (document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus()));
+    if (firstSync || unfocusedOrHidden) {
+      state.targetCtxTokens = state.serverCtxTokens;
+      state.targetTurnTokens = state.serverTurnTokens;
       state.dispCtxTokens = state.serverCtxTokens;
       state.dispTurnTokens = state.serverTurnTokens;
       renderDomValues();
-    } else {
+    }
+    if (!(typeof document !== 'undefined' && document.hidden)) {
       ensureOdometerRunning();
     }
   }
@@ -3584,19 +3415,13 @@
     bladeBtn.addEventListener('click', (ev) => {
       ev.stopPropagation();
       if (ev.shiftKey) {
-        toggleAutoCompactMode();
+        onTogglePopover(ev);
         return;
       }
       if (state.popoverOpen) {
         setPopoverOpen(false);
       }
       triggerCompactSession({ source: 'manual' });
-    });
-
-    bladeBtn.addEventListener('contextmenu', (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      toggleAutoCompactMode();
     });
 
     const quickToggleBioAudio = () => {
@@ -3685,12 +3510,6 @@
         }
         state.autoCompactPending = false;
         state.compactLastFailed = false;
-        if (state.hasTelemetry && Math.round(state.serverCtxTokens || 0) >= AUTO_COMPACT_THRESHOLD) {
-          state.autoCompactDisarmed = true;
-          state.autoCompactLastAt = Date.now();
-          state.autoCompactTriggeredCtx = Math.round(state.serverCtxTokens || 0);
-          state.autoCompactTriggeredTurn = state.serverTurnCount || 0;
-        }
         persistCompactHistory();
         refreshBladeCompactUi();
       }
@@ -3888,7 +3707,15 @@
         }
       }
 
-      if (!document.hidden && (sig.isWorking || state.wasWorking)) {
+      if (isHiddenOrUnfocused && state.hasTelemetry && !curWorking) {
+        if (state.dispCtxTokens !== state.serverCtxTokens || state.dispTurnTokens !== state.serverTurnTokens) {
+          state.targetCtxTokens = state.serverCtxTokens;
+          state.targetTurnTokens = state.serverTurnTokens;
+          state.dispCtxTokens = state.serverCtxTokens;
+          state.dispTurnTokens = state.serverTurnTokens;
+          renderDomValues();
+        }
+      } else if (!document.hidden && (sig.isWorking || state.wasWorking)) {
         ensureOdometerRunning();
       }
     }, 850);

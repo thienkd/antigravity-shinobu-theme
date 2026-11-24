@@ -248,6 +248,7 @@ function sanitizeCompactProfileEntry(entry) {
     out.fxDensity = Math.max(0, Math.min(100, Math.round(entry.fxDensity)));
   }
   if (typeof entry.chibiEnabled === 'boolean') out.chibiEnabled = entry.chibiEnabled;
+  if (typeof entry.chibi3dEnabled === 'boolean') out.chibi3dEnabled = entry.chibi3dEnabled;
   if (typeof entry.autoFinisher === 'boolean') out.autoFinisher = entry.autoFinisher;
   if (typeof entry.focusMode === 'boolean') out.focusMode = entry.focusMode;
   return Object.keys(out).length > 0 ? out : null;

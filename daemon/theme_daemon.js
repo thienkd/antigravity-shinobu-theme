@@ -91,6 +91,8 @@ const ALLOWED_ASSET_MIME = Object.freeze({
     '.jpeg': 'image/jpeg',
     '.gif': 'image/gif',
     '.svg': 'image/svg+xml; charset=utf-8',
+    '.glb': 'model/gltf-binary',
+    '.vrm': 'model/gltf-binary',
 });
 
 const ASSET_CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox";

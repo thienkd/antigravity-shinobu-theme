@@ -137,6 +137,7 @@
   const STORAGE_TRANSPARENT_WORLD = 'agy_transparent_world_v1';
   const STORAGE_MASTER_PERSONA = 'agy_master_persona_v1';
   const STORAGE_CHIBI_ENABLED = 'agy_chibi_enabled_v1';
+  const STORAGE_CHIBI_3D = 'agy_chibi_3d_v1';
   const STORAGE_FX_DENSITY = 'agy_fx_density_v1';
   const STORAGE_AUTO_FINISHER = 'agy_auto_finisher_v1';
   const STORAGE_BUBBLE_RADIUS = 'agy_bubble_radius_v1';
@@ -217,11 +218,22 @@
         dimming: clampInt(item.dimming, 15, 92, THEMES[thName]?.defaultDimming ?? 69),
         fxDensity: clampInt(item.fxDensity, 0, 100, 100),
         chibiEnabled: item.chibiEnabled !== false,
+        ...(typeof item.chibi3dEnabled === 'boolean' ? { chibi3dEnabled: item.chibi3dEnabled } : {}),
         autoFinisher: item.autoFinisher !== false,
         focusMode: Boolean(item.focusMode)
       };
     }
     return out;
+  }
+
+  function resolveActiveChibiCharId(stObj) {
+    const bKey = (stObj && (stObj.bubbleName || stObj.themeName)) || DEFAULT_THEME_KEY;
+    const bTh = THEMES[bKey] || THEMES[DEFAULT_THEME_KEY] || {};
+    const hint = bTh.fxMode || bKey;
+    if (typeof window !== 'undefined' && window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.resolveCharacterMeta === 'function') {
+      return window.__AGY_KNY_CHIBI_AURA__.resolveCharacterMeta(bTh, hint).charId;
+    }
+    return (bTh.fxMode && String(bTh.fxMode).toLowerCase()) || 'shinobu';
   }
 
   const AGY_DOM_CONTRACTS = Object.freeze({
@@ -362,6 +374,9 @@
       if (typeof syncCfg.chibiEnabled === 'boolean') {
         localStorage.setItem(STORAGE_CHIBI_ENABLED, String(syncCfg.chibiEnabled));
       }
+      if (typeof syncCfg.chibi3dEnabled === 'boolean') {
+        localStorage.setItem(STORAGE_CHIBI_3D, String(syncCfg.chibi3dEnabled));
+      }
       if (typeof syncCfg.autoFinisher === 'boolean') {
         localStorage.setItem(STORAGE_AUTO_FINISHER, String(syncCfg.autoFinisher));
       }
@@ -429,44 +444,59 @@
     hydrateStorageFromConfigObject(SEC.getInitialConfig());
   }
 
+  const _lsFallback = new Map();
+  function safeLsGet(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch (_) {
+      return _lsFallback.has(key) ? _lsFallback.get(key) : null;
+    }
+  }
+  function safeLsRemember(key, val) {
+    _lsFallback.set(key, String(val));
+    try {
+      localStorage.setItem(key, String(val));
+    } catch (_) {}
+  }
+
   function getState() {
     const init = SEC.getInitialConfig() || {};
-    const storedTheme = localStorage.getItem(STORAGE_THEME);
+    const storedTheme = safeLsGet(STORAGE_THEME);
     const rawTheme = (storedTheme !== null && storedTheme !== '') ? storedTheme : (init.themeName || DEFAULT_THEME_KEY);
     const themeName = THEMES[rawTheme] ? rawTheme : DEFAULT_THEME_KEY;
 
-    const storedBubble = localStorage.getItem(STORAGE_BUBBLE);
+    const storedBubble = safeLsGet(STORAGE_BUBBLE);
     const rawBubble = (storedBubble !== null && storedBubble !== '') ? storedBubble : (init.bubbleName || themeName);
     const bubbleName = THEMES[rawBubble] ? rawBubble : themeName;
 
-    const storedInput = localStorage.getItem(STORAGE_INPUT);
+    const storedInput = safeLsGet(STORAGE_INPUT);
     const rawInput = (storedInput !== null && storedInput !== '') ? storedInput : (init.inputStyle || 'sync');
     const inputStyle = INPUT_STYLES[rawInput] ? rawInput : 'sync';
 
     const activeThemeCfg = THEMES[themeName] || {};
     const presetDefaultDim = activeThemeCfg.defaultDimming !== undefined ? activeThemeCfg.defaultDimming : 69;
-    const storedDim = localStorage.getItem(STORAGE_DIMMING);
+    const storedDim = safeLsGet(STORAGE_DIMMING);
     const rawDim = (storedDim !== null && storedDim !== '') ? storedDim : (init.dimming ?? presetDefaultDim);
     const dimming = clampInt(rawDim, 15, 92, 69);
 
-    const storedWpEnabled = localStorage.getItem(STORAGE_WP_ENABLED);
+    const storedWpEnabled = safeLsGet(STORAGE_WP_ENABLED);
     const wpEnabled = storedWpEnabled !== null
       ? storedWpEnabled !== 'false'
       : (init.wpEnabled !== undefined ? Boolean(init.wpEnabled) : true);
 
-    const storedCustomWp = localStorage.getItem(STORAGE_CUSTOM_WP);
+    const storedCustomWp = safeLsGet(STORAGE_CUSTOM_WP);
     const rawCustomWp = storedCustomWp !== null ? storedCustomWp : (init.customWp ?? '');
     const customWp = rawCustomWp ? resolveAssetUrl(rawCustomWp) : '';
 
-    const storedUserAv = localStorage.getItem(STORAGE_USER_AVATAR);
+    const storedUserAv = safeLsGet(STORAGE_USER_AVATAR);
     const rawUserAv = storedUserAv !== null ? storedUserAv : (init.userAvatar ?? '');
     const userAvatar = rawUserAv === 'none' ? 'none' : (rawUserAv ? resolveAssetUrl(rawUserAv) : '');
 
-    const storedAgentAv = localStorage.getItem(STORAGE_AGENT_AVATAR);
+    const storedAgentAv = safeLsGet(STORAGE_AGENT_AVATAR);
     const rawAgentAv = storedAgentAv !== null ? storedAgentAv : (init.agentAvatar ?? '');
     const agentAvatar = rawAgentAv === 'none' ? 'none' : (rawAgentAv ? resolveAssetUrl(rawAgentAv) : '');
 
-    const storedBlur = localStorage.getItem(STORAGE_GLASS_BLUR);
+    const storedBlur = safeLsGet(STORAGE_GLASS_BLUR);
     let glassBlur;
     if (storedBlur !== null && storedBlur !== '') {
       glassBlur = clampInt(storedBlur, 0, 16, 0);
@@ -481,56 +511,61 @@
       }
     }
 
-    const storedAvSize = localStorage.getItem(STORAGE_AVATAR_SIZE);
+    const storedAvSize = safeLsGet(STORAGE_AVATAR_SIZE);
     const rawAvSize = (storedAvSize !== null && storedAvSize !== '') ? storedAvSize : init.avatarSize;
     const avatarSize = rawAvSize !== undefined && rawAvSize !== null && rawAvSize !== '' ? clampInt(rawAvSize, 22, 52, 32) : 32;
 
-    const storedAvRad = localStorage.getItem(STORAGE_AVATAR_RADIUS);
+    const storedAvRad = safeLsGet(STORAGE_AVATAR_RADIUS);
     const rawAvRad = (storedAvRad !== null && storedAvRad !== '') ? storedAvRad : init.avatarRadius;
     const avatarRadius = rawAvRad !== undefined && rawAvRad !== null && rawAvRad !== '' ? clampInt(rawAvRad, 0, 50, 50) : 50;
 
-    const storedTw = localStorage.getItem(STORAGE_TRANSPARENT_WORLD);
+    const storedTw = safeLsGet(STORAGE_TRANSPARENT_WORLD);
     const transparentWorld = storedTw !== null
       ? storedTw !== 'false'
       : (init.transparentWorld !== undefined ? Boolean(init.transparentWorld) : true);
 
-    const storedPersona = localStorage.getItem(STORAGE_MASTER_PERSONA);
+    const storedPersona = safeLsGet(STORAGE_MASTER_PERSONA);
     const rawPersona = (storedPersona !== null && storedPersona !== '') ? storedPersona : (init.masterPersona || 'yoriichi');
     const masterPersona = normalizeSafeMasterPersona(rawPersona);
 
-    const storedChibi = localStorage.getItem(STORAGE_CHIBI_ENABLED);
+    const storedChibi = safeLsGet(STORAGE_CHIBI_ENABLED);
     const chibiEnabled = storedChibi !== null
       ? storedChibi !== 'false'
       : (init.chibiEnabled !== undefined ? Boolean(init.chibiEnabled) : true);
 
-    const storedFxDen = localStorage.getItem(STORAGE_FX_DENSITY);
+    const storedChibi3d = safeLsGet(STORAGE_CHIBI_3D);
+    const chibi3dEnabled = storedChibi3d !== null
+      ? storedChibi3d !== 'false'
+      : (init.chibi3dEnabled !== undefined ? Boolean(init.chibi3dEnabled) : true);
+
+    const storedFxDen = safeLsGet(STORAGE_FX_DENSITY);
     const rawFxDen = (storedFxDen !== null && storedFxDen !== '') ? storedFxDen : init.fxDensity;
     const fxDensity = rawFxDen !== undefined && rawFxDen !== null && rawFxDen !== '' ? clampInt(rawFxDen, 0, 100, 100) : 100;
 
-    const storedAutoFin = localStorage.getItem(STORAGE_AUTO_FINISHER);
+    const storedAutoFin = safeLsGet(STORAGE_AUTO_FINISHER);
     const autoFinisher = storedAutoFin !== null
       ? storedAutoFin !== 'false'
       : (init.autoFinisher !== undefined ? Boolean(init.autoFinisher) : true);
 
-    const storedBubRad = localStorage.getItem(STORAGE_BUBBLE_RADIUS);
+    const storedBubRad = safeLsGet(STORAGE_BUBBLE_RADIUS);
     const rawBubRad = (storedBubRad !== null && storedBubRad !== '') ? storedBubRad : init.bubbleRadius;
     const bubbleRadius = rawBubRad !== undefined && rawBubRad !== null && rawBubRad !== '' ? clampInt(rawBubRad, 6, 22, 14) : 14;
 
-    const storedEcoBatt = localStorage.getItem(STORAGE_ECO_BATTERY);
+    const storedEcoBatt = safeLsGet(STORAGE_ECO_BATTERY);
     const ecoBattery = storedEcoBatt !== null
       ? storedEcoBatt !== 'false'
       : (init.ecoBattery !== undefined ? Boolean(init.ecoBattery) : true);
 
-    const storedUiLang = localStorage.getItem(STORAGE_UI_LANG);
+    const storedUiLang = safeLsGet(STORAGE_UI_LANG);
     const uiLang = normalizeUiLang((storedUiLang !== null && storedUiLang !== '') ? storedUiLang : (init.uiLang || 'vi'));
 
-    const storedActiveWs = localStorage.getItem(STORAGE_ACTIVE_WS);
+    const storedActiveWs = safeLsGet(STORAGE_ACTIVE_WS);
     const activeWorkspace = normalizeWorkspaceKey((storedActiveWs !== null && storedActiveWs !== '') ? storedActiveWs : (init.activeWorkspace || ''));
 
-    const storedAiMode = localStorage.getItem(STORAGE_AI_PERSONA_MODE);
+    const storedAiMode = safeLsGet(STORAGE_AI_PERSONA_MODE);
     const aiPersonaMode = normalizeAiPersonaMode((storedAiMode !== null && storedAiMode !== '') ? storedAiMode : init.aiPersonaMode);
 
-    const storedFocusMode = localStorage.getItem(STORAGE_FOCUS_MODE);
+    const storedFocusMode = safeLsGet(STORAGE_FOCUS_MODE);
     const focusMode = storedFocusMode !== null
       ? storedFocusMode === 'true'
       : Boolean(init.focusMode);
@@ -543,7 +578,7 @@
 
     let workspaceProfiles = {};
     try {
-      const rawWsJson = localStorage.getItem(STORAGE_WS_PROFILES);
+      const rawWsJson = safeLsGet(STORAGE_WS_PROFILES);
       if (rawWsJson) {
         workspaceProfiles = sanitizeWorkspaceProfilesMap(SEC.stripProtoKeys(JSON.parse(rawWsJson)));
       } else if (init.workspaceProfiles && typeof init.workspaceProfiles === 'object') {
@@ -569,6 +604,7 @@
       focusMode,
       privacyShieldActive,
       chibiEnabled,
+      chibi3dEnabled,
       fxDensity,
       autoFinisher,
       bubbleRadius,
@@ -801,6 +837,7 @@
     st.inputStyle = INPUT_STYLES[st.inputStyle] ? st.inputStyle : 'sync';
     st.transparentWorld = st.transparentWorld !== false;
     st.chibiEnabled = st.chibiEnabled !== false;
+    st.chibi3dEnabled = st.chibi3dEnabled !== false;
     st.autoFinisher = st.autoFinisher !== false;
     st.ecoBattery = st.ecoBattery !== false;
     st.masterPersona = normalizeSafeMasterPersona(st.masterPersona);
@@ -820,6 +857,21 @@
     st.uiLang = normalizeUiLang(st.uiLang);
     st.activeWorkspace = normalizeWorkspaceKey(st.activeWorkspace);
     st.workspaceProfiles = sanitizeWorkspaceProfilesMap(st.workspaceProfiles);
+    let syncedWsChibi3d = false;
+    if (
+      !isTransient &&
+      overrides.chibi3dEnabled !== undefined &&
+      overrides.workspaceProfiles === undefined &&
+      st.activeWorkspace &&
+      st.workspaceProfiles &&
+      Object.prototype.hasOwnProperty.call(st.workspaceProfiles, st.activeWorkspace)
+    ) {
+      st.workspaceProfiles[st.activeWorkspace] = {
+        ...st.workspaceProfiles[st.activeWorkspace],
+        chibi3dEnabled: Boolean(st.chibi3dEnabled)
+      };
+      syncedWsChibi3d = true;
+    }
 
     window.__AGY_FX_DENSITY__ = st.fxDensity / 100;
     window.__AGY_AUTO_FINISHER__ = st.autoFinisher;
@@ -828,50 +880,50 @@
       transientOverrideState = { ...st };
     } else {
       transientOverrideState = null;
-      try {
-        localStorage.setItem(STORAGE_THEME, st.themeName);
-        localStorage.setItem(STORAGE_BUBBLE, st.bubbleName);
-        localStorage.setItem(STORAGE_INPUT, st.inputStyle);
-        localStorage.setItem(STORAGE_DIMMING, String(st.dimming));
-        localStorage.setItem(STORAGE_WP_ENABLED, String(st.wpEnabled));
-        localStorage.setItem(STORAGE_TRANSPARENT_WORLD, String(st.transparentWorld));
-        localStorage.setItem(STORAGE_CHIBI_ENABLED, String(st.chibiEnabled));
-        localStorage.setItem(STORAGE_FX_DENSITY, String(st.fxDensity));
-        localStorage.setItem(STORAGE_AUTO_FINISHER, String(st.autoFinisher));
-        localStorage.setItem(STORAGE_BUBBLE_RADIUS, String(st.bubbleRadius));
-        localStorage.setItem(STORAGE_ECO_BATTERY, String(st.ecoBattery));
-        localStorage.setItem(STORAGE_MASTER_PERSONA, st.masterPersona);
-        localStorage.setItem(STORAGE_AI_PERSONA_MODE, st.aiPersonaMode);
-        localStorage.setItem(STORAGE_FOCUS_MODE, String(Boolean(st.focusMode)));
-        localStorage.setItem(STORAGE_UI_LANG, st.uiLang);
-        if (typeof window !== 'undefined' && window.__AGY_I18N__ && typeof window.__AGY_I18N__.setLang === 'function') {
-          window.__AGY_I18N__.setLang(st.uiLang);
-        }
-        if (overrides.activeWorkspace !== undefined) {
-          localStorage.setItem(STORAGE_ACTIVE_WS, st.activeWorkspace);
-        }
-        if (overrides.workspaceProfiles !== undefined) {
-          localStorage.setItem(STORAGE_WS_PROFILES, JSON.stringify(st.workspaceProfiles));
-        }
-        if (overrides.userAvatar !== undefined) {
-          localStorage.setItem(STORAGE_USER_AVATAR, overrides.userAvatar === 'none' ? 'none' : safeCssUrl(overrides.userAvatar));
-        }
-        if (overrides.agentAvatar !== undefined) {
-          localStorage.setItem(STORAGE_AGENT_AVATAR, overrides.agentAvatar === 'none' ? 'none' : safeCssUrl(overrides.agentAvatar));
-        }
-        if (overrides.glassBlur !== undefined) {
-          localStorage.setItem(STORAGE_GLASS_BLUR, String(st.glassBlur));
-        }
-        if (overrides.avatarSize !== undefined) {
-          localStorage.setItem(STORAGE_AVATAR_SIZE, String(st.avatarSize));
-        }
-        if (overrides.avatarRadius !== undefined) {
-          localStorage.setItem(STORAGE_AVATAR_RADIUS, String(st.avatarRadius));
-        }
-      } catch (e) {}
+      safeLsRemember(STORAGE_THEME, st.themeName);
+      safeLsRemember(STORAGE_BUBBLE, st.bubbleName);
+      safeLsRemember(STORAGE_INPUT, st.inputStyle);
+      safeLsRemember(STORAGE_DIMMING, String(st.dimming));
+      safeLsRemember(STORAGE_WP_ENABLED, String(st.wpEnabled));
+      safeLsRemember(STORAGE_TRANSPARENT_WORLD, String(st.transparentWorld));
+      safeLsRemember(STORAGE_CHIBI_ENABLED, String(st.chibiEnabled));
+      safeLsRemember(STORAGE_CHIBI_3D, String(st.chibi3dEnabled));
+      safeLsRemember(STORAGE_FX_DENSITY, String(st.fxDensity));
+      safeLsRemember(STORAGE_AUTO_FINISHER, String(st.autoFinisher));
+      safeLsRemember(STORAGE_BUBBLE_RADIUS, String(st.bubbleRadius));
+      safeLsRemember(STORAGE_ECO_BATTERY, String(st.ecoBattery));
+      safeLsRemember(STORAGE_MASTER_PERSONA, st.masterPersona);
+      safeLsRemember(STORAGE_AI_PERSONA_MODE, st.aiPersonaMode);
+      safeLsRemember(STORAGE_FOCUS_MODE, String(Boolean(st.focusMode)));
+      safeLsRemember(STORAGE_UI_LANG, st.uiLang);
+      if (typeof window !== 'undefined' && window.__AGY_I18N__ && typeof window.__AGY_I18N__.setLang === 'function') {
+        window.__AGY_I18N__.setLang(st.uiLang);
+      }
+      if (overrides.activeWorkspace !== undefined) {
+        safeLsRemember(STORAGE_ACTIVE_WS, st.activeWorkspace);
+      }
+      if (overrides.workspaceProfiles !== undefined || syncedWsChibi3d) {
+        safeLsRemember(STORAGE_WS_PROFILES, JSON.stringify(st.workspaceProfiles));
+      }
+      if (overrides.userAvatar !== undefined) {
+        safeLsRemember(STORAGE_USER_AVATAR, overrides.userAvatar === 'none' ? 'none' : safeCssUrl(overrides.userAvatar));
+      }
+      if (overrides.agentAvatar !== undefined) {
+        safeLsRemember(STORAGE_AGENT_AVATAR, overrides.agentAvatar === 'none' ? 'none' : safeCssUrl(overrides.agentAvatar));
+      }
+      if (overrides.glassBlur !== undefined) {
+        safeLsRemember(STORAGE_GLASS_BLUR, String(st.glassBlur));
+      }
+      if (overrides.avatarSize !== undefined) {
+        safeLsRemember(STORAGE_AVATAR_SIZE, String(st.avatarSize));
+      }
+      if (overrides.avatarRadius !== undefined) {
+        safeLsRemember(STORAGE_AVATAR_RADIUS, String(st.avatarRadius));
+      }
 
       if (overrides.customWp !== undefined) {
         const cleanWp = overrides.customWp ? safeCssUrl(overrides.customWp) : '';
+        _lsFallback.set(STORAGE_CUSTOM_WP, cleanWp);
         try {
           localStorage.setItem(STORAGE_CUSTOM_WP, cleanWp);
         } catch (_) {
@@ -1706,6 +1758,11 @@
 
       ${bubbleStickerCss}
       ${inputStickerCss}
+      .surface-composer[data-chibi-3d-active="1"]::before,
+      .surface-composer[data-chibi3d-active="1"]::before {
+        opacity: 0 !important;
+        visibility: hidden !important;
+      }
 
       @media (max-width: 640px) {
         .agy-user-bubble-frame::before,
@@ -1969,6 +2026,7 @@
         dimming: clampInt(src.dimming, 15, 92, cur.dimming),
         fxDensity: clampInt(src.fxDensity, 0, 100, cur.fxDensity),
         chibiEnabled: src.chibiEnabled !== false,
+        chibi3dEnabled: src.chibi3dEnabled !== false,
         autoFinisher: src.autoFinisher !== false,
         focusMode: Boolean(src.focusMode)
       };
@@ -1993,6 +2051,7 @@
         dimming: prof.dimming,
         fxDensity: prof.fxDensity,
         chibiEnabled: prof.chibiEnabled,
+        chibi3dEnabled: typeof prof.chibi3dEnabled === 'boolean' ? prof.chibi3dEnabled : cur.chibi3dEnabled,
         autoFinisher: prof.autoFinisher !== false,
         focusMode: Boolean(prof.focusMode)
       });
@@ -2448,6 +2507,19 @@
     const effAgentAv = computeEffectiveAgentAv(st);
 
     const personaList = forge && Array.isArray(forge.PERSONA_LIST) ? forge.PERSONA_LIST : [activePersona];
+    const activeChibiCharId = resolveActiveChibiCharId(st);
+    const is3dModeOn = st.chibi3dEnabled !== false;
+    const glbApi = typeof window !== 'undefined' ? window.__AGY_KNY_CHIBI_3D__ : null;
+    const glbInfo = (glbApi && typeof glbApi.getCustomGlbInfo === 'function')
+      ? glbApi.getCustomGlbInfo(activeChibiCharId)
+      : { loaded: false, charId: activeChibiCharId };
+    const glbStatusInitText = (glbInfo && glbInfo.loaded)
+      ? (is3dModeOn
+          ? `${tr('glbOk', 'Đã nạp mô hình 3D:')} ${glbInfo.fileName} (${glbInfo.vertexCount || 0}v)`
+          : `Đã nạp ${glbInfo.fileName} (${glbInfo.vertexCount || 0}v) — đang hiển thị 2D gốc`)
+      : (is3dModeOn
+          ? `Chưa nạp tệp .glb/.vrm cho ${activeChibiCharId} — đang hiển thị ảnh Chibi 2D gốc`
+          : `${tr('glbDef', 'Đang ở chế độ 2D (Ảnh gốc)')} (${activeChibiCharId})`);
     const multiversePresets = forge && Array.isArray(forge.MULTIVERSE_PRESETS) ? forge.MULTIVERSE_PRESETS : [];
     const fxModeOptions = forge && Array.isArray(forge.FX_MODE_OPTIONS)
       ? forge.FX_MODE_OPTIONS
@@ -2724,6 +2796,27 @@
                 <span>${esc(tr('finTg', 'Tự tung chiêu Trảm Quỷ (tự nhường khi gõ code)'))}</span>
                 <input id="agy-autofinisher-toggle" type="checkbox" ${st.autoFinisher !== false ? 'checked' : ''} style="accent-color: ${escMainPrimary}; cursor: pointer; width: 16px; height: 16px;" />
               </label>
+              <div style="display: flex; flex-direction: column; gap: 8px; padding: 11px 14px; border-radius: 10px; background: rgba(11,14,22,0.62); border: 1px solid rgba(255,255,255,0.09); grid-column: 1 / -1;">
+                <label style="display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 12.5px; color: #f1f5f9; cursor: pointer;">
+                  <span>${esc(tr('chb3dTg', 'Nhân vật Chibi 3D tương tác (.glb / .vrm)'))}</span>
+                  <input id="agy-chibi-3d-toggle" type="checkbox" ${is3dModeOn ? 'checked' : ''} style="accent-color: ${escMainPrimary}; cursor: pointer; width: 16px; height: 16px;" />
+                </label>
+                <div role="group" aria-label="${esc(tr('chb3dTg', 'Chế độ hiển thị Chibi 2D hoặc 3D'))}" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+                  <button id="agy-chibi-mode-2d" type="button" data-chibi-mode="2d" aria-pressed="${!is3dModeOn ? 'true' : 'false'}" style="padding: 8px 10px; border-radius: 8px; font-size: 12px; font-weight: ${!is3dModeOn ? '700' : '500'}; color: ${!is3dModeOn ? '#f8fafc' : '#cbd5e1'}; background: ${!is3dModeOn ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${!is3dModeOn ? escMainPrimary : 'rgba(255,255,255,0.14)'}; cursor: pointer;">${esc(tr('chb2dM', 'Chế độ 2D (Ảnh gốc)'))}</button>
+                  <button id="agy-chibi-mode-3d" type="button" data-chibi-mode="3d" aria-pressed="${is3dModeOn ? 'true' : 'false'}" style="padding: 8px 10px; border-radius: 8px; font-size: 12px; font-weight: ${is3dModeOn ? '700' : '500'}; color: ${is3dModeOn ? '#f8fafc' : '#cbd5e1'}; background: ${is3dModeOn ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${is3dModeOn ? escMainPrimary : 'rgba(255,255,255,0.14)'}; cursor: pointer;">${esc(tr('chb3dM', 'Chế độ 3D (.glb / .vrm)'))}</button>
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 14px; border-radius: 10px; background: rgba(11,14,22,0.62); border: 1px solid rgba(255,255,255,0.09);">
+              <div style="min-width: 190px; flex: 1;">
+                <div style="font-size: 12.5px; font-weight: 600; color: #f1f5f9; margin-bottom: 2px;">${esc(tr('glbH', 'Mô hình 3D (.glb / .vrm) tùy chỉnh cho nhân vật'))}</div>
+                <div id="agy-chibi-glb-status" style="font-size: 11.5px; color: #94a3b8;">${esc(glbStatusInitText)}</div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input id="agy-chibi-glb-input" type="file" accept=".glb,.vrm" style="display: none;" />
+                <button id="agy-chibi-glb-upload" type="button" style="padding: 6px 12px; border-radius: 8px; background: rgba(255,255,255,0.09); border: 1px solid ${escMainPrimary}; color: #f8fafc; font-size: 12px; font-weight: 600; cursor: pointer;">${esc(tr('glbUp', 'Nạp tệp .glb / .vrm'))}</button>
+                <button id="agy-chibi-glb-reset" type="button" style="padding: 6px 12px; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.16); color: #cbd5e1; font-size: 12px; cursor: pointer;">${esc(tr('glbRst', 'Xóa 3D (Dùng ảnh 2D gốc)'))}</button>
+              </div>
             </div>
           </div>
 
@@ -3170,7 +3263,7 @@
       const cleanId = normalizeSafeMasterPersona(pid);
       // Clear manual userAvatar override if it was 'none' or empty so persona emblem shows immediately
       const nextOverrides = { masterPersona: cleanId };
-      const curAv = localStorage.getItem(STORAGE_USER_AVATAR);
+      const curAv = safeLsGet(STORAGE_USER_AVATAR);
       if (!curAv || curAv === 'none') {
         nextOverrides.userAvatar = '';
       }
@@ -3555,6 +3648,112 @@
       });
     }
 
+    const chibi3dToggle = container.querySelector('#agy-chibi-3d-toggle');
+    const chibiMode2dBtn = container.querySelector('#agy-chibi-mode-2d');
+    const chibiMode3dBtn = container.querySelector('#agy-chibi-mode-3d');
+    const setChibi3dModeUi = (enabled) => {
+      applyTheme({ chibi3dEnabled: Boolean(enabled) });
+      renderThemePanels(container);
+    };
+    if (chibi3dToggle) {
+      chibi3dToggle.addEventListener('change', (e) => {
+        setChibi3dModeUi(Boolean(e.target.checked));
+      });
+    }
+    if (chibiMode2dBtn) {
+      chibiMode2dBtn.addEventListener('click', () => {
+        setChibi3dModeUi(false);
+      });
+    }
+    if (chibiMode3dBtn) {
+      chibiMode3dBtn.addEventListener('click', () => {
+        setChibi3dModeUi(true);
+      });
+    }
+
+    const glbInput = container.querySelector('#agy-chibi-glb-input');
+    const glbUploadBtn = container.querySelector('#agy-chibi-glb-upload');
+    const glbResetBtn = container.querySelector('#agy-chibi-glb-reset');
+    const glbStatusEl = container.querySelector('#agy-chibi-glb-status');
+    const syncGlbUiRefresh = (msg, isErr) => {
+      if (glbStatusEl) {
+        glbStatusEl.textContent = msg;
+        glbStatusEl.style.color = isErr ? '#fca5a5' : '#94a3b8';
+      }
+      if (window.__AGY_KNY_CHIBI_AURA__) {
+        if (typeof window.__AGY_KNY_CHIBI_AURA__.notifyChibiReaction === 'function') {
+          window.__AGY_KNY_CHIBI_AURA__.notifyChibiReaction('happy', 800);
+        }
+        if (typeof window.__AGY_KNY_CHIBI_AURA__.resumeOrPauseAura === 'function') {
+          window.__AGY_KNY_CHIBI_AURA__.resumeOrPauseAura();
+        }
+      }
+    };
+    if (glbUploadBtn && glbInput) {
+      glbUploadBtn.addEventListener('click', () => {
+        glbInput.click();
+      });
+    }
+    if (glbInput) {
+      glbInput.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+        const chApi = window.__AGY_KNY_CHIBI_3D__;
+        if (!chApi || typeof chApi.setCustomGlbModel !== 'function') {
+          syncGlbUiRefresh(`${tr('glbErr', 'Tệp .glb/.vrm không hợp lệ:')} Động cơ 3D chưa sẵn sàng.`, true);
+          return;
+        }
+        const lowerName = String(file.name || '').toLowerCase();
+        if (!lowerName.endsWith('.glb') && !lowerName.endsWith('.vrm')) {
+          syncGlbUiRefresh(`${tr('glbErr', 'Tệp .glb/.vrm không hợp lệ:')} Chỉ hỗ trợ định dạng .glb hoặc .vrm.`, true);
+          return;
+        }
+        if (file.size > 25 * 1024 * 1024) {
+          syncGlbUiRefresh(`${tr('glbErr', 'Tệp .glb/.vrm không hợp lệ:')} Vượt giới hạn 25MB.`, true);
+          return;
+        }
+        try {
+          const cid = resolveActiveChibiCharId(getState());
+          const buf = typeof file.arrayBuffer === 'function'
+            ? await file.arrayBuffer()
+            : await new Promise((resolve, reject) => {
+                const fr = new FileReader();
+                fr.onload = () => resolve(fr.result);
+                fr.onerror = () => reject(new Error('Không thể đọc tệp .glb/.vrm.'));
+                fr.readAsArrayBuffer(file);
+              });
+          const res = await chApi.setCustomGlbModel(cid, buf, { fileName: file.name });
+          applyTheme({ chibi3dEnabled: true });
+          renderThemePanels(container);
+          const refreshedStatus = container.querySelector('#agy-chibi-glb-status');
+          if (refreshedStatus) {
+            refreshedStatus.textContent = `${tr('glbOk', 'Đã nạp mô hình 3D:')} ${res.fileName} (${res.vertexCount || 0}v)`;
+          }
+          syncGlbUiRefresh(`${tr('glbOk', 'Đã nạp mô hình 3D:')} ${res.fileName} (${res.vertexCount || 0}v)`, false);
+        } catch (err) {
+          syncGlbUiRefresh(`${tr('glbErr', 'Tệp .glb/.vrm không hợp lệ:')} ${(err && err.message) || String(err)}`, true);
+        }
+      });
+    }
+    if (glbResetBtn) {
+      glbResetBtn.addEventListener('click', async () => {
+        const cid = resolveActiveChibiCharId(getState());
+        const chApi = window.__AGY_KNY_CHIBI_3D__;
+        if (chApi && typeof chApi.clearCustomGlbModel === 'function') {
+          try { await chApi.clearCustomGlbModel(cid); } catch (_) {}
+        }
+        applyTheme({});
+        renderThemePanels(container);
+        const msg = getState().chibi3dEnabled === false
+          ? `${tr('glbDef', 'Đang ở chế độ 2D (Ảnh gốc)')} (${cid})`
+          : `Chưa nạp tệp .glb/.vrm cho ${cid} — đang hiển thị ảnh Chibi 2D gốc`;
+        const refreshedStatus = container.querySelector('#agy-chibi-glb-status');
+        if (refreshedStatus) refreshedStatus.textContent = msg;
+        syncGlbUiRefresh(msg, false);
+      });
+    }
+
     container.querySelectorAll('.agy-ai-persona-mode-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const mode = normalizeAiPersonaMode(btn.getAttribute('data-ai-persona-mode'));
@@ -3719,6 +3918,9 @@
       if (typeof parsed.chibiEnabled === 'boolean') {
         allowed.chibiEnabled = parsed.chibiEnabled;
       }
+      if (typeof parsed.chibi3dEnabled === 'boolean') {
+        allowed.chibi3dEnabled = parsed.chibi3dEnabled;
+      }
       if (typeof parsed.autoFinisher === 'boolean') {
         allowed.autoFinisher = parsed.autoFinisher;
       }
@@ -3830,28 +4032,18 @@
       modalPendingForged = null;
       modalPendingForgeName = '';
       modalPendingForgeFx = '';
-      localStorage.removeItem(STORAGE_CUSTOM_WP);
-      localStorage.removeItem(STORAGE_USER_AVATAR);
-      localStorage.removeItem(STORAGE_AGENT_AVATAR);
-      localStorage.removeItem(STORAGE_USER_AVATAR_SAVED);
-      localStorage.removeItem(STORAGE_AGENT_AVATAR_SAVED);
-      localStorage.removeItem(STORAGE_GLASS_BLUR);
-      localStorage.removeItem(STORAGE_AVATAR_SIZE);
-      localStorage.removeItem(STORAGE_AVATAR_RADIUS);
-      localStorage.removeItem(STORAGE_THEME);
-      localStorage.removeItem(STORAGE_BUBBLE);
-      localStorage.removeItem(STORAGE_INPUT);
-      localStorage.removeItem(STORAGE_DIMMING);
-      localStorage.removeItem(STORAGE_WP_ENABLED);
-      localStorage.removeItem(STORAGE_TRANSPARENT_WORLD);
-      localStorage.removeItem(STORAGE_CHIBI_ENABLED);
-      localStorage.removeItem(STORAGE_FX_DENSITY);
-      localStorage.removeItem(STORAGE_AUTO_FINISHER);
-      localStorage.removeItem(STORAGE_BUBBLE_RADIUS);
-      localStorage.removeItem(STORAGE_ECO_BATTERY);
-      localStorage.removeItem(STORAGE_MASTER_PERSONA);
-      localStorage.removeItem(STORAGE_AI_PERSONA_MODE);
-      localStorage.removeItem(STORAGE_FOCUS_MODE);
+      _lsFallback.clear();
+      try {
+        [
+          STORAGE_CUSTOM_WP, STORAGE_USER_AVATAR, STORAGE_AGENT_AVATAR,
+          STORAGE_USER_AVATAR_SAVED, STORAGE_AGENT_AVATAR_SAVED, STORAGE_GLASS_BLUR,
+          STORAGE_AVATAR_SIZE, STORAGE_AVATAR_RADIUS, STORAGE_THEME, STORAGE_BUBBLE,
+          STORAGE_INPUT, STORAGE_DIMMING, STORAGE_WP_ENABLED, STORAGE_TRANSPARENT_WORLD,
+          STORAGE_CHIBI_ENABLED, STORAGE_CHIBI_3D, STORAGE_FX_DENSITY, STORAGE_AUTO_FINISHER,
+          STORAGE_BUBBLE_RADIUS, STORAGE_ECO_BATTERY, STORAGE_MASTER_PERSONA,
+          STORAGE_AI_PERSONA_MODE, STORAGE_FOCUS_MODE
+        ].forEach((k) => localStorage.removeItem(k));
+      } catch (_) {}
       const defTh = THEMES[DEFAULT_THEME_KEY] || {};
       const defDim = defTh.defaultDimming ?? 24;
       const defBlurParsed = parseFloat(defTh.headerBlur);
@@ -3870,6 +4062,7 @@
         avatarRadius: 50,
         transparentWorld: true,
         chibiEnabled: true,
+        chibi3dEnabled: true,
         fxDensity: 100,
         autoFinisher: true,
         bubbleRadius: 14,
@@ -4011,12 +4204,15 @@
   function injectMainSidebarButton() {
     if (document.getElementById('agy-custom-theme-sidebar-btn')) return;
 
-    const spans = Array.from(document.querySelectorAll('aside span, [data-sidebar] span, .bg-sidebar span'));
+    const spans = Array.from(document.querySelectorAll('aside span, [data-sidebar] span, .bg-sidebar span, [data-testid="sidebar-navigation-items"] span'));
     const customSpan = spans.find(s => s.textContent?.trim() === 'Customizations');
-    if (!customSpan) return;
+    const navItemsContainer = !customSpan ? document.querySelector('[data-testid="sidebar-navigation-items"]') : null;
+    if (!customSpan && !navItemsContainer) return;
 
-    const row = customSpan.closest('a, button, div[role="button"], .group\\/headerbtn') || customSpan.parentElement;
-    if (!row || !row.parentNode) return;
+    const row = customSpan
+      ? (customSpan.closest('a, button, div[role="button"], .group\\/headerbtn') || customSpan.parentElement)
+      : null;
+    if (customSpan && (!row || !row.parentNode)) return;
 
     const btn = document.createElement('button');
     btn.id = 'agy-custom-theme-sidebar-btn';
@@ -4028,7 +4224,11 @@
       <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${SEC.escapeHtml(tr('sidebarBtn', 'Giao diện tùy biến'))}</span>
     `;
 
-    row.parentNode.insertBefore(btn, row.nextSibling);
+    if (row && row.parentNode) {
+      row.parentNode.insertBefore(btn, row.nextSibling);
+    } else if (navItemsContainer) {
+      navItemsContainer.appendChild(btn);
+    }
 
     btn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -4353,7 +4553,7 @@
     if (!window.__AGY_SHINOBU_RT__) {
       window.__AGY_SHINOBU_RT__ = {
         fxRaf: 0,
-        fxPaused: localStorage.getItem('agy_fx_paused_v1') === '1',
+        fxPaused: safeLsGet('agy_fx_paused_v1') === '1',
         fxFocusPaused: false,
         fxCleanups: [],
         activeFxMode: '',
@@ -4794,6 +4994,9 @@
     targetEl.__agyBounceTimer = setTimeout(() => {
       delete targetEl.dataset.chibiBounce;
     }, 280);
+    if (typeof window !== 'undefined' && window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.notifyChibiReaction === 'function') {
+      try { window.__AGY_KNY_CHIBI_AURA__.notifyChibiReaction('happy', 1000); } catch (_) {}
+    }
   }
 
   function speakShinobuLine(line, expandIfCollapsed = true) {
@@ -5281,6 +5484,7 @@
         mainHit.innerHTML = '<i aria-hidden="true"></i>';
         mainHit.addEventListener('click', (e) => {
           e.stopPropagation();
+          if (compItem && compItem.dataset && compItem.dataset.chibi3dDragging === '1') return;
           if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill === 'function') {
             window.__AGY_KNY_CHIBI_AURA__.castNextComboSkill({
               originEl: e.currentTarget,
@@ -5508,6 +5712,7 @@
       const charHint = bTheme.fxMode || activeBubbleKey;
       const auraThemeCfg = {
         ...bTheme,
+        chibi3dEnabled: st.chibi3dEnabled !== false,
         masterPersonaId: persona ? persona.id : 'yoriichi',
         personaRingColor: SEC.sanitizeCssValue(persona.ringColor, '#fde047'),
         personaGlowColor: SEC.sanitizeCssValue(persona.glowColor, 'rgba(239, 68, 68, 0.52)'),
@@ -5732,6 +5937,7 @@
           dimming: prof.dimming,
           fxDensity: prof.fxDensity,
           chibiEnabled: prof.chibiEnabled !== false,
+          chibi3dEnabled: typeof prof.chibi3dEnabled === 'boolean' ? prof.chibi3dEnabled : curState.chibi3dEnabled,
           autoFinisher: prof.autoFinisher !== false,
           focusMode: Boolean(prof.focusMode)
         });

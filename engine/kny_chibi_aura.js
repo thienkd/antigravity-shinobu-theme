@@ -28,11 +28,41 @@
   const TWO_PI = Math.PI * 2;
   const AURA_W = 162;
   const AURA_H = 84;
+  const CHIBI_3D_W = 136;
+  const CHIBI_3D_H = 112;
+  const CHIBI_3D_STORAGE_KEY = 'agy_chibi_3d_v1';
   const STYLE_ID = 'antigravity-kny-chibi-aura-style';
   const SKILL_BAR_ID = 'agy-chibi-skill-bar';
   const SFX_MUTE_STORAGE_KEY = 'agy_kny_sfx_muted';
   const FX_PAUSE_STORAGE_KEY = 'agy_fx_paused_v1';
   const FINISHER_COOLDOWN_MS = 12000;
+
+  function getChibi3dApi() {
+    if (typeof window === 'undefined') return null;
+    return window.__AGY_KNY_CHIBI_3D__ || (window.__AGY_KNY_3D_VFX__ && window.__AGY_KNY_3D_VFX__.chibi3d) || null;
+  }
+
+  function isChibi3dExplicitlyEnabled(themeCfg) {
+    if (!getChibi3dApi()) return false;
+    if (themeCfg && themeCfg.isChibiNpc === false) return false;
+    if (themeCfg && themeCfg.isMultiversePreset) return false;
+    if (themeCfg && themeCfg.chibi3dEnabled === false) return false;
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage.getItem(CHIBI_3D_STORAGE_KEY) === 'false') {
+        return false;
+      }
+    } catch (_) {}
+    return true;
+  }
+
+  function isChibi3dActiveForConfig(themeCfg, charId) {
+    if (!isChibi3dExplicitlyEnabled(themeCfg)) return false;
+    if (themeCfg && themeCfg.allowProcedural3d === true) return true;
+    const c3d = getChibi3dApi();
+    if (!c3d || typeof c3d.hasRealGlbModel !== 'function') return false;
+    const cid = charId || (themeCfg && (themeCfg.fxMode || themeCfg.charId)) || 'shinobu';
+    return Boolean(c3d.hasRealGlbModel(cid));
+  }
 
   function safeResolveAsset(val) {
     if (!val || typeof val !== 'string') return '';
@@ -1406,11 +1436,43 @@
       agy-chibi-aura[data-aura-surge="1"] {
         filter: brightness(1.38) saturate(1.22) drop-shadow(0 0 9px var(--agy-aura-surge, rgba(250, 204, 21, 0.72)));
       }
-      agy-chibi-aura > canvas {
+      agy-chibi-aura > canvas:not(.agy-chibi-3d-canvas) {
         width: 162px !important;
         height: 84px !important;
         display: block !important;
         pointer-events: none !important;
+      }
+      agy-chibi-aura > canvas.agy-chibi-3d-canvas {
+        position: absolute !important;
+        right: 2px !important;
+        bottom: -2px !important;
+        width: 136px !important;
+        height: 112px !important;
+        z-index: 3 !important;
+        display: block !important;
+        pointer-events: none !important;
+        transition: opacity 220ms ease, transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .surface-composer[data-chibi-out-on-stage="1"] agy-chibi-aura > canvas.agy-chibi-3d-canvas {
+        opacity: 0 !important;
+        transform: translateY(-18px) scale(0.75) !important;
+        transition: opacity 0.08s ease-out, transform 0.11s cubic-bezier(0.22, 1, 0.36, 1) !important;
+      }
+      .surface-composer[data-chibi-landing="1"] agy-chibi-aura > canvas.agy-chibi-3d-canvas {
+        animation: agyChibiSpringLanding 0.38s cubic-bezier(0.22, 1, 0.36, 1) both !important;
+      }
+      .surface-composer[data-chibi3d-active="1"] > .agy-chibi-hitbox,
+      .surface-composer[data-chibi-3d-active="1"] > .agy-chibi-hitbox {
+        width: 112px !important;
+        height: 92px !important;
+        top: -88px !important;
+        cursor: grab !important;
+      }
+      .surface-composer[data-chibi3d-active="1"] > .agy-chibi-hitbox:active,
+      .surface-composer[data-chibi-3d-active="1"] > .agy-chibi-hitbox:active,
+      .surface-composer[data-chibi3d-dragging="1"] > .agy-chibi-hitbox,
+      .surface-composer[data-chibi-3d-dragging="1"] > .agy-chibi-hitbox {
+        cursor: grabbing !important;
       }
 
       /* Subtle elemental wave accent for Chibi on .agy-user-bubble-frame */
@@ -1625,8 +1687,9 @@
         flex-shrink: 0;
       }
 
-      /* Integrated 4-Form Drawer inside #agy-shinobu-npc-wrap */
-      .agy-npc-skill-pill[data-active="1"] {
+      /* Integrated 4-Form Drawer & 2D/3D Mode Toggle inside #agy-shinobu-npc-wrap */
+      .agy-npc-skill-pill[data-active="1"],
+      .agy-npc-mode-pill[data-mode="3d"] {
         background: rgba(255, 255, 255, 0.18) !important;
         border-color: var(--npc-primary, #c084fc) !important;
         box-shadow: 0 0 10px var(--npc-glow, rgba(192, 132, 252, 0.38));
@@ -1674,6 +1737,28 @@
     attackTimer: 0,
     surgeTimer: 0,
     focusSyncTimer: 0,
+
+    // 3D Chibi companion state
+    chibi3dCanvas: null,
+    chibi3dCtx: null,
+    chibi3dActive: false,
+    chibi3dDpr: 1,
+    chibi3dLookYaw: 0,
+    chibi3dLookPitch: 0,
+    chibi3dTargetLookYaw: 0,
+    chibi3dTargetLookPitch: 0,
+    chibi3dOrbitYaw: 0,
+    chibi3dOrbitPitch: 0,
+    chibi3dReaction: 'idle',
+    chibi3dReactionUntil: 0,
+    chibi3dDragging: false,
+    chibi3dMoved: false,
+    chibi3dSpringBackAt: 0,
+    chibi3dDragReleaseTimer: 0,
+    chibi3dFrameCount: 0,
+    chibi3dLastMode: '',
+    chibi3dRectCacheAt: 0,
+    chibi3dRectCache: null,
 
     // Skill UI state
     uiComposer: null,
@@ -1771,12 +1856,99 @@
       state.auraCanvas.height = Math.round(AURA_H * nextDpr);
       state.auraCtx.setTransform(nextDpr, 0, 0, nextDpr, 0, 0);
     }
+    if (state.chibi3dCanvas && state.chibi3dCtx && Math.abs(nextDpr - (state.chibi3dDpr || 1)) > 0.01) {
+      state.chibi3dDpr = nextDpr;
+      state.chibi3dCanvas.width = Math.round(CHIBI_3D_W * nextDpr);
+      state.chibi3dCanvas.height = Math.round(CHIBI_3D_H * nextDpr);
+      if (typeof state.chibi3dCtx.setTransform === 'function') {
+        state.chibi3dCtx.setTransform(nextDpr, 0, 0, nextDpr, 0, 0);
+      }
+    }
+  }
+
+  function notifyChibiReaction(kind, durationMs) {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    state.chibi3dReaction = String(kind || 'happy');
+    state.chibi3dReactionUntil = now + Math.max(200, Number(durationMs) || 1000);
+    if (state.chibi3dActive && isMotionPaused()) {
+      drawStaticAuraFrame();
+    }
+  }
+
+  function getChibi3dState() {
+    return {
+      active: Boolean(state.chibi3dActive),
+      mode: state.chibi3dLastMode || '',
+      charId: state.auraCharId || '',
+      reaction: state.chibi3dReaction || 'idle',
+      orbitYaw: state.chibi3dOrbitYaw || 0,
+      orbitPitch: state.chibi3dOrbitPitch || 0,
+      lookYaw: state.chibi3dLookYaw || 0,
+      lookPitch: state.chibi3dLookPitch || 0,
+      dragging: Boolean(state.chibi3dDragging)
+    };
+  }
+
+  function renderChibi3dFrame(now, dt, surgeProgress, isStatic) {
+    if (!state.chibi3dActive || !state.chibi3dCtx) return;
+    const c3d = getChibi3dApi();
+    if (!c3d || typeof c3d.renderChibiTo2D !== 'function') return;
+
+    if (now > state.chibi3dReactionUntil && state.chibi3dReaction !== 'idle') {
+      state.chibi3dReaction = 'idle';
+    }
+    const lerpRate = Math.min(0.45, 0.14 * dt);
+    state.chibi3dLookYaw += (state.chibi3dTargetLookYaw - state.chibi3dLookYaw) * lerpRate;
+    state.chibi3dLookPitch += (state.chibi3dTargetLookPitch - state.chibi3dLookPitch) * lerpRate;
+
+    if (!isStatic && !state.chibi3dDragging && state.chibi3dSpringBackAt > 0 && now >= state.chibi3dSpringBackAt) {
+      let yawDiff = -state.chibi3dOrbitYaw;
+      yawDiff = ((yawDiff + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+      if (Math.abs(yawDiff) < 0.01 && Math.abs(state.chibi3dOrbitPitch) < 0.01) {
+        state.chibi3dOrbitYaw = 0;
+        state.chibi3dOrbitPitch = 0;
+        state.chibi3dSpringBackAt = 0;
+      } else {
+        state.chibi3dOrbitYaw += yawDiff * Math.min(0.35, 0.10 * dt);
+        state.chibi3dOrbitPitch += (0 - state.chibi3dOrbitPitch) * Math.min(0.35, 0.10 * dt);
+      }
+    }
+
+    const activeReaction = surgeProgress > 0.22 ? 'attack' : state.chibi3dReaction;
+    const eco = Boolean(state.themeCfg && state.themeCfg.ecoBattery);
+    if (eco && !isStatic && !state.chibi3dDragging && activeReaction === 'idle' && (state.chibi3dFrameCount % 2 === 1)) {
+      return;
+    }
+
+    const cycle = now % 4200;
+    const blinkAmt = (!isStatic && cycle > 4020) ? Math.sin(((cycle - 4020) / 180) * Math.PI) : 0;
+    const res = c3d.renderChibiTo2D(
+      state.chibi3dCtx,
+      CHIBI_3D_W,
+      CHIBI_3D_H,
+      state.auraCharId || 'shinobu',
+      {
+        timeSec: now * 0.001,
+        isStatic: Boolean(isStatic),
+        lookYaw: state.chibi3dLookYaw,
+        lookPitch: state.chibi3dLookPitch,
+        orbitYaw: state.chibi3dOrbitYaw,
+        orbitPitch: state.chibi3dOrbitPitch,
+        reaction: activeReaction,
+        blinkAmt,
+        surge: surgeProgress,
+        allowProcedural3d: Boolean(state.themeCfg && state.themeCfg.allowProcedural3d)
+      },
+      { dpr: state.chibi3dDpr || state.auraDpr || 1 }
+    );
+    if (res && res.mode) state.chibi3dLastMode = res.mode;
   }
 
   function drawStaticAuraFrame() {
     if (!state.auraCtx || !state.auraScene) return;
     syncAuraCanvasDpr();
     state.auraScene.render(state.auraCtx, 1800, 1, 1, 0, true);
+    renderChibi3dFrame(1800, 1, 0, true);
   }
 
   function auraTick(now) {
@@ -1795,6 +1967,7 @@
       ? Math.max(0.35, Math.min(2.2, (now - state.auraLastNow) / 16.6667))
       : 1.0;
     state.auraLastNow = now;
+    state.chibi3dFrameCount++;
 
     let surgeBoost = 1.0;
     let surgeProgress = 0;
@@ -1807,6 +1980,7 @@
     }
 
     state.auraScene.render(state.auraCtx, now, dt, surgeBoost, surgeProgress, false);
+    renderChibi3dFrame(now, dt, surgeProgress, false);
     state.auraRaf = requestAnimationFrame(auraTick);
   }
 
@@ -1846,6 +2020,10 @@
       clearTimeout(state.focusSyncTimer);
       state.focusSyncTimer = 0;
     }
+    if (state.chibi3dDragReleaseTimer) {
+      clearTimeout(state.chibi3dDragReleaseTimer);
+      state.chibi3dDragReleaseTimer = 0;
+    }
     if (state.bubbleObserver) {
       state.bubbleObserver.disconnect();
       state.bubbleObserver = null;
@@ -1856,6 +2034,12 @@
     }
     if (state.auraComposer) {
       delete state.auraComposer.dataset.chibiAttack;
+      delete state.auraComposer.dataset.chibi3dActive;
+      delete state.auraComposer.dataset.chibi3dDragging;
+      if (typeof state.auraComposer.removeAttribute === 'function') {
+        state.auraComposer.removeAttribute('data-chibi-3d-active');
+        state.auraComposer.removeAttribute('data-chibi-3d-dragging');
+      }
     }
     if (typeof document !== 'undefined') {
       document.querySelectorAll('agy-chibi-aura').forEach((el) => el.remove());
@@ -1866,6 +2050,25 @@
     state.auraHost = null;
     state.auraCanvas = null;
     state.auraCtx = null;
+    state.chibi3dCanvas = null;
+    state.chibi3dCtx = null;
+    state.chibi3dActive = false;
+    state.chibi3dDpr = 1;
+    state.chibi3dLookYaw = 0;
+    state.chibi3dLookPitch = 0;
+    state.chibi3dTargetLookYaw = 0;
+    state.chibi3dTargetLookPitch = 0;
+    state.chibi3dOrbitYaw = 0;
+    state.chibi3dOrbitPitch = 0;
+    state.chibi3dReaction = 'idle';
+    state.chibi3dReactionUntil = 0;
+    state.chibi3dDragging = false;
+    state.chibi3dMoved = false;
+    state.chibi3dSpringBackAt = 0;
+    state.chibi3dFrameCount = 0;
+    state.chibi3dLastMode = '';
+    state.chibi3dRectCacheAt = 0;
+    state.chibi3dRectCache = null;
     state.auraMode = '';
     state.auraCharId = '';
     state.auraMeta = null;
@@ -1892,8 +2095,37 @@
       state.themeCfg = themeCfg;
     }
     const meta = resolveCharacterMeta(themeCfg, charId);
+    const want3d = isChibi3dActiveForConfig(themeCfg, meta.charId);
+    if (!want3d && isChibi3dExplicitlyEnabled(themeCfg)) {
+      const c3dProbe = getChibi3dApi();
+      const targetCharId = meta.charId;
+      const tryRemountIfRealGlbReady = () => {
+        if (
+          c3dProbe &&
+          typeof c3dProbe.hasRealGlbModel === 'function' &&
+          c3dProbe.hasRealGlbModel(targetCharId) &&
+          state.auraComposer === composer &&
+          composer.isConnected &&
+          state.auraCharId === targetCharId &&
+          !state.chibi3dActive &&
+          isChibi3dExplicitlyEnabled(state.themeCfg || themeCfg)
+        ) {
+          mountChibiAura(composer, state.themeCfg || themeCfg, targetCharId);
+        }
+      };
+      if (c3dProbe && typeof c3dProbe.hydrateCustomModelsFromDb === 'function') {
+        try {
+          Promise.resolve(c3dProbe.hydrateCustomModelsFromDb()).then(tryRemountIfRealGlbReady).catch(() => {});
+        } catch (_) {}
+      }
+      if (c3dProbe && typeof c3dProbe.preloadAssetGlb === 'function') {
+        try {
+          c3dProbe.preloadAssetGlb(targetCharId, tryRemountIfRealGlbReady);
+        } catch (_) {}
+      }
+    }
 
-    // Preload Full-Body Action Chibi PNG sprite into memory so 1st click leaps with 0ms latency!
+    // Preload Full-Body Action Chibi PNG sprite into memory when 2D sprite mode or fallback
     if (typeof window !== 'undefined' && window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.preloadActionSprite === 'function') {
       try {
         const safeAct = safeResolveAsset(themeCfg && themeCfg.actionSticker);
@@ -1901,12 +2133,13 @@
       } catch (_) {}
     }
 
-    // Idempotent fast-path when tick() re-invokes with identical composer & mode
+    // Idempotent fast-path when tick() re-invokes with identical composer, mode, and 3D state
     if (
       state.auraHost &&
       state.auraHost.parentElement === composer &&
       state.auraMode === meta.auraMode &&
-      state.auraCharId === meta.charId
+      state.auraCharId === meta.charId &&
+      state.chibi3dActive === want3d
     ) {
       syncBubbleFrames();
       resumeOrPauseAura();
@@ -1935,6 +2168,25 @@
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
     host.appendChild(canvas);
+
+    let chibi3dCanvas = null;
+    let chibi3dCtx = null;
+    if (want3d) {
+      chibi3dCanvas = document.createElement('canvas');
+      chibi3dCanvas.className = 'agy-chibi-3d-canvas';
+      chibi3dCanvas.width = Math.round(CHIBI_3D_W * dpr);
+      chibi3dCanvas.height = Math.round(CHIBI_3D_H * dpr);
+      chibi3dCanvas.style.cssText =
+        'position: absolute; right: 2px; bottom: -2px; width: 136px; height: 112px; z-index: 3; display: block; pointer-events: none;';
+      chibi3dCtx = chibi3dCanvas.getContext('2d');
+      if (chibi3dCtx) {
+        if (typeof chibi3dCtx.setTransform === 'function') chibi3dCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        host.appendChild(chibi3dCanvas);
+      } else {
+        chibi3dCanvas = null;
+      }
+    }
+
     composer.appendChild(host);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
@@ -1943,10 +2195,135 @@
     state.auraCanvas = canvas;
     state.auraCtx = ctx;
     state.auraDpr = dpr;
+    state.chibi3dCanvas = chibi3dCanvas;
+    state.chibi3dCtx = chibi3dCtx;
+    state.chibi3dActive = Boolean(chibi3dCanvas && chibi3dCtx);
+    state.chibi3dDpr = dpr;
+    if (state.chibi3dActive) {
+      composer.dataset.chibi3dActive = '1';
+      if (typeof composer.setAttribute === 'function') composer.setAttribute('data-chibi-3d-active', '1');
+      const c3d = getChibi3dApi();
+      if (c3d && typeof c3d.hydrateCustomModelsFromDb === 'function') {
+        try { Promise.resolve(c3d.hydrateCustomModelsFromDb()).catch(() => {}); } catch (_) {}
+      }
+    } else {
+      delete composer.dataset.chibi3dActive;
+      if (typeof composer.removeAttribute === 'function') composer.removeAttribute('data-chibi-3d-active');
+    }
     state.auraMode = meta.auraMode;
     state.auraCharId = meta.charId;
     state.auraMeta = meta;
     state.auraScene = createChibiAuraScene(meta.auraMode, meta);
+
+    if (state.chibi3dActive) {
+      let dragStartX = 0;
+      let dragStartY = 0;
+      let dragBaseYaw = 0;
+      let dragBasePitch = 0;
+      const nowFn = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+      const onComposerPointerDown = (ev) => {
+        const tgt = ev.target;
+        if (!tgt || typeof tgt.closest !== 'function' || !tgt.closest('.agy-chibi-hitbox')) return;
+        if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+        if (state.chibi3dDragReleaseTimer) {
+          clearTimeout(state.chibi3dDragReleaseTimer);
+          state.chibi3dDragReleaseTimer = 0;
+        }
+        dragStartX = Number(ev.clientX) || 0;
+        dragStartY = Number(ev.clientY) || 0;
+        dragBaseYaw = state.chibi3dOrbitYaw;
+        dragBasePitch = state.chibi3dOrbitPitch;
+        state.chibi3dDragging = true;
+        state.chibi3dMoved = false;
+      };
+      const onDocPointerMove3d = (ev) => {
+        const cx = Number(ev.clientX) || 0;
+        const cy = Number(ev.clientY) || 0;
+        if (state.chibi3dDragging) {
+          const dx = cx - dragStartX;
+          const dy = cy - dragStartY;
+          if (!state.chibi3dMoved && Math.hypot(dx, dy) >= 6) {
+            state.chibi3dMoved = true;
+            if (state.auraComposer) {
+              state.auraComposer.dataset.chibi3dDragging = '1';
+              if (typeof state.auraComposer.setAttribute === 'function') {
+                state.auraComposer.setAttribute('data-chibi-3d-dragging', '1');
+              }
+            }
+          }
+          if (state.chibi3dMoved) {
+            state.chibi3dOrbitYaw = dragBaseYaw + dx * 0.016;
+            state.chibi3dOrbitPitch = Math.max(-0.55, Math.min(0.55, dragBasePitch + dy * 0.01));
+          }
+          return;
+        }
+        const now = nowFn();
+        if ((!state.chibi3dRectCache || now - state.chibi3dRectCacheAt > 250) && state.auraHost && typeof state.auraHost.getBoundingClientRect === 'function') {
+          state.chibi3dRectCache = state.auraHost.getBoundingClientRect();
+          state.chibi3dRectCacheAt = now;
+        }
+        const rect = state.chibi3dRectCache;
+        if (rect && rect.width > 0) {
+          const anchorX = rect.left + rect.width * 0.56;
+          const anchorY = rect.top + rect.height * 0.45;
+          state.chibi3dTargetLookYaw = Math.max(-0.42, Math.min(0.42, (cx - anchorX) / 480));
+          state.chibi3dTargetLookPitch = Math.max(-0.32, Math.min(0.32, -(cy - anchorY) / 420));
+        }
+      };
+      const finishDrag = () => {
+        if (!state.chibi3dDragging) return;
+        const hadMoved = state.chibi3dMoved;
+        state.chibi3dDragging = false;
+        state.chibi3dMoved = false;
+        state.chibi3dSpringBackAt = nowFn() + 2200;
+        if (hadMoved) {
+          clearTimeout(state.chibi3dDragReleaseTimer);
+          state.chibi3dDragReleaseTimer = setTimeout(() => {
+            state.chibi3dDragReleaseTimer = 0;
+            if (state.auraComposer) {
+              delete state.auraComposer.dataset.chibi3dDragging;
+              if (typeof state.auraComposer.removeAttribute === 'function') {
+                state.auraComposer.removeAttribute('data-chibi-3d-dragging');
+              }
+            }
+          }, 60);
+        } else if (state.auraComposer) {
+          delete state.auraComposer.dataset.chibi3dDragging;
+          if (typeof state.auraComposer.removeAttribute === 'function') {
+            state.auraComposer.removeAttribute('data-chibi-3d-dragging');
+          }
+        }
+      };
+      const onComposerDblClick = (ev) => {
+        const tgt = ev.target;
+        if (!tgt || typeof tgt.closest !== 'function' || !tgt.closest('.agy-chibi-hitbox')) return;
+        state.chibi3dOrbitYaw = 0;
+        state.chibi3dOrbitPitch = 0;
+        state.chibi3dSpringBackAt = 0;
+        notifyChibiReaction('happy', 1200);
+      };
+      const onComposerKeyDown = (ev) => {
+        if (ev && ev.key === 'Enter' && !ev.shiftKey) {
+          notifyChibiReaction('happy', 900);
+        } else {
+          notifyChibiReaction('focus', 700);
+        }
+      };
+
+      composer.addEventListener('pointerdown', onComposerPointerDown, true);
+      composer.addEventListener('dblclick', onComposerDblClick, true);
+      composer.addEventListener('keydown', onComposerKeyDown, { passive: true });
+      document.addEventListener('pointermove', onDocPointerMove3d, { passive: true });
+      document.addEventListener('pointerup', finishDrag, { passive: true });
+      document.addEventListener('pointercancel', finishDrag, { passive: true });
+      state.auraCleanups.push(() => composer.removeEventListener('pointerdown', onComposerPointerDown, true));
+      state.auraCleanups.push(() => composer.removeEventListener('dblclick', onComposerDblClick, true));
+      state.auraCleanups.push(() => composer.removeEventListener('keydown', onComposerKeyDown));
+      state.auraCleanups.push(() => document.removeEventListener('pointermove', onDocPointerMove3d));
+      state.auraCleanups.push(() => document.removeEventListener('pointerup', finishDrag));
+      state.auraCleanups.push(() => document.removeEventListener('pointercancel', finishDrag));
+    }
 
     const onVis = () => resumeOrPauseAura();
     const onFocusArbiterSync = () => {
@@ -2166,6 +2543,8 @@
 
     const ext = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
     if (ext && typeof ext.castSkill === 'function') {
+      const castCfg = state.uiThemeCfg || state.themeCfg;
+      const active3dCast = isChibi3dActiveForConfig(castCfg, charId);
       try {
         ext.castSkill(charId, safeIdx, {
           charId,
@@ -2175,8 +2554,10 @@
           originRect,
           sourceFrameEl: opts.sourceFrameEl || null,
           themeCfg: state.uiThemeCfg,
+          chibi3dEnabled: active3dCast,
+          allowProcedural3d: Boolean(castCfg && castCfg.allowProcedural3d),
           actionSticker: safeResolveAsset(state.uiThemeCfg && state.uiThemeCfg.actionSticker),
-          noActionSprite: Boolean(state.uiThemeCfg && (state.uiThemeCfg.isMultiversePreset || (state.uiThemeCfg.isForged && !state.uiThemeCfg.actionSticker))),
+          noActionSprite: Boolean(state.uiThemeCfg && (state.uiThemeCfg.isMultiversePreset || (!active3dCast && state.uiThemeCfg.isForged && !state.uiThemeCfg.actionSticker))),
           composerEl: composer,
           soundEnabled: !muted,
           muted,
@@ -2272,6 +2653,28 @@
     return btn;
   }
 
+  function refreshNpcModePill(pillEl, themeCfg, charId) {
+    if (!pillEl) return;
+    const explicitOn = isChibi3dExplicitlyEnabled(themeCfg);
+    const active3d = isChibi3dActiveForConfig(themeCfg, charId);
+    pillEl.dataset.mode = explicitOn ? '3d' : '2d';
+    pillEl.setAttribute('aria-pressed', explicitOn ? 'true' : 'false');
+    const lbl = pillEl.querySelector('.agy-npc-mode-label');
+    const modeLabel = explicitOn ? 'Chibi 3D' : 'Chibi 2D';
+    if (lbl) {
+      lbl.textContent = modeLabel;
+    } else {
+      pillEl.textContent = modeLabel;
+    }
+    if (explicitOn && !active3d) {
+      pillEl.title = 'Đang dùng ảnh Chibi 2D gốc (chưa nạp .glb/.vrm) — bấm để chuyển về chế độ 2D';
+    } else if (explicitOn) {
+      pillEl.title = 'Chế độ Chibi 3D (.glb/.vrm) — bấm để chuyển về ảnh 2D gốc';
+    } else {
+      pillEl.title = 'Đang ở chế độ ảnh Chibi 2D gốc — bấm để bật chế độ Chibi 3D';
+    }
+  }
+
   function teardownSkillUi() {
     if (state.badgeObserver) {
       state.badgeObserver.disconnect();
@@ -2287,6 +2690,7 @@
     if (typeof document !== 'undefined') {
       document.querySelectorAll(`#${SKILL_BAR_ID}`).forEach((el) => el.remove());
       document.querySelectorAll('.agy-npc-skill-pill').forEach((el) => el.remove());
+      document.querySelectorAll('.agy-npc-mode-pill').forEach((el) => el.remove());
       document.querySelectorAll('.agy-npc-skills-drawer').forEach((el) => el.remove());
     }
     state.uiComposer = null;
@@ -2324,16 +2728,20 @@
     const existingBar = document.getElementById(SKILL_BAR_ID);
     if (existingBar) existingBar.remove();
     const existingNpcPill = npcWrap ? npcWrap.querySelector('.agy-npc-skill-pill') : null;
+    const existingModePill = npcWrap ? npcWrap.querySelector('.agy-npc-mode-pill') : null;
     const uiMatches = Boolean(
       state.uiComposer === composer &&
       state.uiCharId === meta.charId &&
-      (!npcWrap || existingNpcPill)
+      (!npcWrap || (existingNpcPill && existingModePill))
     );
 
     if (uiMatches) {
       state.uiNpcWrap = npcWrap;
       state.uiMeta = meta;
       if (npcWrap) {
+        if (existingModePill) {
+          refreshNpcModePill(existingModePill, state.uiThemeCfg || state.themeCfg, meta.charId);
+        }
         const drawer = npcWrap.querySelector('.agy-npc-skills-drawer');
         if (drawer) {
           drawer.style.setProperty('--skill-primary', meta.primary);
@@ -2377,11 +2785,20 @@
         npcSkillPill.setAttribute('aria-expanded', 'false');
         npcSkillPill.innerHTML = `${iconMarkup('breathing_forms', 12)}<span>Các Thức</span>`;
 
+        const npcModePill = document.createElement('button');
+        npcModePill.type = 'button';
+        npcModePill.className = 'agy-npc-pill agy-npc-mode-pill';
+        npcModePill.dataset.npcAct = 'toggle-chibi-mode';
+        npcModePill.innerHTML = '<span class="agy-npc-mode-label">Chibi 2D</span>';
+        refreshNpcModePill(npcModePill, state.uiThemeCfg || state.themeCfg, meta.charId);
+
         const chatOpenBtn = pillsRow.querySelector('[data-npc-act="chat-open"]');
         if (chatOpenBtn) {
           pillsRow.insertBefore(npcSkillPill, chatOpenBtn);
+          pillsRow.insertBefore(npcModePill, chatOpenBtn);
         } else {
           pillsRow.appendChild(npcSkillPill);
+          pillsRow.appendChild(npcModePill);
         }
 
         const drawer = document.createElement('div');
@@ -2415,6 +2832,46 @@
           const oldList = drawer.querySelector('.agy-skill-list');
           if (oldList) oldList.replaceWith(buildSkillItemsDom(freshSkills, (idx) => executeSkillCast(idx)));
           setNpcSkillsDrawerOpen(!state.npcDrawerOpen);
+        });
+
+        npcModePill.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const curCfg = state.uiThemeCfg || state.themeCfg;
+          const nextEnabled = !isChibi3dExplicitlyEnabled(curCfg);
+          try {
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem(CHIBI_3D_STORAGE_KEY, String(nextEnabled));
+            }
+          } catch (_) {}
+          const activeCid = state.uiCharId || meta.charId;
+          const patchedCfg = curCfg && typeof curCfg === 'object' ? { ...curCfg, chibi3dEnabled: nextEnabled } : { chibi3dEnabled: nextEnabled };
+          state.themeCfg = patchedCfg;
+          state.uiThemeCfg = patchedCfg;
+          if (typeof window !== 'undefined' && typeof window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__ === 'function') {
+            try {
+              window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__({ chibi3dEnabled: nextEnabled });
+            } catch (_) {}
+          } else if (state.uiComposer || state.auraComposer) {
+            mountChibiAura(state.uiComposer || state.auraComposer, patchedCfg, activeCid);
+          }
+          const liveWrap = state.uiNpcWrap || (typeof document !== 'undefined' ? document.getElementById('agy-shinobu-npc-wrap') : null);
+          const livePill = (liveWrap && liveWrap.querySelector('.agy-npc-mode-pill')) || npcModePill;
+          refreshNpcModePill(livePill, state.uiThemeCfg || patchedCfg, activeCid);
+          const dialogEl = liveWrap ? liveWrap.querySelector('.agy-npc-dialog-text') : null;
+          if (dialogEl) {
+            if (typeof window !== 'undefined' && window.__AGY_SHINOBU_RT__ && window.__AGY_SHINOBU_RT__.typeTimer) {
+              clearInterval(window.__AGY_SHINOBU_RT__.typeTimer);
+              window.__AGY_SHINOBU_RT__.typeTimer = 0;
+            }
+            const active3dNow = isChibi3dActiveForConfig(state.uiThemeCfg || patchedCfg, activeCid);
+            if (!nextEnabled) {
+              dialogEl.textContent = 'Đã chuyển về chế độ ảnh Chibi 2D gốc sắc nét!';
+            } else if (active3dNow) {
+              dialogEl.textContent = 'Đã kích hoạt mô hình Chibi 3D tương tác!';
+            } else {
+              dialogEl.textContent = 'Chưa nạp tệp .glb/.vrm cho nhân vật này — đang giữ ảnh Chibi 2D gốc (mở Giao diện tùy biến → Nhân vật để nạp mô hình 3D).';
+            }
+          }
         });
       }
     }
@@ -2540,6 +2997,8 @@
     triggerFinisher,
     resolveCharacterMeta,
     resumeOrPauseAura,
+    notifyChibiReaction,
+    getChibi3dState,
     isSfxMuted,
     setSfxMuted
   };

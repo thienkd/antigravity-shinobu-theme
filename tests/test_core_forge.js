@@ -3302,6 +3302,42 @@ describe('F08 — Định Dạng .agytheme (agytheme/2.0), Prototype Guard, Giá
       assert.equal(stImported.inputStyle, 'glass');
       assert.equal(stImported.transparentWorld, false);
     });
+
+    it('[F08-T2-10] Quản lý chibi3dEnabled qua Studio/Import/Reset & CSS ẩn sticker 2D khi Chibi 3D hoạt động', () => {
+      const env = createTestEnv({ loadCore: true });
+      const stInit = env.core.getState();
+      assert.equal(stInit.chibi3dEnabled, true, 'chibi3dEnabled mặc định phải bật');
+
+      const css = env.document.getElementById('antigravity-custom-theme-active').textContent;
+      assert.ok(
+        css.includes('.surface-composer[data-chibi-3d-active="1"]::before') && css.includes('opacity: 0 !important'),
+        'Stylesheet phải có luật ẩn sticker 2D khi Chibi 3D hoạt động mà vẫn giữ nguyên .surface-composer::before gốc'
+      );
+
+      env.window.__ANTIGRAVITY_OPEN_THEME_MODAL__();
+      const body = env.document.getElementById('agy-theme-modal-body');
+      assert.ok(body.querySelector('#agy-chibi-3d-toggle'), 'Tab Nhân vật phải có toggle #agy-chibi-3d-toggle');
+      assert.ok(body.querySelector('#agy-chibi-mode-2d'), 'Phải có nút chuyển #agy-chibi-mode-2d');
+      assert.ok(body.querySelector('#agy-chibi-mode-3d'), 'Phải có nút chuyển #agy-chibi-mode-3d');
+      const glbInput = body.querySelector('#agy-chibi-glb-input');
+      assert.ok(glbInput, 'Phải có input chọn tệp .glb/.vrm');
+      assert.equal(glbInput.getAttribute('accept'), '.glb,.vrm');
+      assert.ok(body.querySelector('#agy-chibi-glb-upload'), 'Phải có nút nạp tệp .glb/.vrm');
+      assert.ok(body.querySelector('#agy-chibi-glb-reset'), 'Phải có nút chuyển về ảnh 2D gốc');
+
+      body.querySelector('#agy-chibi-mode-2d').click();
+      assert.equal(env.core.getState().chibi3dEnabled, false, 'Nút Chế độ 2D phải tắt chibi3dEnabled');
+      body.querySelector('#agy-chibi-mode-3d').click();
+      assert.equal(env.core.getState().chibi3dEnabled, true, 'Nút Chế độ 3D phải bật chibi3dEnabled');
+
+      const toggle3d = body.querySelector('#agy-chibi-3d-toggle');
+      toggle3d.checked = false;
+      toggle3d.dispatchEvent({ type: 'change', target: toggle3d });
+      assert.equal(env.core.getState().chibi3dEnabled, false);
+
+      body.querySelector('#agy-reset-btn').click();
+      assert.equal(env.core.getState().chibi3dEnabled, true, 'Reset mặc định phải bật lại chibi3dEnabled');
+    });
   });
 });
 

@@ -2881,13 +2881,14 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     assert.equal(hud.getCompactState().inFlight, false);
   });
 
-  it('F13-T2-12 [COMPACT-AUTO-380K]: Tự động nén ở 380K, chống false-positive firstSync, hoãn khi đang gõ/bận & tự nạp lại dưới 350K', () => {
+  it('F13-T2-12 [COMPACT-AUTO-DISABLED]: Tự động nén 380K bị tắt cứng (kể cả khi localStorage cũ = \'1\'), không tự bắn /compact và không bật compactReady', () => {
     env = createKnyVmEnv();
     const { composer, editor, sendBtn } = env.buildStandardIdeDom();
+    env.localStorage.setItem('agy_auto_compact_380k_v1', '1');
     env.loadModules(['agy_security.js', 'kny_semantic_icons.js', 'kny_squad_raid.js', 'kny_token_hud.js']);
     const hud = env.sandbox.__AGY_TOKEN_HUD__;
-    const cidHist = 'dddddddd-4444-4444-8444-dddddddddddd';
-    env.sandbox.location.pathname = `/c/${cidHist}`;
+    const cidLive = 'eeeeeeee-5555-4555-8555-eeeeeeeeeeee';
+    env.sandbox.location.pathname = `/c/${cidLive}`;
 
     const bar = hud.mountTokenHud(composer, {});
     const bladeBtn = bar.querySelector('.agy-nichirin-pill');
@@ -2898,68 +2899,31 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
       editor.value = '';
     });
 
-    // 1. Mở lại phiên cũ đã 410K ở trạng thái rảnh (firstSync) -> KHÔNG tự bắn /compact
-    hud.ingestTelemetrySnapshot({
-      ok: true, cid: cidHist, contextTokens: 410000, turnCount: 9, stepCount: 20, isWorking: false
-    });
+    assert.equal(hud.isAutoCompactEnabled(), false, 'Phải ép tắt cứng tự động nén dù localStorage cũ lưu "1"');
+    assert.equal(env.localStorage.getItem('agy_auto_compact_380k_v1'), '0', 'Phải tự ghi đè localStorage về "0"');
+    assert.equal(bladeBtn.dataset.autoCompact, '0', 'Nút thanh kiếm phải có data-auto-compact="0"');
+
+    // Tăng dần ngữ cảnh qua 200K -> 382K -> 395K -> 410K dù AI rảnh & ô chat trống -> tuyệt đối không tự bắn
+    hud.ingestTelemetrySnapshot({ ok: true, cid: cidLive, contextTokens: 200000, turnCount: 1, stepCount: 2, isWorking: false });
+    hud.ingestTelemetrySnapshot({ ok: true, cid: cidLive, contextTokens: 382000, turnCount: 2, stepCount: 4, isWorking: true });
+    hud.ingestTelemetrySnapshot({ ok: true, cid: cidLive, contextTokens: 395000, turnCount: 2, stepCount: 5, isWorking: false });
+    hud.ingestTelemetrySnapshot({ ok: true, cid: cidLive, contextTokens: 410000, turnCount: 3, stepCount: 6, isWorking: false });
     env.clock.advanceBy(5000);
-    assert.equal(autoSent.length, 0, 'Mở lại phiên lịch sử cũ >380K ở firstSync không được tự động nén ngay');
-    assert.equal(hud.getCompactState().waitingLiveTurn, true);
-    assert.equal(bladeBtn.dataset.compactReady, '1', 'Vẫn phải gắn data-compact-ready="1" báo hiệu ngưỡng 380K');
 
-    // 2. Chuyển sang phiên sống mới: tăng dần đạt >= 380K trong lúc AI đang chạy -> chờ rảnh mới nén
-    const cidLive = 'eeeeeeee-5555-4555-8555-eeeeeeeeeeee';
-    env.sandbox.location.pathname = `/c/${cidLive}`;
-    env.clock.advanceBy(900);
-    hud.ingestTelemetrySnapshot({
-      ok: true, cid: cidLive, contextTokens: 200000, turnCount: 1, stepCount: 2, isWorking: false
-    });
-    hud.ingestTelemetrySnapshot({
-      ok: true, cid: cidLive, contextTokens: 382000, turnCount: 2, stepCount: 4, isWorking: true
-    });
-    env.clock.advanceBy(2500);
-    assert.equal(autoSent.length, 0, 'Khi AI đang xử lý (isWorking=true) phải hoãn tự nén');
-    assert.equal(hud.getCompactState().pending, true);
+    assert.equal(autoSent.length, 0, 'Vượt 380K không được tự động gửi /compact');
+    assert.equal(bladeBtn.dataset.compactReady, undefined, 'Không được bật data-compact-ready="1"');
+    assert.equal(hud.getCompactState().enabled, false);
+    assert.equal(hud.getCompactState().pending, false);
 
-    // 3. Khi AI vừa xong việc nhưng người dùng đang gõ nháp -> vẫn hoãn
-    editor.value = 'đang viết tiếp';
-    hud.ingestTelemetrySnapshot({
-      ok: true, cid: cidLive, contextTokens: 384000, turnCount: 2, stepCount: 5, isWorking: false
-    });
-    env.clock.advanceBy(2500);
-    assert.equal(autoSent.length, 0, 'Khi đang có nháp trong ô chat phải hoãn tự nén');
-    assert.equal(hud.getCompactState().pending, true);
-
-    // 4. Người dùng xóa sạch nháp -> sau 1200ms settle + 200ms tự động nén đúng 1 lần
-    editor.value = '';
-    editor.dispatchEvent(new env.MiniEvent('input', { bubbles: true }));
-    env.clock.advanceBy(1450);
-    assert.deepEqual(autoSent, ['/compact'], 'Khi rảnh và hết nháp ở >=380K phải tự động gửi /compact');
-    env.clock.advanceBy(700);
-    assert.equal(hud.getCompactState().disarmed, true, 'Sau khi tự nén 380K phải disarm tránh bắn lặp');
-
-    // 5. Snapshot tiếp theo vẫn 386K -> không được bắn lặp
-    hud.ingestTelemetrySnapshot({
-      ok: true, cid: cidLive, contextTokens: 386000, turnCount: 3, stepCount: 6, isWorking: false
-    });
+    const autoRes = hud.triggerCompact({ source: 'auto' });
+    assert.equal(autoRes.ok, false, 'Gọi trực tiếp source="auto" phải bị từ chối');
+    assert.equal(autoRes.reason, 'disabled', 'Gọi trực tiếp source="auto" phải trả về reason="disabled"');
+    assert.equal(hud.setAutoCompactEnabled(true, { silent: true }), false, 'setAutoCompactEnabled(true) vẫn phải trả về false');
     env.clock.advanceBy(3000);
-    assert.equal(autoSent.length, 1, 'Không được tự nén lặp lại trong cùng chu kỳ 380K');
-
-    // 6. Ngữ cảnh tụt xuống < 350K sau khi nén -> tự nạp lại (re-arm) -> leo lại >= 380K phải tự nén lần 2
-    hud.ingestTelemetrySnapshot({
-      ok: true, cid: cidLive, contextTokens: 120000, turnCount: 4, stepCount: 7, isWorking: false
-    });
-    assert.equal(hud.getCompactState().disarmed, false, 'Khi ngữ cảnh tụt < 350K phải tự động re-arm');
-
-    env.clock.advanceBy(121000); // qua cooldown 120s
-    hud.ingestTelemetrySnapshot({
-      ok: true, cid: cidLive, contextTokens: 390000, turnCount: 6, stepCount: 10, isWorking: false
-    });
-    env.clock.advanceBy(2200);
-    assert.deepEqual(autoSent, ['/compact', '/compact'], 'Sau khi re-arm và tăng lại >=380K phải tự động nén lần 2');
+    assert.equal(autoSent.length, 0, 'Sau khi gọi setAutoCompactEnabled(true) vẫn không được tự bắn /compact');
   });
 
-  it('F13-T2-13 [COMPACT-TOGGLE-POPOVER-CLEANUP]: Shift+Click/Chuột phải bật-tắt Tự nén 380K, Popover Tiếng Việt 100% & teardown dọn sạch timer', () => {
+  it('F13-T2-13 [COMPACT-MANUAL-POPOVER-CLEANUP]: Shift+Click không bật tự nén, nén tay hoạt động, Popover Tiếng Việt 100% & teardown sạch timer', () => {
     env = createKnyVmEnv();
     const { composer, editor, sendBtn } = env.buildStandardIdeDom();
     env.loadModules(['agy_security.js', 'kny_semantic_icons.js', 'kny_squad_raid.js', 'kny_token_hud.js']);
@@ -2969,7 +2933,6 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
 
     const bar = hud.mountTokenHud(composer, {});
     const bladeBtn = bar.querySelector('.agy-nichirin-pill');
-    const ctxBtn = bar.querySelector('.agy-tok-ctx-pill');
 
     const sent = [];
     sendBtn.addEventListener('click', () => {
@@ -2977,47 +2940,38 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
       editor.value = '';
     });
 
-    assert.equal(hud.isAutoCompactEnabled(), true, 'Mặc định phải bật tự nén 380K');
-    assert.equal(hud.getAutoCompactThreshold(), 380000);
-    assert.equal(bladeBtn.dataset.autoCompact, '1');
-
-    // Shift+Click tắt tự nén 380K -> lưu localStorage
-    bladeBtn.dispatchEvent(new env.MiniEvent('click', { bubbles: true, shiftKey: true }));
-    assert.equal(hud.isAutoCompactEnabled(), false);
-    assert.equal(env.localStorage.getItem('agy_auto_compact_380k_v1'), '0');
+    assert.equal(hud.isAutoCompactEnabled(), false, 'Mặc định phải tắt tự động nén');
     assert.equal(bladeBtn.dataset.autoCompact, '0');
 
-    // Đạt 400K khi đang tắt tự nén -> không tự bắn, nhưng kích tay vẫn bắn được
-    hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 200000, isWorking: false });
+    // Shift+Click mở Popover (không bật lại tự nén) & contextmenu không bật tự nén
+    bladeBtn.dispatchEvent(new env.MiniEvent('click', { bubbles: true, shiftKey: true }));
+    assert.equal(hud.isAutoCompactEnabled(), false, 'Shift+Click không được bật lại tự nén');
+    assert.equal(bar.dataset.open, '1', 'Shift+Click trên thanh kiếm mở Popover xem thông số');
+    bladeBtn.dispatchEvent(new env.MiniEvent('contextmenu', { bubbles: true, cancelable: true }));
+    assert.equal(hud.isAutoCompactEnabled(), false, 'Chuột phải không được bật lại tự nén');
+    assert.equal(env.localStorage.getItem('agy_auto_compact_380k_v1'), '0');
+
+    // Đạt 400K: không tự bắn, nhưng click thường vào thanh kiếm vẫn nén tay thành công
     hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 400000, isWorking: false });
     env.clock.advanceBy(2500);
-    assert.equal(sent.length, 0, 'Khi tắt tự nén 380K không được tự động gửi /compact');
-    assert.equal(bladeBtn.dataset.compactReady, '1');
+    assert.equal(sent.length, 0, 'Khi đạt 400K không được tự động gửi /compact');
+    assert.equal(bladeBtn.dataset.compactReady, undefined);
 
     bladeBtn.click();
     env.clock.advanceBy(950);
-    assert.deepEqual(sent, ['/compact'], 'Khi tắt tự nén vẫn kích tay gửi /compact được');
+    assert.deepEqual(sent, ['/compact'], 'Click thường vào thanh kiếm vẫn kích tay gửi /compact được');
 
-    // Chuột phải bật lại tự nén 380K & kiểm tra Popover Tiếng Việt 100%
-    bladeBtn.dispatchEvent(new env.MiniEvent('contextmenu', { bubbles: true, cancelable: true }));
-    assert.equal(hud.isAutoCompactEnabled(), true);
-    assert.equal(env.localStorage.getItem('agy_auto_compact_380k_v1'), '1');
-    assert.equal(bladeBtn.dataset.autoCompact, '1');
-
-    ctxBtn.click();
+    // Kiểm tra Popover Tiếng Việt 100% sạch từ cấm
+    const ctxBtn = bar.querySelector('.agy-tok-ctx-pill');
+    if (bar.dataset.open !== '1') ctxBtn.click();
+    assert.equal(bar.dataset.open, '1');
     const popTxt = bar.textContent;
     assert.ok(popTxt.includes('Nén phiên (/compact):'), 'Popover phải hiển thị hàng trạng thái Nén phiên (/compact)');
+    assert.ok(popTxt.includes('Tự động nén: Đã tắt'), 'Popover phải hiển thị rõ Tự động nén: Đã tắt');
     assert.equal(/\b(?:cache|tok)\b|SSE\s*<30ms|Antigravity Agent/i.test(popTxt), false, 'Popover phải 100% Tiếng Việt sạch từ cấm');
 
-    // Bắt đầu chu kỳ hẹn giờ tự nén 1200ms rồi gọi teardown() giữa chừng -> 0 timer rò rỉ
-    hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 100000, isWorking: false });
-    hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 395000, isWorking: false });
-    env.clock.advanceBy(400);
+    // Mount mới, bấm nén tay rồi teardown() giữa lúc compactStepTimers đang chờ -> 0 timer rò rỉ
     hud.teardown();
-    const st1 = env.clock.getStats();
-    assert.equal(st1.activeTimeouts + st1.activeIntervals + st1.activeRafs, 0, 'teardown() giữa autoCompactTimer không được sót timer');
-
-    // Mount lại, bấm nén tay rồi teardown() giữa lúc compactStepTimers đang chờ -> 0 timer rò rỉ
     const { composer: comp2 } = env.buildStandardIdeDom();
     const bar2 = hud.mountTokenHud(comp2, {});
     bar2.querySelector('.agy-nichirin-pill').click();
@@ -3027,7 +2981,7 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     assert.equal(st2.activeTimeouts + st2.activeIntervals + st2.activeRafs, 0, 'teardown() giữa compactStepTimers không được sót timer');
   });
 
-  it('F13-T2-14 [COMPACT-AUDIT-HARDENING]: Chống nhầm nút HTML5 submit, popup fixed offsetParent=null, chống double-send, tab ẩn, silent-failure & giữ disarm qua re-mount', () => {
+  it('F13-T2-14 [COMPACT-AUDIT-HARDENING]: Chống nhầm nút HTML5 submit, popup fixed offsetParent=null, chống double-send, không tự nén khi re-mount/visible & silent-failure khi nén tay', () => {
     env = createKnyVmEnv();
     const { composer, editor, sendBtn } = env.buildStandardIdeDom();
 
@@ -3087,14 +3041,12 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     fixedPopper.appendChild(fixedOpt);
     env.document.body.appendChild(fixedPopper);
 
-    // Khi popup fixed đang mở -> auto-compact 380K PHẢI hoãn dù offsetParent === null!
+    // Đẩy ngữ cảnh 388K không tự bắn -> khi kích tay phải tìm thấy và click đúng option dù offsetParent === null
     hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 100000, isWorking: false });
     hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 388000, isWorking: false });
     env.clock.advanceBy(2000);
-    assert.equal(sendClicks, 1, 'Popup position:fixed (offsetParent=null) đang mở phải hoãn auto-compact');
-    assert.equal(hud.getCompactState().pending, true);
+    assert.equal(sendClicks, 1, 'Đạt 388K không được tự bắn');
 
-    // Khi kích tay lúc popup fixed mở -> phải tìm thấy và chọn đúng option dù offsetParent === null
     sendBtn.addEventListener('click', () => {
       editor.value = '';
       sendBtn.disabled = false;
@@ -3105,59 +3057,32 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     env.clock.advanceBy(750);
     assert.equal(sendClicks, 2);
 
-    // 3. Gõ /compact thủ công ở 380K phải hủy timer auto-compact chống bắn chồng
-    env.clock.advanceBy(121000);
-    hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 100000, isWorking: false });
-    hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 392000, isWorking: false });
-    env.clock.advanceBy(500); // giữa 1200ms settle
-    editor.value = '/compact';
-    editor.dispatchEvent(new env.MiniEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-    editor.value = '';
-    env.clock.advanceBy(2000);
-    assert.equal(sendClicks, 2, 'Sau khi tự gõ /compact + Enter, auto-compact không được bắn chồng');
-    assert.equal(hud.getCompactState().disarmed, true);
-
-    // 4. Split-View / Re-mount composer bảo toàn disarmed & cooldown 120s theo cid
+    // 3. Re-mount composer & tab ẩn -> hiện ở 395K tuyệt đối không tự bắn /compact
     composer.remove();
     const { composer: compSplit, editor: edSplit, sendBtn: sendSplit } = env.buildStandardIdeDom();
     let splitSends = 0;
     sendSplit.addEventListener('click', () => { splitSends++; edSplit.value = ''; });
     const barSplit = hud.mountTokenHud(compSplit, {});
-    hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 395000, turnCount: 5, stepCount: 10, isWorking: true });
-    hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 395000, turnCount: 5, stepCount: 11, isWorking: false });
+    env.document.hidden = true;
+    hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 395000, turnCount: 5, stepCount: 10, isWorking: false });
     env.clock.advanceBy(2500);
-    assert.equal(hud.getCompactState().disarmed, true, 'Re-mount HUD phải giữ nguyên disarmed của cid');
-    assert.equal(splitSends, 0, 'Không được tự nén lặp lại ngay sau khi re-mount');
+    env.document.hidden = false;
+    env.document.dispatchEvent(new env.MiniEvent('visibilitychange'));
+    env.clock.advanceBy(2500);
+    assert.equal(splitSends, 0, 'Re-mount và chuyển tab từ ẩn sang hiện ở 395K tuyệt đối không tự bắn /compact');
     assert.ok(barSplit.isConnected);
 
-    // 5. Tab ẩn (document.hidden = true) hoãn auto-compact -> visible chạy -> silent failure khi kẹt
-    env.clock.advanceBy(121000);
-    hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 100000, isWorking: false });
-    env.document.hidden = true;
-    hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 385000, isWorking: false });
-    env.clock.advanceBy(3000);
-    assert.equal(splitSends, 0, 'Khi document.hidden = true phải hoãn auto-compact');
-    assert.equal(hud.getCompactState().pending, true);
-
-    // Tạo composer mà nút Send không làm gì (giả lập gửi kẹt silent failure)
+    // 4. Silent-failure khi kích tay trên composer không có nút Send
     compSplit.remove();
     const { composer: stuckComp, editor: stuckEd } = env.buildStandardIdeDom();
     stuckComp.querySelector('button[aria-label="Gửi tin nhắn"]').remove();
     const barStuck = hud.mountTokenHud(stuckComp, {});
-    env.clock.advanceBy(121000);
-    hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 100000, isWorking: false });
-    env.document.hidden = true;
-    hud.ingestTelemetrySnapshot({ ok: true, cid, contextTokens: 386000, isWorking: false });
-    env.clock.advanceBy(2000);
-    assert.equal(stuckEd.value, '', 'Tab ẩn vẫn đang hoãn');
-
-    // Quay lại tab visible -> tự động kích hoạt -> kẹt ở T=860ms -> báo cảnh báo và không đánh dấu disarmed
-    env.document.hidden = false;
-    env.document.dispatchEvent(new env.MiniEvent('visibilitychange'));
-    env.clock.advanceBy(2200);
-    assert.equal(stuckEd.value, '/compact', 'Khi tab hiện lại phải chạy auto-compact');
+    const bladeBtnStuck = barStuck.querySelector('.agy-nichirin-pill');
+    bladeBtnStuck.click();
+    env.clock.advanceBy(900);
+    assert.equal(stuckEd.value, '/compact', 'Khi kích tay mà thiếu nút Send phải giữ /compact trong ô chat');
     assert.equal(hud.getCompactState().failed, true, 'Khi /compact còn kẹt trong ô chat sau 860ms phải đánh dấu failed=true');
-    assert.equal(hud.getCompactState().disarmed, false, 'Gửi thất bại không được đánh dấu disarmed thành công giả');
+    assert.equal(hud.getCompactState().disarmed, false);
     barStuck.querySelector('.agy-tok-ctx-pill').click();
     assert.ok(barStuck.textContent.includes('Cần nhấn Enter để hoàn tất /compact'), 'Popover phải báo rõ trạng thái cần nhấn Enter');
   });

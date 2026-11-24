@@ -733,6 +733,7 @@ const __AGY_SEC__ = (() => {
         if (typeof src.wpEnabled === 'boolean') out.wpEnabled = src.wpEnabled;
         if (typeof src.transparentWorld === 'boolean') out.transparentWorld = src.transparentWorld;
         if (typeof src.chibiEnabled === 'boolean') out.chibiEnabled = src.chibiEnabled;
+        if (typeof src.chibi3dEnabled === 'boolean') out.chibi3dEnabled = src.chibi3dEnabled;
         if (typeof src.autoFinisher === 'boolean') out.autoFinisher = src.autoFinisher;
         if (typeof src.ecoBattery === 'boolean') out.ecoBattery = src.ecoBattery;
         if (typeof src.focusMode === 'boolean') out.focusMode = src.focusMode;
@@ -782,6 +783,7 @@ const __AGY_SEC__ = (() => {
                     entry.fxDensity = Math.max(0, Math.min(100, Math.round(item.fxDensity)));
                 }
                 if (typeof item.chibiEnabled === 'boolean') entry.chibiEnabled = item.chibiEnabled;
+                if (typeof item.chibi3dEnabled === 'boolean') entry.chibi3dEnabled = item.chibi3dEnabled;
                 if (typeof item.autoFinisher === 'boolean') entry.autoFinisher = item.autoFinisher;
                 if (typeof item.focusMode === 'boolean') entry.focusMode = item.focusMode;
                 if (Object.keys(entry).length > 0) cleanProfiles[wk] = entry;
