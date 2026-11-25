@@ -30,7 +30,10 @@
   const AURA_H = 84;
   const CHIBI_3D_W = 136;
   const CHIBI_3D_H = 112;
+  const LIVE2D_W = 162;
+  const LIVE2D_H = 108;
   const CHIBI_3D_STORAGE_KEY = 'agy_chibi_3d_v1';
+  const CHIBI_2D_LIVE_STORAGE_KEY = 'agy_chibi_2d_live_v1';
   const STYLE_ID = 'antigravity-kny-chibi-aura-style';
   const SKILL_BAR_ID = 'agy-chibi-skill-bar';
   const SFX_MUTE_STORAGE_KEY = 'agy_kny_sfx_muted';
@@ -62,6 +65,60 @@
     if (!c3d || typeof c3d.hasRealGlbModel !== 'function') return false;
     const cid = charId || (themeCfg && (themeCfg.fxMode || themeCfg.charId)) || 'shinobu';
     return Boolean(c3d.hasRealGlbModel(cid));
+  }
+
+  function isChibi2dLiveEnabled(themeCfg) {
+    if (themeCfg && themeCfg.isChibiNpc === false) return false;
+    if (themeCfg && themeCfg.isMultiversePreset) return false;
+    if (themeCfg && typeof themeCfg.chibi2dLive === 'boolean') return themeCfg.chibi2dLive;
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage.getItem(CHIBI_2D_LIVE_STORAGE_KEY) === 'false') {
+        return false;
+      }
+    } catch (_) {}
+    return true;
+  }
+
+  function setChibi2dLiveEnabled(enabled) {
+    const next = Boolean(enabled);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(CHIBI_2D_LIVE_STORAGE_KEY, String(next));
+      }
+    } catch (_) {}
+    if (next && typeof window !== 'undefined' && window.__AGY_SHINOBU_RT__ && window.__AGY_SHINOBU_RT__.fxPaused) {
+      try {
+        if (typeof window.__AGY_SHINOBU_RT__.toggleFxPause === 'function') {
+          window.__AGY_SHINOBU_RT__.toggleFxPause();
+        } else {
+          window.__AGY_SHINOBU_RT__.fxPaused = false;
+          if (typeof localStorage !== 'undefined') localStorage.setItem(FX_PAUSE_STORAGE_KEY, '0');
+        }
+        const mBtn = typeof document !== 'undefined' ? document.querySelector('#agy-shinobu-npc-wrap [data-npc-act="motion"]') : null;
+        if (mBtn) {
+          mBtn.textContent = '⏸';
+          mBtn.title = 'Tạm dừng hiệu ứng nền';
+          mBtn.setAttribute('aria-label', 'Tạm dừng hiệu ứng nền');
+        }
+      } catch (_) {}
+    }
+    if (state.themeCfg && typeof state.themeCfg === 'object') {
+      state.themeCfg = { ...state.themeCfg, chibi2dLive: next };
+    }
+    if (state.uiThemeCfg && typeof state.uiThemeCfg === 'object') {
+      state.uiThemeCfg = { ...state.uiThemeCfg, chibi2dLive: next };
+    }
+    const comp = state.auraComposer || state.uiComposer || (typeof document !== 'undefined' ? document.querySelector('.surface-composer') : null);
+    const cid = state.auraCharId || state.uiCharId || 'shinobu';
+    if (typeof window !== 'undefined' && typeof window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__ === 'function') {
+      try {
+        window.__ANTIGRAVITY_APPLY_CUSTOM_THEME__({ chibi2dLive: next });
+      } catch (_) {}
+    }
+    if (comp && state.live2dActive !== Boolean(!state.chibi3dActive && next)) {
+      mountChibiAura(comp, state.themeCfg || state.uiThemeCfg, cid);
+    }
+    return next;
   }
 
   function safeResolveAsset(val) {
@@ -1411,6 +1468,221 @@
   }
 
   /* ==========================================================================
+   * LIVE2D-LITE FOREGROUND PARTICLE & ANIME EMOTE RENDERER (162x96, ZERO-GC)
+   * ========================================================================== */
+
+  function drawMiniMusicNote(ctx, x, y, size, rgb, alpha) {
+    if (alpha <= 0.01) return;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = `rgba(${rgb}, ${Math.min(1, alpha).toFixed(3)})`;
+    ctx.strokeStyle = `rgba(${rgb}, ${Math.min(1, alpha).toFixed(3)})`;
+    ctx.lineWidth = Math.max(1.2, size * 0.24);
+    ctx.beginPath();
+    ctx.ellipse(-size * 0.25, size * 0.35, size * 0.38, size * 0.28, -0.35, 0, TWO_PI);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(size * 0.06, size * 0.28);
+    ctx.lineTo(size * 0.06, -size * 0.68);
+    ctx.quadraticCurveTo(size * 0.56, -size * 0.45, size * 0.48, -size * 0.05);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawMiniBolt(ctx, x, y, size, rgb, alpha) {
+    if (alpha <= 0.01) return;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = `rgba(${rgb}, ${Math.min(1, alpha).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.moveTo(size * 0.18, -size * 0.95);
+    ctx.lineTo(-size * 0.48, size * 0.06);
+    ctx.lineTo(size * 0.02, size * 0.06);
+    ctx.lineTo(-size * 0.22, size * 0.95);
+    ctx.lineTo(size * 0.52, -size * 0.12);
+    ctx.lineTo(0, -size * 0.12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function createLive2dForegroundRenderer(auraMode, meta) {
+    const fgParticles = [];
+    for (let i = 0; i < 9; i++) {
+      fgParticles.push({
+        seedX: frac(i + 3, 137, 29),
+        seedY: frac(i + 5, 193, 71),
+        speed: 0.42 + frac(i + 7, 89, 17) * 0.58,
+        phase: frac(i + 11, 251, 43) * TWO_PI,
+        scale: 0.72 + frac(i + 13, 113, 19) * 0.55
+      });
+    }
+
+    function drawLive2dEmote(ctx, t, mood, typingCombo, lookX, lookY) {
+      if (!mood || mood === 'idle') return;
+      // Đặt ngay phía trên-phải chỏm đầu Chibi (x ~ 118, y ~ 17) để không bao giờ bị hộp thoại NPC che khuất
+      const ex = 118 + lookX * 3.2;
+      const ey = 17 + lookY * 1.6 + Math.sin(t * 0.0045) * 1.8;
+
+      if (mood === 'thinking') {
+        ctx.save();
+        ctx.translate(ex, ey);
+        // Hai chấm dẫn suy nghĩ từ chỏm tóc Chibi đi lên
+        ctx.fillStyle = `rgba(${meta.rgb1}, 0.85)`;
+        ctx.beginPath();
+        ctx.arc(-6, 15, 2.1, 0, TWO_PI);
+        ctx.arc(-3, 11, 2.9, 0, TWO_PI);
+        ctx.fill();
+
+        // Bong bóng suy nghĩ kính mờ viền màu Hơi Thở
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.strokeStyle = `rgba(${meta.rgb1}, 0.90)`;
+        ctx.lineWidth = 1.35;
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(-17, -9, 34, 18, 9);
+        } else {
+          ctx.rect(-17, -9, 34, 18);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        for (let d = 0; d < 3; d++) {
+          const wave = Math.max(0, Math.sin(t * 0.0065 - d * 0.85));
+          const dy = 0.5 - wave * 2.8;
+          const r = 2.1 + wave * 0.75;
+          ctx.fillStyle = d === 1 ? `rgba(${meta.rgb2}, 0.98)` : `rgba(${meta.rgb1}, 0.98)`;
+          ctx.beginPath();
+          ctx.arc(-7 + d * 7, dy, r, 0, TWO_PI);
+          ctx.fill();
+        }
+        drawFourPointStar(ctx, 20, -7, 3.2, t * 0.0028, meta.rgb2, 0.94);
+        ctx.restore();
+        return;
+      }
+
+      if (mood === 'typing' || mood === 'combo') {
+        const bounce = Math.abs(Math.sin(t * 0.011)) * 3.2;
+        drawMiniMusicNote(ctx, ex + 18, ey + 4 - bounce, 5.4, meta.rgb1, 0.94);
+        drawFourPointStar(ctx, ex - 18, ey + 6 - bounce * 0.5, 2.9, t * 0.004, meta.rgb2, 0.88);
+        if (typingCombo >= 3) {
+          ctx.save();
+          ctx.translate(ex, ey - bounce * 0.4);
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+          ctx.strokeStyle = `rgba(${meta.rgb1}, 0.92)`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          if (typeof ctx.roundRect === 'function') {
+            ctx.roundRect(-15, -7, 30, 14, 7);
+          } else {
+            ctx.rect(-15, -7, 30, 14);
+          }
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#f8fafc';
+          ctx.font = '700 9.5px system-ui, -apple-system, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`×${Math.min(99, typingCombo)}`, 0, 0.5);
+          ctx.restore();
+        }
+        return;
+      }
+
+      if (mood === 'crisis') {
+        const jitter = Math.sin(t * 0.032) * 1.4;
+        ctx.save();
+        ctx.translate(ex + jitter, ey);
+        ctx.fillStyle = 'rgba(127, 29, 29, 0.90)';
+        ctx.strokeStyle = 'rgba(251, 113, 133, 0.96)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(0, 0, 9.5, 0, TWO_PI);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#fef08a';
+        ctx.font = '800 12px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('!', 0, 0.5);
+        ctx.restore();
+        drawMiniBolt(ctx, ex + 15, ey - 5, 5.2, '250, 204, 21', 0.94);
+        return;
+      }
+
+      if (mood === 'victory' || mood === 'happy') {
+        const pulse = 0.86 + Math.sin(t * 0.010) * 0.18;
+        drawFourPointStar(ctx, ex, ey - 2, 4.5 * pulse, t * 0.0035, '250, 204, 21', 0.96);
+        drawFourPointStar(ctx, ex + 18, ey + 6, 3.2 * pulse, -t * 0.003, meta.rgb1, 0.92);
+        drawTinyHeart(ctx, ex - 15, ey + 5, 3.9 * pulse, meta.rgb1, 0.94);
+        if (mood === 'victory') {
+          drawFourPointStar(ctx, ex - 8, ey - 6, 3.6 * pulse, t * 0.004, meta.rgb2, 0.94);
+        }
+      }
+    }
+
+    function render(ctx, now, mood, typingCombo, lookX, lookY, surgeProgress) {
+      ctx.clearRect(0, 0, LIVE2D_W, LIVE2D_H);
+      const t = now;
+      const energy = (mood === 'victory' || mood === 'happy') ? 1.45
+        : (mood === 'combo' || mood === 'typing' || mood === 'thinking') ? 1.22
+        : 1.0;
+      const count = (mood === 'victory' || surgeProgress > 0.1) ? 9 : 6;
+
+      for (let i = 0; i < count; i++) {
+        const p = fgParticles[i];
+        const cyc = ((t * 0.00034 * p.speed * energy + p.seedY) % 1);
+        const py = LIVE2D_H - 8 - cyc * (LIVE2D_H - 18);
+        const sway = Math.sin(t * 0.0022 * p.speed + p.phase) * (7 + (i % 3) * 2.5);
+        const px = 44 + p.seedX * 106 + sway + lookX * 3.6;
+        const fade = Math.sin(cyc * Math.PI);
+        const alpha = Math.max(0, Math.min(0.95, fade * 0.76 * energy));
+        if (alpha <= 0.02) continue;
+        const rgb = (i % 2 === 0) ? meta.rgb1 : meta.rgb2;
+
+        if (auraMode === 'wisteria' || auraMode === 'royal_wisteria') {
+          if (i % 3 === 0) {
+            const flap = 0.35 + Math.abs(Math.sin(t * 0.009 + p.phase)) * 0.65;
+            drawTinyButterfly(ctx, px, py, 0.56 * p.scale, flap, meta.rgb1, meta.rgb2, alpha);
+          } else {
+            drawOrb(ctx, px, py, 1.5 * p.scale, rgb, alpha * 0.85);
+          }
+        } else if (auraMode === 'love' || auraMode === 'nezuko') {
+          if (i % 2 === 0) {
+            drawTinyHeart(ctx, px, py, 2.7 * p.scale, rgb, alpha * 0.9);
+          } else {
+            drawFourPointStar(ctx, px, py, 1.9 * p.scale, t * 0.0024 + p.phase, rgb, alpha * 0.86);
+          }
+        } else if (auraMode === 'thunder') {
+          if (i % 2 === 0) {
+            drawMiniBolt(ctx, px, py, 3.6 * p.scale, rgb, alpha * 0.9);
+          } else {
+            drawFourPointStar(ctx, px, py, 1.8 * p.scale, t * 0.004 + p.phase, rgb, alpha * 0.85);
+          }
+        } else if (auraMode === 'flame' || auraMode === 'sun' || auraMode === 'sun_water') {
+          if (i % 3 === 0) {
+            drawFourPointStar(ctx, px, py, 2.1 * p.scale, t * 0.003 + p.phase, '253, 224, 71', alpha * 0.9);
+          } else {
+            drawOrb(ctx, px, py, 1.8 * p.scale, rgb, alpha * 0.9);
+          }
+        } else if (auraMode === 'sound') {
+          drawFourPointStar(ctx, px, py, 2.2 * p.scale, t * 0.0035 + p.phase, rgb, alpha * 0.92);
+        } else {
+          if (i % 3 === 0) {
+            drawFourPointStar(ctx, px, py, 1.9 * p.scale, t * 0.0022 + p.phase, rgb, alpha * 0.84);
+          } else {
+            drawOrb(ctx, px, py, 1.6 * p.scale, rgb, alpha * 0.84);
+          }
+        }
+      }
+
+      drawLive2dEmote(ctx, t, mood, typingCombo, lookX, lookY);
+    }
+
+    return { render };
+  }
+
+  /* ==========================================================================
    * STYLESHEET INJECTION (AURA, BUBBLE WAVE, ATTACK MOTION, SKILL TRIGGER UI)
    * ========================================================================== */
 
@@ -1473,6 +1745,30 @@
       .surface-composer[data-chibi3d-dragging="1"] > .agy-chibi-hitbox,
       .surface-composer[data-chibi-3d-dragging="1"] > .agy-chibi-hitbox {
         cursor: grabbing !important;
+      }
+
+      /* Live2D-lite 2D Chibi Physics & Foreground Emote Layer */
+      .agy-chibi-live2d-overlay {
+        pointer-events: none !important;
+        position: absolute !important;
+        top: -94px !important;
+        right: -4px !important;
+        width: 162px !important;
+        height: 108px !important;
+        z-index: 31 !important;
+        display: block !important;
+        transition: opacity 0.16s ease;
+      }
+      .surface-composer[data-chibi-out-on-stage="1"] > .agy-chibi-live2d-overlay,
+      .surface-composer[data-chibi-3d-active="1"] > .agy-chibi-live2d-overlay {
+        opacity: 0 !important;
+      }
+      .surface-composer[data-chibi-live2d="1"]:not([data-chibi-3d-active="1"]):not([data-chibi-out-on-stage="1"]):not([data-chibi-landing="1"]):not([data-chibi-attack="1"]):not([data-chibi-bounce="1"])::before {
+        transform-origin: 58% 95% !important;
+        transition: none !important;
+        will-change: transform, filter;
+        transform: translate3d(var(--agy-l2d-tx, 0px), var(--agy-l2d-ty, 0px), 0) rotate(var(--agy-l2d-rot, 0deg)) scale(var(--agy-l2d-sx, 1), var(--agy-l2d-sy, 1)) !important;
+        filter: drop-shadow(0 0 var(--agy-l2d-glow-r, 0px) var(--agy-l2d-glow-c, rgba(255, 255, 255, 0)));
       }
 
       /* Subtle elemental wave accent for Chibi on .agy-user-bubble-frame */
@@ -1689,7 +1985,8 @@
 
       /* Integrated 4-Form Drawer & 2D/3D Mode Toggle inside #agy-shinobu-npc-wrap */
       .agy-npc-skill-pill[data-active="1"],
-      .agy-npc-mode-pill[data-mode="3d"] {
+      .agy-npc-mode-pill[data-mode="3d"],
+      .agy-npc-live2d-pill[data-active="1"] {
         background: rgba(255, 255, 255, 0.18) !important;
         border-color: var(--npc-primary, #c084fc) !important;
         box-shadow: 0 0 10px var(--npc-glow, rgba(192, 132, 252, 0.38));
@@ -1759,6 +2056,36 @@
     chibi3dLastMode: '',
     chibi3dRectCacheAt: 0,
     chibi3dRectCache: null,
+
+    // Live2D-lite 2D Chibi companion state
+    live2dCanvas: null,
+    live2dCtx: null,
+    live2dRenderer: null,
+    live2dActive: false,
+    live2dDpr: 1,
+    l2dLookX: 0,
+    l2dLookY: 0,
+    l2dTargetLookX: 0,
+    l2dTargetLookY: 0,
+    l2dTypingImpulse: 0,
+    l2dTypingCombo: 0,
+    l2dLastKeyAt: 0,
+    l2dAiWorking: false,
+    l2dInCrisis: false,
+    l2dBladeHeat: 0,
+    l2dReaction: 'idle',
+    l2dReactionUntil: 0,
+    l2dLastHoverAt: 0,
+    l2dTx: 0,
+    l2dTy: 0,
+    l2dRot: 0,
+    l2dSx: 1,
+    l2dSy: 1,
+    l2dEffectiveMood: 'idle',
+    l2dFrameCount: 0,
+    l2dLastUpdateAt: 0,
+    l2dRectCacheAt: 0,
+    l2dRectCache: null,
 
     // Skill UI state
     uiComposer: null,
@@ -1864,12 +2191,221 @@
         state.chibi3dCtx.setTransform(nextDpr, 0, 0, nextDpr, 0, 0);
       }
     }
+    if (state.live2dCanvas && state.live2dCtx && Math.abs(nextDpr - (state.live2dDpr || 1)) > 0.01) {
+      state.live2dDpr = nextDpr;
+      state.live2dCanvas.width = Math.round(LIVE2D_W * nextDpr);
+      state.live2dCanvas.height = Math.round(LIVE2D_H * nextDpr);
+      if (typeof state.live2dCtx.setTransform === 'function') {
+        state.live2dCtx.setTransform(nextDpr, 0, 0, nextDpr, 0, 0);
+      }
+    }
+  }
+
+  function triggerLive2dReaction(kind, durationMs) {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const normKind = String(kind || 'happy').trim().toLowerCase();
+    if (normKind === 'typing' || normKind === 'combo') {
+      state.l2dTypingImpulse = 1.0;
+      state.l2dTypingCombo = normKind === 'combo' ? Math.max(5, state.l2dTypingCombo + 1) : (state.l2dTypingCombo + 1);
+      state.l2dLastKeyAt = now;
+    }
+    state.l2dReaction = normKind || 'happy';
+    state.l2dReactionUntil = now + Math.max(250, Number(durationMs) || 1200);
+    if (state.live2dActive && !state.chibi3dActive && !isMotionPaused()) {
+      updateAndRenderLive2d(now, 1, 0, false);
+      resumeOrPauseAura();
+    }
+    return state.l2dReaction;
+  }
+
+  function setLive2dWorkState(workObj) {
+    if (!workObj || typeof workObj !== 'object') return;
+    const prevWorking = state.l2dAiWorking;
+    const prevCrisis = state.l2dInCrisis;
+    if (typeof workObj.working === 'boolean') {
+      state.l2dAiWorking = workObj.working;
+    }
+    if (typeof workObj.crisis === 'boolean') {
+      state.l2dInCrisis = workObj.crisis;
+    }
+    if (typeof workObj.bladeHeat === 'number' && Number.isFinite(workObj.bladeHeat)) {
+      state.l2dBladeHeat = Math.max(0, Math.min(100, workObj.bladeHeat));
+    }
+    if ((prevWorking !== state.l2dAiWorking || prevCrisis !== state.l2dInCrisis) && state.live2dActive && !state.chibi3dActive && !isMotionPaused()) {
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      updateAndRenderLive2d(now, 1, 0, false);
+      resumeOrPauseAura();
+    }
+  }
+
+  function clearComposerLive2dVars(comp) {
+    if (!comp) return;
+    delete comp.dataset.chibiLive2d;
+    delete comp.dataset.chibiLive2dMood;
+    if (typeof comp.removeAttribute === 'function') {
+      comp.removeAttribute('data-chibi-live2d');
+      comp.removeAttribute('data-chibi-live2d-mood');
+    }
+    if (comp.style && typeof comp.style.removeProperty === 'function') {
+      comp.style.removeProperty('--agy-l2d-tx');
+      comp.style.removeProperty('--agy-l2d-ty');
+      comp.style.removeProperty('--agy-l2d-rot');
+      comp.style.removeProperty('--agy-l2d-sx');
+      comp.style.removeProperty('--agy-l2d-sy');
+      comp.style.removeProperty('--agy-l2d-glow-r');
+      comp.style.removeProperty('--agy-l2d-glow-c');
+    }
+  }
+
+  function updateAndRenderLive2d(now, dt, surgeProgress, isStatic) {
+    if (!state.auraComposer) return;
+    if (!state.live2dActive || state.chibi3dActive || isStatic) {
+      if (state.auraComposer.dataset && state.auraComposer.dataset.chibiLive2d) {
+        clearComposerLive2dVars(state.auraComposer);
+      }
+      if (state.live2dCtx) {
+        state.live2dCtx.clearRect(0, 0, LIVE2D_W, LIVE2D_H);
+      }
+      state.l2dEffectiveMood = 'idle';
+      return;
+    }
+
+    state.l2dFrameCount++;
+    if (now > state.l2dReactionUntil && state.l2dReaction !== 'idle') {
+      state.l2dReaction = 'idle';
+    }
+    if (state.l2dTypingCombo > 0 && now - state.l2dLastKeyAt > 2200) {
+      state.l2dTypingCombo = 0;
+    }
+    state.l2dTypingImpulse *= Math.pow(0.84, dt);
+    if (state.l2dTypingImpulse < 0.01) state.l2dTypingImpulse = 0;
+
+    state.l2dLastUpdateAt = state.l2dLastUpdateAt || now;
+    const elapsedMs = Math.max(4, Math.min(250, now - state.l2dLastUpdateAt));
+    state.l2dLastUpdateAt = now;
+    const lerpRate = 1 - Math.exp(-elapsedMs / 85);
+    state.l2dLookX += (state.l2dTargetLookX - state.l2dLookX) * lerpRate;
+    state.l2dLookY += (state.l2dTargetLookY - state.l2dLookY) * lerpRate;
+
+    let mood = 'idle';
+    if (now < state.l2dReactionUntil && state.l2dReaction !== 'idle') {
+      mood = state.l2dReaction;
+    } else if (state.l2dInCrisis || (state.auraComposer.dataset && state.auraComposer.dataset.agyCrisis === '1')) {
+      mood = 'crisis';
+    } else if (state.l2dAiWorking) {
+      mood = 'thinking';
+    } else if (now - state.l2dLastKeyAt < 1400) {
+      mood = state.l2dTypingCombo >= 4 ? 'combo' : 'typing';
+    }
+    state.l2dEffectiveMood = mood;
+
+    const eco = Boolean(state.themeCfg && state.themeCfg.ecoBattery);
+    if (eco && mood === 'idle' && Math.abs(state.l2dTargetLookX - state.l2dLookX) < 0.02 && (state.l2dFrameCount % 2 === 1)) {
+      return;
+    }
+
+    // Organic breathing + mouse parallax + live state reaction choreography
+    const breath = Math.sin(now * 0.00175);
+    let tx = state.l2dLookX * 4.4;
+    let ty = -Math.max(0, breath) * 2.0 + state.l2dLookY * 2.4;
+    let rot = state.l2dLookX * 3.8;
+    let sx = 1.0 - breath * 0.009;
+    let sy = 1.0 + breath * 0.022;
+    let glowR = 0;
+    const meta = state.auraMeta || CHAR_META.shinobu;
+    let glowC = `rgba(${meta.rgb1}, 0.42)`;
+
+    if (mood === 'thinking') {
+      rot += Math.sin(now * 0.0032) * 3.1;
+      ty -= 1.2 + Math.sin(now * 0.0064) * 1.1;
+      glowR = 7;
+      glowC = `rgba(${meta.rgb1}, 0.52)`;
+    } else if (mood === 'typing' || mood === 'combo') {
+      const imp = state.l2dTypingImpulse;
+      ty -= imp * 5.2;
+      sy += imp * 0.046;
+      sx -= imp * 0.024;
+      rot += Math.sin(now * 0.015) * (1.4 + Math.min(2.4, state.l2dTypingCombo * 0.2));
+      glowR = 5 + Math.min(8, state.l2dTypingCombo * 0.7);
+      glowC = `rgba(${meta.rgb1}, 0.55)`;
+    } else if (mood === 'crisis') {
+      rot += Math.sin(now * 0.030) * 2.1;
+      ty -= 1.4;
+      glowR = 10;
+      glowC = 'rgba(248, 113, 113, 0.68)';
+    } else if (mood === 'victory' || mood === 'happy' || mood === 'focus') {
+      const hop = Math.abs(Math.sin(now * 0.0086));
+      ty -= hop * 7.2;
+      sy = 1.0 + hop * 0.052 - (1 - hop) * 0.018;
+      sx = 1.0 - hop * 0.024 + (1 - hop) * 0.014;
+      rot += Math.sin(now * 0.0086) * 4.2;
+      glowR = mood === 'victory' ? 13 : 9;
+      glowC = mood === 'victory' ? 'rgba(250, 204, 21, 0.68)' : `rgba(${meta.rgb1}, 0.56)`;
+    }
+
+    state.l2dTx = tx;
+    state.l2dTy = ty;
+    state.l2dRot = rot;
+    state.l2dSx = sx;
+    state.l2dSy = sy;
+
+    const comp = state.auraComposer;
+    if (comp.dataset.chibiLive2d !== '1') {
+      comp.dataset.chibiLive2d = '1';
+      if (typeof comp.setAttribute === 'function') comp.setAttribute('data-chibi-live2d', '1');
+    }
+    if (comp.dataset.chibiLive2dMood !== mood) {
+      comp.dataset.chibiLive2dMood = mood;
+    }
+    if (comp.style && typeof comp.style.setProperty === 'function') {
+      comp.style.setProperty('--agy-l2d-tx', `${tx.toFixed(2)}px`);
+      comp.style.setProperty('--agy-l2d-ty', `${ty.toFixed(2)}px`);
+      comp.style.setProperty('--agy-l2d-rot', `${rot.toFixed(2)}deg`);
+      comp.style.setProperty('--agy-l2d-sx', sx.toFixed(3));
+      comp.style.setProperty('--agy-l2d-sy', sy.toFixed(3));
+      comp.style.setProperty('--agy-l2d-glow-r', `${glowR.toFixed(1)}px`);
+      comp.style.setProperty('--agy-l2d-glow-c', glowC);
+    }
+
+    if (state.live2dCtx && state.live2dRenderer) {
+      state.live2dRenderer.render(
+        state.live2dCtx,
+        now,
+        mood,
+        state.l2dTypingCombo,
+        state.l2dLookX,
+        state.l2dLookY,
+        surgeProgress
+      );
+    }
+  }
+
+  function getChibi2dLiveState() {
+    return {
+      active: Boolean(state.live2dActive && !state.chibi3dActive),
+      enabled: isChibi2dLiveEnabled(state.themeCfg || state.uiThemeCfg),
+      charId: state.auraCharId || '',
+      mood: state.l2dEffectiveMood || 'idle',
+      typingCombo: state.l2dTypingCombo || 0,
+      lookX: state.l2dLookX || 0,
+      lookY: state.l2dLookY || 0,
+      tx: state.l2dTx || 0,
+      ty: state.l2dTy || 0,
+      rot: state.l2dRot || 0,
+      sx: state.l2dSx || 1,
+      sy: state.l2dSy || 1,
+      aiWorking: Boolean(state.l2dAiWorking),
+      inCrisis: Boolean(state.l2dInCrisis),
+      frameCount: state.l2dFrameCount || 0
+    };
   }
 
   function notifyChibiReaction(kind, durationMs) {
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    state.chibi3dReaction = String(kind || 'happy');
+    const cleanKind = String(kind || 'happy');
+    state.chibi3dReaction = cleanKind;
     state.chibi3dReactionUntil = now + Math.max(200, Number(durationMs) || 1000);
+    triggerLive2dReaction(cleanKind === 'focus' ? 'typing' : cleanKind, durationMs);
     if (state.chibi3dActive && isMotionPaused()) {
       drawStaticAuraFrame();
     }
@@ -1949,6 +2485,7 @@
     syncAuraCanvasDpr();
     state.auraScene.render(state.auraCtx, 1800, 1, 1, 0, true);
     renderChibi3dFrame(1800, 1, 0, true);
+    updateAndRenderLive2d(1800, 1, 0, true);
   }
 
   function auraTick(now) {
@@ -1981,6 +2518,7 @@
 
     state.auraScene.render(state.auraCtx, now, dt, surgeBoost, surgeProgress, false);
     renderChibi3dFrame(now, dt, surgeProgress, false);
+    updateAndRenderLive2d(now, dt, surgeProgress, false);
     state.auraRaf = requestAnimationFrame(auraTick);
   }
 
@@ -2036,6 +2574,7 @@
       delete state.auraComposer.dataset.chibiAttack;
       delete state.auraComposer.dataset.chibi3dActive;
       delete state.auraComposer.dataset.chibi3dDragging;
+      clearComposerLive2dVars(state.auraComposer);
       if (typeof state.auraComposer.removeAttribute === 'function') {
         state.auraComposer.removeAttribute('data-chibi-3d-active');
         state.auraComposer.removeAttribute('data-chibi-3d-dragging');
@@ -2043,6 +2582,7 @@
     }
     if (typeof document !== 'undefined') {
       document.querySelectorAll('agy-chibi-aura').forEach((el) => el.remove());
+      document.querySelectorAll('.agy-chibi-live2d-overlay').forEach((el) => el.remove());
       document.querySelectorAll('.agy-user-chibi-aura-wave').forEach((el) => el.remove());
       if (document.body) delete document.body.dataset.agyFxPaused;
     }
@@ -2069,6 +2609,27 @@
     state.chibi3dLastMode = '';
     state.chibi3dRectCacheAt = 0;
     state.chibi3dRectCache = null;
+    state.live2dCanvas = null;
+    state.live2dCtx = null;
+    state.live2dRenderer = null;
+    state.live2dActive = false;
+    state.live2dDpr = 1;
+    state.l2dLookX = 0;
+    state.l2dLookY = 0;
+    state.l2dTargetLookX = 0;
+    state.l2dTargetLookY = 0;
+    state.l2dTypingImpulse = 0;
+    state.l2dTypingCombo = 0;
+    state.l2dTx = 0;
+    state.l2dTy = 0;
+    state.l2dRot = 0;
+    state.l2dSx = 1;
+    state.l2dSy = 1;
+    state.l2dEffectiveMood = 'idle';
+    state.l2dFrameCount = 0;
+    state.l2dLastUpdateAt = 0;
+    state.l2dRectCacheAt = 0;
+    state.l2dRectCache = null;
     state.auraMode = '';
     state.auraCharId = '';
     state.auraMeta = null;
@@ -2133,13 +2694,15 @@
       } catch (_) {}
     }
 
-    // Idempotent fast-path when tick() re-invokes with identical composer, mode, and 3D state
+    // Idempotent fast-path when tick() re-invokes with identical composer, mode, and 3D/Live2D state
+    const want2dLive = !want3d && isChibi2dLiveEnabled(themeCfg);
     if (
       state.auraHost &&
       state.auraHost.parentElement === composer &&
       state.auraMode === meta.auraMode &&
       state.auraCharId === meta.charId &&
-      state.chibi3dActive === want3d
+      state.chibi3dActive === want3d &&
+      state.live2dActive === want2dLive
     ) {
       syncBubbleFrames();
       resumeOrPauseAura();
@@ -2187,7 +2750,28 @@
       }
     }
 
+    let live2dCanvas = null;
+    let live2dCtx = null;
+    if (want2dLive) {
+      live2dCanvas = document.createElement('canvas');
+      live2dCanvas.className = 'agy-chibi-live2d-overlay';
+      live2dCanvas.setAttribute('aria-hidden', 'true');
+      live2dCanvas.width = Math.round(LIVE2D_W * dpr);
+      live2dCanvas.height = Math.round(LIVE2D_H * dpr);
+      live2dCanvas.style.cssText =
+        'pointer-events: none; position: absolute; top: -94px; right: -4px; width: 162px; height: 108px; z-index: 31; display: block;';
+      live2dCtx = live2dCanvas.getContext('2d');
+      if (live2dCtx) {
+        if (typeof live2dCtx.setTransform === 'function') live2dCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      } else {
+        live2dCanvas = null;
+      }
+    }
+
     composer.appendChild(host);
+    if (live2dCanvas) {
+      composer.appendChild(live2dCanvas);
+    }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     state.auraComposer = composer;
@@ -2199,6 +2783,11 @@
     state.chibi3dCtx = chibi3dCtx;
     state.chibi3dActive = Boolean(chibi3dCanvas && chibi3dCtx);
     state.chibi3dDpr = dpr;
+    state.live2dCanvas = live2dCanvas;
+    state.live2dCtx = live2dCtx;
+    state.live2dActive = Boolean(!state.chibi3dActive && live2dCanvas && live2dCtx);
+    state.live2dDpr = dpr;
+    state.live2dRenderer = state.live2dActive ? createLive2dForegroundRenderer(meta.auraMode, meta) : null;
     if (state.chibi3dActive) {
       composer.dataset.chibi3dActive = '1';
       if (typeof composer.setAttribute === 'function') composer.setAttribute('data-chibi-3d-active', '1');
@@ -2323,6 +2912,89 @@
       state.auraCleanups.push(() => document.removeEventListener('pointermove', onDocPointerMove3d));
       state.auraCleanups.push(() => document.removeEventListener('pointerup', finishDrag));
       state.auraCleanups.push(() => document.removeEventListener('pointercancel', finishDrag));
+    } else if (state.live2dActive) {
+      const nowFn2d = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      const MODIFIER_ONLY_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab', 'Escape']);
+
+      const onDocPointerMove2d = (ev) => {
+        const cx = Number(ev.clientX);
+        const cy = Number(ev.clientY);
+        if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+        if (typeof document !== 'undefined' && !document.hidden && typeof window !== 'undefined' && window.__AGY_SHINOBU_RT__ && window.__AGY_SHINOBU_RT__.fxFocusPaused) {
+          window.__AGY_SHINOBU_RT__.fxFocusPaused = false;
+          resumeOrPauseAura();
+        }
+        const now = nowFn2d();
+        const refNode = state.auraComposer || state.auraHost;
+        if ((!state.l2dRectCache || now - state.l2dRectCacheAt > 250) && refNode && typeof refNode.getBoundingClientRect === 'function') {
+          state.l2dRectCache = refNode.getBoundingClientRect();
+          state.l2dRectCacheAt = now;
+        }
+        const rect = state.l2dRectCache;
+        if (rect && rect.width > 0) {
+          // Cân bằng theo tâm ngang của khung hội thoại để khi gõ ở giữa Chibi đứng ngay ngắn, rê trái/phải nghiêng đều 2 phía
+          const centerX = rect.left + rect.width * 0.5;
+          const centerY = rect.top;
+          const spanX = Math.max(240, rect.width * 0.48);
+          state.l2dTargetLookX = Math.max(-1, Math.min(1, (cx - centerX) / spanX));
+          state.l2dTargetLookY = Math.max(-1, Math.min(1, (cy - centerY) / 340));
+          if (state.live2dActive && !state.chibi3dActive && !isMotionPaused() && now - (state.l2dLastUpdateAt || 0) > 24) {
+            updateAndRenderLive2d(now, 1, 0, false);
+          }
+        }
+      };
+
+      const onDocMouseLeave2d = () => {
+        state.l2dTargetLookX = 0;
+        state.l2dTargetLookY = 0;
+      };
+
+      const onComposerPointerOver2d = (ev) => {
+        const tgt = ev.target;
+        if (!tgt || typeof tgt.closest !== 'function' || !tgt.closest('.agy-chibi-hitbox')) return;
+        const now = nowFn2d();
+        if (now - state.l2dLastHoverAt > 2400 && state.l2dEffectiveMood === 'idle') {
+          state.l2dLastHoverAt = now;
+          triggerLive2dReaction('happy', 850);
+        }
+      };
+
+      const onDocKeyDown2d = (ev) => {
+        if (!ev || MODIFIER_ONLY_KEYS.has(ev.key)) return;
+        const tgt = ev.target;
+        if (!tgt) return;
+        const tag = String(tgt.tagName || '').toUpperCase();
+        const isEditable =
+          tag === 'TEXTAREA' ||
+          tag === 'INPUT' ||
+          Boolean(tgt.isContentEditable) ||
+          Boolean(typeof tgt.closest === 'function' && tgt.closest('.surface-composer, .monaco-editor, .xterm, [contenteditable="true"]'));
+        if (!isEditable) return;
+        const inComposer = Boolean(typeof tgt.closest === 'function' && tgt.closest('.surface-composer'));
+        if (inComposer && ev.key === 'Enter' && !ev.shiftKey) {
+          triggerLive2dReaction('happy', 1150);
+          return;
+        }
+        const now = nowFn2d();
+        if (now - state.l2dLastKeyAt > 2200) {
+          state.l2dTypingCombo = 1;
+        } else {
+          state.l2dTypingCombo = Math.min(99, state.l2dTypingCombo + 1);
+        }
+        state.l2dLastKeyAt = now;
+        state.l2dTypingImpulse = 1.0;
+      };
+
+      document.addEventListener('pointermove', onDocPointerMove2d, { passive: true });
+      document.addEventListener('keydown', onDocKeyDown2d, { passive: true });
+      composer.addEventListener('pointerover', onComposerPointerOver2d, { passive: true });
+      if (document.documentElement) {
+        document.documentElement.addEventListener('mouseleave', onDocMouseLeave2d, { passive: true });
+        state.auraCleanups.push(() => document.documentElement.removeEventListener('mouseleave', onDocMouseLeave2d));
+      }
+      state.auraCleanups.push(() => document.removeEventListener('pointermove', onDocPointerMove2d));
+      state.auraCleanups.push(() => document.removeEventListener('keydown', onDocKeyDown2d));
+      state.auraCleanups.push(() => composer.removeEventListener('pointerover', onComposerPointerOver2d));
     }
 
     const onVis = () => resumeOrPauseAura();
@@ -2675,6 +3347,24 @@
     }
   }
 
+  function refreshNpcLive2dPill(pillEl, themeCfg, charId) {
+    if (!pillEl) return;
+    const active3d = isChibi3dActiveForConfig(themeCfg, charId);
+    const liveOn = isChibi2dLiveEnabled(themeCfg);
+    pillEl.style.display = active3d ? 'none' : '';
+    if (liveOn && !active3d) {
+      pillEl.dataset.active = '1';
+      pillEl.setAttribute('aria-pressed', 'true');
+      pillEl.innerHTML = '<span class="agy-npc-live2d-label">✨ Live 2D</span>';
+      pillEl.title = 'Chibi 2D Sống Động đang bật (nhịp thở, theo chuột & phản ứng code) — bấm để chuyển sang 2D tĩnh';
+    } else {
+      delete pillEl.dataset.active;
+      pillEl.setAttribute('aria-pressed', 'false');
+      pillEl.innerHTML = '<span class="agy-npc-live2d-label">2D Tĩnh</span>';
+      pillEl.title = 'Chibi 2D đang ở chế độ tĩnh — bấm để bật Chibi 2D Sống Động (Live2D-lite)';
+    }
+  }
+
   function teardownSkillUi() {
     if (state.badgeObserver) {
       state.badgeObserver.disconnect();
@@ -2691,6 +3381,7 @@
       document.querySelectorAll(`#${SKILL_BAR_ID}`).forEach((el) => el.remove());
       document.querySelectorAll('.agy-npc-skill-pill').forEach((el) => el.remove());
       document.querySelectorAll('.agy-npc-mode-pill').forEach((el) => el.remove());
+      document.querySelectorAll('.agy-npc-live2d-pill').forEach((el) => el.remove());
       document.querySelectorAll('.agy-npc-skills-drawer').forEach((el) => el.remove());
     }
     state.uiComposer = null;
@@ -2729,10 +3420,11 @@
     if (existingBar) existingBar.remove();
     const existingNpcPill = npcWrap ? npcWrap.querySelector('.agy-npc-skill-pill') : null;
     const existingModePill = npcWrap ? npcWrap.querySelector('.agy-npc-mode-pill') : null;
+    const existingLive2dPill = npcWrap ? npcWrap.querySelector('.agy-npc-live2d-pill') : null;
     const uiMatches = Boolean(
       state.uiComposer === composer &&
       state.uiCharId === meta.charId &&
-      (!npcWrap || (existingNpcPill && existingModePill))
+      (!npcWrap || (existingNpcPill && existingModePill && existingLive2dPill))
     );
 
     if (uiMatches) {
@@ -2741,6 +3433,9 @@
       if (npcWrap) {
         if (existingModePill) {
           refreshNpcModePill(existingModePill, state.uiThemeCfg || state.themeCfg, meta.charId);
+        }
+        if (existingLive2dPill) {
+          refreshNpcLive2dPill(existingLive2dPill, state.uiThemeCfg || state.themeCfg, meta.charId);
         }
         const drawer = npcWrap.querySelector('.agy-npc-skills-drawer');
         if (drawer) {
@@ -2792,13 +3487,21 @@
         npcModePill.innerHTML = '<span class="agy-npc-mode-label">Chibi 2D</span>';
         refreshNpcModePill(npcModePill, state.uiThemeCfg || state.themeCfg, meta.charId);
 
+        const npcLive2dPill = document.createElement('button');
+        npcLive2dPill.type = 'button';
+        npcLive2dPill.className = 'agy-npc-pill agy-npc-live2d-pill';
+        npcLive2dPill.dataset.npcAct = 'toggle-live2d';
+        refreshNpcLive2dPill(npcLive2dPill, state.uiThemeCfg || state.themeCfg, meta.charId);
+
         const chatOpenBtn = pillsRow.querySelector('[data-npc-act="chat-open"]');
         if (chatOpenBtn) {
           pillsRow.insertBefore(npcSkillPill, chatOpenBtn);
           pillsRow.insertBefore(npcModePill, chatOpenBtn);
+          pillsRow.insertBefore(npcLive2dPill, chatOpenBtn);
         } else {
           pillsRow.appendChild(npcSkillPill);
           pillsRow.appendChild(npcModePill);
+          pillsRow.appendChild(npcLive2dPill);
         }
 
         const drawer = document.createElement('div');
@@ -2856,7 +3559,9 @@
           }
           const liveWrap = state.uiNpcWrap || (typeof document !== 'undefined' ? document.getElementById('agy-shinobu-npc-wrap') : null);
           const livePill = (liveWrap && liveWrap.querySelector('.agy-npc-mode-pill')) || npcModePill;
+          const live2dPill = (liveWrap && liveWrap.querySelector('.agy-npc-live2d-pill')) || npcLive2dPill;
           refreshNpcModePill(livePill, state.uiThemeCfg || patchedCfg, activeCid);
+          refreshNpcLive2dPill(live2dPill, state.uiThemeCfg || patchedCfg, activeCid);
           const dialogEl = liveWrap ? liveWrap.querySelector('.agy-npc-dialog-text') : null;
           if (dialogEl) {
             if (typeof window !== 'undefined' && window.__AGY_SHINOBU_RT__ && window.__AGY_SHINOBU_RT__.typeTimer) {
@@ -2871,6 +3576,30 @@
             } else {
               dialogEl.textContent = 'Chưa nạp tệp .glb/.vrm cho nhân vật này — đang giữ ảnh Chibi 2D gốc (mở Giao diện tùy biến → Nhân vật để nạp mô hình 3D).';
             }
+          }
+        });
+
+        npcLive2dPill.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const curCfg = state.uiThemeCfg || state.themeCfg;
+          const nextLive = !isChibi2dLiveEnabled(curCfg);
+          const activeCid = state.uiCharId || meta.charId;
+          setChibi2dLiveEnabled(nextLive);
+          if (nextLive) {
+            triggerLive2dReaction('happy', 1300);
+          }
+          const liveWrap = state.uiNpcWrap || (typeof document !== 'undefined' ? document.getElementById('agy-shinobu-npc-wrap') : null);
+          const live2dPillNow = (liveWrap && liveWrap.querySelector('.agy-npc-live2d-pill')) || npcLive2dPill;
+          refreshNpcLive2dPill(live2dPillNow, state.uiThemeCfg || state.themeCfg, activeCid);
+          const dialogEl = liveWrap ? liveWrap.querySelector('.agy-npc-dialog-text') : null;
+          if (dialogEl) {
+            if (typeof window !== 'undefined' && window.__AGY_SHINOBU_RT__ && window.__AGY_SHINOBU_RT__.typeTimer) {
+              clearInterval(window.__AGY_SHINOBU_RT__.typeTimer);
+              window.__AGY_SHINOBU_RT__.typeTimer = 0;
+            }
+            dialogEl.textContent = nextLive
+              ? 'Đã bật Chibi 2D Sống Động — nhân vật sẽ hít thở, dõi theo chuột và phản ứng cùng lúc anh gõ code!'
+              : 'Đã chuyển Chibi 2D về chế độ ảnh tĩnh nguyên bản.';
           }
         });
       }
@@ -2998,6 +3727,11 @@
     resolveCharacterMeta,
     resumeOrPauseAura,
     notifyChibiReaction,
+    triggerLive2dReaction,
+    setLive2dWorkState,
+    isChibi2dLiveEnabled,
+    setChibi2dLiveEnabled,
+    getChibi2dLiveState,
     getChibi3dState,
     isSfxMuted,
     setSfxMuted

@@ -968,13 +968,36 @@ describe('F24 — Kiểm Thử Thực Chiến E2E Trình Duyệt Chromium Toàn 
       await realMouseClick(cdp, '#agy-chibi-mode-2d', 'Bấm nút Chế độ 2D (Ảnh gốc)');
       assert.equal(await cdp.eval(`window.__AGY_THEME_CORE__.getSnapshot().chibi3dEnabled`), false);
 
+      // Kiểm chứng công tắc Chibi 2D Sống Động (Live2D-lite) & đủ 4 nút xem thử phản ứng trong Tab 2
+      await realMouseClick(cdp, '#agy-chibi-2d-live-toggle', 'Tắt thử Chibi 2D Sống Động trong Tab 2');
+      assert.equal(await cdp.eval(`window.__AGY_THEME_CORE__.getSnapshot().chibi2dLive`), false);
+      assert.equal(await cdp.eval(`Boolean(document.querySelector('canvas.agy-chibi-live2d-overlay'))`), false, 'Tắt Live2D-lite phải gỡ canvas tiền cảnh');
+      await realMouseClick(cdp, '#agy-chibi-2d-live-toggle', 'Bật lại Chibi 2D Sống Động trong Tab 2');
+      assert.equal(await cdp.eval(`window.__AGY_THEME_CORE__.getSnapshot().chibi2dLive`), true);
+      assert.equal(await cdp.eval(`Boolean(document.querySelector('canvas.agy-chibi-live2d-overlay'))`), true, 'Bật Live2D-lite phải gắn canvas tiền cảnh');
+
+      for (const [btnSel, expectedMood] of [
+        ['#agy-l2d-preview-happy', 'happy'],
+        ['#agy-l2d-preview-thinking', 'thinking'],
+        ['#agy-l2d-preview-typing', 'combo'],
+        ['#agy-l2d-preview-victory', 'victory']
+      ]) {
+        await realMouseClick(cdp, btnSel, `Bấm nút xem thử phản ứng Live2D-lite: ${expectedMood}`);
+        await sleep(80);
+        assert.equal(
+          await cdp.eval(`window.__AGY_KNY_CHIBI_AURA__.getChibi2dLiveState().mood`),
+          expectedMood,
+          `Bấm ${btnSel} phải chuyển mood Live2D-lite sang ${expectedMood}`
+        );
+      }
+
       await captureAuditScreenshot(
         cdp,
         auditDir,
         manifest,
         '03_studio_tab2_persona_2d_3d.png',
-        'Tab Nhân vật & Đại diện — Điều khiển Avatar, Khí chất AI & Công tắc Chế độ Chibi 2D / 3D',
-        'Toàn bộ nút Avatar, 3 nút Khí chất AI và cặp nút Chế độ 2D / 3D phản hồi chính xác'
+        'Tab Nhân vật & Đại diện — Avatar, Khí chất AI, Chibi 2D/3D & Chibi 2D Sống Động (Live2D-lite)',
+        'Toàn bộ nút Avatar, 3 Khí chất AI, Chibi 2D/3D, công tắc Live2D-lite và 4 nút xem thử phản ứng hoạt động chuẩn xác'
       );
 
       // Nạp tệp .glb thật qua DOM.setFileInputFiles vào #agy-chibi-glb-input
@@ -1182,6 +1205,81 @@ describe('F24 — Kiểm Thử Thực Chiến E2E Trình Duyệt Chromium Toàn 
       assert.match(npcModeFeedback, /Chibi 2D|mô hình 3D|\.glb/i, 'Bấm nút Chibi 2D/3D trên NPC phải hiện thông báo phản hồi trực quan ngay trong hộp thoại');
       // Bấm lần nữa trả lại chế độ 2D
       await realMouseClick(cdp, '#agy-shinobu-npc-wrap .agy-npc-mode-pill', 'Chuyển lại Chibi 2D trong Hộp thoại NPC');
+
+      // Kiểm chứng nút nhanh ✨ Live 2D ngay trên Hộp thoại NPC + di chuột vật lý + gõ phím Combo + AI suy luận
+      await realMouseClick(cdp, '#agy-shinobu-npc-wrap .agy-npc-live2d-pill', 'Tắt nhanh Live 2D từ Hộp thoại NPC');
+      assert.equal(await cdp.eval(`window.__AGY_KNY_CHIBI_AURA__.isChibi2dLiveEnabled()`), false);
+      assert.match(
+        await cdp.eval(`document.querySelector('#agy-shinobu-npc-wrap .agy-npc-dialog-text')?.textContent || ''`),
+        /tĩnh nguyên bản/i
+      );
+      await realMouseClick(cdp, '#agy-shinobu-npc-wrap .agy-npc-live2d-pill', 'Bật lại Live 2D từ Hộp thoại NPC');
+      assert.equal(await cdp.eval(`window.__AGY_KNY_CHIBI_AURA__.isChibi2dLiveEnabled()`), true);
+      assert.match(
+        await cdp.eval(`document.querySelector('#agy-shinobu-npc-wrap .agy-npc-dialog-text')?.textContent || ''`),
+        /Chibi 2D Sống Động/i
+      );
+
+      // Kiểm chứng nghiêng theo chuột thực tế (Mouse Parallax) từ góc trái sang góc phải
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 180, y: 520 });
+      await sleep(160);
+      const lookLeft = await cdp.eval(`window.__AGY_KNY_CHIBI_AURA__.getChibi2dLiveState()`);
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1380, y: 520 });
+      await sleep(160);
+      const lookRight = await cdp.eval(`window.__AGY_KNY_CHIBI_AURA__.getChibi2dLiveState()`);
+      assert.ok(lookRight.lookX > lookLeft.lookX + 0.45, `Di chuột từ trái sang phải phải làm Chibi 2D nghiêng theo chuột (${lookLeft.lookX} -> ${lookRight.lookX})`);
+      assert.ok(lookRight.tx > lookLeft.tx + 2.5, `Dịch chuyển ngang CSS --agy-l2d-tx phải lướt theo chuột (${lookLeft.tx}px -> ${lookRight.tx}px)`);
+
+      // Kiểm chứng gõ phím vật lý liên hoàn trong khung Lexical -> kích hoạt Combo & vẽ huy hiệu biểu cảm lên canvas
+      await realMouseClick(cdp, '#lexical-chat-editor', 'Focus khung soạn thảo để kiểm chứng gõ phím Combo Live2D-lite');
+      for (const ch of ['k', 'o', 'i', 'n', 'o']) {
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ch, text: ch });
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ch });
+        await sleep(30);
+      }
+      await sleep(90);
+      const comboCheck = await cdp.eval(`(() => {
+        const st = window.__AGY_KNY_CHIBI_AURA__.getChibi2dLiveState();
+        const cv = document.querySelector('canvas.agy-chibi-live2d-overlay');
+        let nonZeroAlpha = 0;
+        if (cv) {
+          const data = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+          for (let i = 3; i < data.length; i += 4) {
+            if (data[i] > 20) nonZeroAlpha++;
+          }
+        }
+        return { st, nonZeroAlpha, liveAttr: document.querySelector('.surface-composer')?.getAttribute('data-chibi-live2d') };
+      })()`);
+      assert.equal(comboCheck.liveAttr, '1', 'Composer phải bật data-chibi-live2d="1"');
+      assert.ok(comboCheck.st.typingCombo >= 5, `Gõ 5 phím phải ghi nhận typingCombo >= 5 (thực tế: ${comboCheck.st.typingCombo})`);
+      assert.ok(comboCheck.nonZeroAlpha > 60, `Canvas tiền cảnh Live2D-lite phải vẽ hạt & huy hiệu ×Combo hữu hình (${comboCheck.nonZeroAlpha} pixel)`);
+      // Xóa chữ nháp vừa gõ để khung soạn thảo sạch cho bước kiểm thử /compact sau
+      await cdp.eval(`(() => { const ed = document.getElementById('lexical-chat-editor'); if (ed) { ed.textContent = ''; ed.dispatchEvent(new Event('input', { bubbles: true })); } })()`);
+
+      // Kiểm chứng đồng bộ trạng thái AI đang suy luận (thinking) từ luồng SSE thật & chụp ảnh kiểm duyệt thứ 15!
+      currentTelemetry = { ...currentTelemetry, isWorking: true };
+      for (const client of sseClients) {
+        client.write(`data: ${JSON.stringify({ ...currentTelemetry, cid: activeCid })}\n\n`);
+      }
+      await sleep(180);
+      assert.equal(
+        await cdp.eval(`window.__AGY_KNY_CHIBI_AURA__.getChibi2dLiveState().mood`),
+        'thinking',
+        'Khi SSE báo AI đang suy luận (isWorking: true) thì Chibi 2D phải chuyển sang trạng thái thinking'
+      );
+      await captureAuditScreenshot(
+        cdp,
+        auditDir,
+        manifest,
+        '15_chibi_2d_live2d_thinking_and_npc_pill.png',
+        'Chibi 2D Sống Động (Live2D-lite) — Bong bóng AI Suy Luận, Hạt Hoa Đào Tiền Cảnh & Nút ✨ Live 2D trên NPC',
+        'Đã kiểm chứng nghiêng theo chuột, gõ phím ×Combo, bong bóng AI suy luận qua SSE và nút bật/tắt ✨ Live 2D'
+      );
+      currentTelemetry = { ...currentTelemetry, isWorking: false };
+      for (const client of sseClients) {
+        client.write(`data: ${JSON.stringify({ ...currentTelemetry, cid: activeCid })}\n\n`);
+      }
+      await sleep(120);
 
       // Mở ô chat riêng với NPC & gửi tin nhắn
       await realMouseClick(cdp, '#agy-shinobu-npc-wrap [data-npc-act="chat-toggle"]', 'Mở ô trò chuyện riêng với NPC');
@@ -1394,7 +1492,7 @@ describe('F24 — Kiểm Thử Thực Chiến E2E Trình Duyệt Chromium Toàn 
         JSON.stringify({ generatedAt: new Date().toISOString(), totalScreenshots: manifest.length, screenshots: manifest }, null, 2),
         'utf8'
       );
-      assert.equal(manifest.length, 14, 'Phải chụp và xác thực đủ 14 tấm ảnh kiểm duyệt PNG');
+      assert.equal(manifest.length, 15, 'Phải chụp và xác thực đủ 15 tấm ảnh kiểm duyệt PNG');
     } finally {
       if (cdp) await cdp.close();
       for (const c of sseClients) {

@@ -1910,7 +1910,18 @@
   }
 
   function applyCrisisVisual(isCrisis) {
+    const prevCrisis = state.crisisState;
     state.crisisState = Boolean(isCrisis);
+    if (typeof window !== 'undefined' && window.__AGY_KNY_CHIBI_AURA__) {
+      try {
+        if (typeof window.__AGY_KNY_CHIBI_AURA__.setLive2dWorkState === 'function') {
+          window.__AGY_KNY_CHIBI_AURA__.setLive2dWorkState({ crisis: state.crisisState });
+        }
+        if (state.crisisState && !prevCrisis && typeof window.__AGY_KNY_CHIBI_AURA__.triggerLive2dReaction === 'function') {
+          window.__AGY_KNY_CHIBI_AURA__.triggerLive2dReaction('crisis', 2000);
+        }
+      } catch (_) {}
+    }
     const comp = state.composer || resolveComposerRoot();
     if (!comp || !comp.dataset) return;
     if (state.crisisState) {
@@ -1942,6 +1953,9 @@
   function executeDemonSlayCelebration(slashSeq, slashReason) {
     // 1. Immediately clear crisis blood demon border
     applyCrisisVisual(false);
+    if (typeof window !== 'undefined' && window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.triggerLive2dReaction === 'function') {
+      try { window.__AGY_KNY_CHIBI_AURA__.triggerLive2dReaction('victory', 2200); } catch (_) {}
+    }
 
     // 2. Grant +25% Bright Red Blade forge heat bonus
     state.bladeBonusHeat = Math.min(100, state.bladeBonusHeat + 25);
@@ -2139,6 +2153,15 @@
       if (window.__AGY_BIO_AUDIO__ && typeof window.__AGY_BIO_AUDIO__.onTelemetry === 'function') {
         try {
           window.__AGY_BIO_AUDIO__.onTelemetry(snap);
+        } catch (_) {}
+      }
+      if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.setLive2dWorkState === 'function') {
+        try {
+          window.__AGY_KNY_CHIBI_AURA__.setLive2dWorkState({
+            working: Boolean(state.serverIsWorking || state.isWorking),
+            crisis: Boolean(state.crisisState),
+            bladeHeat: state.bladeHeat || 0
+          });
         } catch (_) {}
       }
     }
@@ -2707,9 +2730,15 @@
       state.stepBaselineDomChars = domChars;
       state.dispTurnTokens = 0;
       computeAndApplyBladeHeat();
+      if (typeof window !== 'undefined' && window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.setLive2dWorkState === 'function') {
+        try { window.__AGY_KNY_CHIBI_AURA__.setLive2dWorkState({ working: true, crisis: state.crisisState, bladeHeat: state.bladeHeat }); } catch (_) {}
+      }
       if (state.cid && !state.streamConnected) fetchDaemonTelemetry(state.cid);
     } else if (!state.isWorking && state.wasWorking) {
       computeAndApplyBladeHeat();
+      if (typeof window !== 'undefined' && window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.setLive2dWorkState === 'function') {
+        try { window.__AGY_KNY_CHIBI_AURA__.setLive2dWorkState({ working: false, crisis: state.crisisState, bladeHeat: state.bladeHeat }); } catch (_) {}
+      }
       evaluateAutoCompact({ firstSync: false });
       if (state.cid && !state.streamConnected) fetchDaemonTelemetry(state.cid);
     }
@@ -3386,6 +3415,10 @@
         delete bar.dataset.compact;
         if (composer.dataset) delete composer.dataset.agyCompact;
       }
+      if (composer.dataset) {
+        if (cw > 0 && cw < 700) composer.dataset.agyNpcStack = '1';
+        else delete composer.dataset.agyNpcStack;
+      }
     };
     syncCompactTier();
     if (typeof ResizeObserver !== 'undefined') {
@@ -3823,6 +3856,7 @@
     if (state.composer && state.composer.dataset) {
       delete state.composer.dataset.agyCrisis;
       delete state.composer.dataset.agyCompact;
+      delete state.composer.dataset.agyNpcStack;
     }
     if (typeof document !== 'undefined') {
       document.querySelectorAll(`#${HUD_BAR_ID}, #${ECHO_BAR_ID}`).forEach((el) => el.remove());

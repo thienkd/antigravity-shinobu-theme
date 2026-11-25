@@ -562,6 +562,19 @@ foreach ($d in $Dirs) {
     } catch {}
   }
 }
+if (-not $OverrideDirsRaw) {
+  $protoReg = 'HKCU:\\Software\\Classes\\antigravity\\shell\\open\\command'
+  try {
+    if (Test-Path -LiteralPath $protoReg) {
+      $curCmd = (Get-ItemProperty -LiteralPath $protoReg -Name '(default)' -ErrorAction SilentlyContinue).'(default)'
+      if ($curCmd -and ($curCmd -match '--remote-debugging-port')) {
+        $cleanCmd = (($curCmd -replace '\\s*--remote-debugging-port(?:=\\S+)?', '') -replace '\\s{2,}', ' ').Trim()
+        Set-ItemProperty -LiteralPath $protoReg -Name '(default)' -Value $cleanCmd -ErrorAction SilentlyContinue
+        Write-Output $protoReg
+      }
+    }
+  } catch {}
+}
 `;
     const childEnv = { ...process.env };
     if (customDirs) {

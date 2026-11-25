@@ -2992,6 +2992,18 @@ function saveConfig(incoming) {
 
 let lastKnownExeMtime = 0;
 let shortcutHealRunning = false;
+let relaunchPromptRunning = false;
+const promptedMissingCdpPids = new Set();
+
+function isInteractiveDaemonRuntime() {
+    if (process.env.CI || process.env.NODE_TEST_CONTEXT || process.env.AGY_DAEMON_TEST_MODE) return false;
+    try {
+        const tmpNorm = path.resolve(os.tmpdir()).toLowerCase();
+        const rootNorm = path.resolve(ROOT_DIR).toLowerCase();
+        if (tmpNorm && rootNorm.startsWith(tmpNorm)) return false;
+    } catch (_) {}
+    return true;
+}
 
 function resolveAntigravityExeWin() {
     if (process.platform !== 'win32') return null;
@@ -3029,7 +3041,18 @@ foreach ($d in $Dirs) {
     } catch {}
   }
 }
-if ($patched -gt 0) { Write-Output "Patched $patched shortcut(s)" }
+$protoReg = 'HKCU:\\Software\\Classes\\antigravity\\shell\\open\\command'
+try {
+  if (Test-Path -LiteralPath $protoReg) {
+    $curCmd = (Get-ItemProperty -LiteralPath $protoReg -Name '(default)' -ErrorAction SilentlyContinue).'(default)'
+    if ($curCmd -and ($curCmd -imatch 'Antigravity\\.exe') -and ($curCmd -notmatch '--remote-debugging-port')) {
+      $newCmd = $curCmd -replace '(Antigravity\\.exe"?\\s*)', '$1--remote-debugging-port=0 '
+      Set-ItemProperty -LiteralPath $protoReg -Name '(default)' -Value $newCmd -ErrorAction SilentlyContinue
+      $patched++
+    }
+  }
+} catch {}
+if ($patched -gt 0) { Write-Output "Patched $patched launcher(s)" }
 `;
     try {
         const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psScript], {
@@ -3068,6 +3091,76 @@ if ($patched -gt 0) { Write-Output "Patched $patched shortcut(s)" }
     }
 }
 
+function offerCdpRelaunchIfMissingWin(exePath) {
+    if (process.platform !== 'win32' || relaunchPromptRunning || !isInteractiveDaemonRuntime()) return;
+    if (!exePath || !fs.existsSync(exePath)) return;
+    if (getPortInfo() !== null) return;
+
+    relaunchPromptRunning = true;
+    const detectScript = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$main = Get-CimInstance Win32_Process -Filter "Name = 'Antigravity.exe'" -ErrorAction SilentlyContinue | Where-Object {
+  $_.CommandLine -and ($_.CommandLine -notmatch '--type=') -and ($_.CommandLine -notmatch '--remote-debugging-port')
+} | Select-Object -First 1
+if ($main) { Write-Output "$($main.ProcessId)|$($main.CommandLine)" }
+`;
+    try {
+        const detector = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', detectScript], {
+            windowsHide: true,
+            stdio: ['ignore', 'pipe', 'ignore'],
+        });
+        let raw = '';
+        if (detector.stdout) detector.stdout.on('data', (c) => (raw += String(c)));
+        detector.on('error', () => {
+            relaunchPromptRunning = false;
+        });
+        detector.on('close', () => {
+            const line = raw.trim().split(/\r?\n/)[0] || '';
+            const sep = line.indexOf('|');
+            const mainPid = sep > 0 ? parseInt(line.slice(0, sep).trim(), 10) : 0;
+            if (!mainPid || promptedMissingCdpPids.has(mainPid) || getPortInfo() !== null) {
+                relaunchPromptRunning = false;
+                return;
+            }
+            promptedMissingCdpPids.add(mainPid);
+            const isUpdatedLaunch = /--updated\b/i.test(line);
+            log(`[update-guard] Detected running Antigravity.exe (PID ${mainPid}${isUpdatedLaunch ? ', --updated' : ''}) without --remote-debugging-port; offering 1-click relaunch.`);
+
+            const promptPs = `
+$ws = New-Object -ComObject WScript.Shell
+$msg = "Antigravity vừa mở mà chưa có cổng giao diện CDP (thường xảy ra ngay sau khi tự động cập nhật phiên bản mới).\`n\`nBạn có muốn khởi động lại Antigravity ngay bây giờ (khoảng 2 giây) để bật lại Giao Diện Tùy Biến không?"
+$ans = $ws.Popup($msg, 45, "Antigravity Custom Theme — Khôi phục Giao diện", 4 + 64 + 4096)
+if ($ans -eq 6) {
+  Get-Process -Name 'Antigravity' -ErrorAction SilentlyContinue | ForEach-Object { try { $_.CloseMainWindow() | Out-Null } catch {} }
+  Start-Sleep -Milliseconds 900
+  Get-Process -Name 'Antigravity' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Milliseconds 700
+  Start-Process -FilePath $env:AGY_RELAUNCH_EXE -ArgumentList '--remote-debugging-port=0'
+  Write-Output 'RELAUNCHED'
+}
+`;
+            const promptChild = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', promptPs], {
+                windowsHide: true,
+                stdio: ['ignore', 'pipe', 'ignore'],
+                env: { ...process.env, AGY_RELAUNCH_EXE: exePath },
+            });
+            let pOut = '';
+            if (promptChild.stdout) promptChild.stdout.on('data', (c) => (pOut += String(c)));
+            promptChild.on('close', () => {
+                relaunchPromptRunning = false;
+                if (pOut.includes('RELAUNCHED')) {
+                    log('[update-guard] User accepted 1-click relaunch with --remote-debugging-port=0.');
+                }
+            });
+            promptChild.on('error', () => {
+                relaunchPromptRunning = false;
+            });
+        });
+    } catch (_) {
+        relaunchPromptRunning = false;
+    }
+}
+
 function checkAntigravityUpdateAndHeal() {
     if (!fs.existsSync(PAYLOAD_PATH) && fs.existsSync(BUILD_SCRIPT_JS)) {
         try {
@@ -3092,6 +3185,7 @@ function checkAntigravityUpdateAndHeal() {
                     healWindowsShortcutsAsync('app-updated');
                     setTimeout(() => healWindowsShortcutsAsync('app-updated-followup'), 8000);
                 }
+                setTimeout(() => offerCdpRelaunchIfMissingWin(exePath), 5500);
             } catch (_) {}
         }
     }

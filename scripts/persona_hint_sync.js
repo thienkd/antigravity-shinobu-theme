@@ -249,6 +249,7 @@ function sanitizeCompactProfileEntry(entry) {
   }
   if (typeof entry.chibiEnabled === 'boolean') out.chibiEnabled = entry.chibiEnabled;
   if (typeof entry.chibi3dEnabled === 'boolean') out.chibi3dEnabled = entry.chibi3dEnabled;
+  if (typeof entry.chibi2dLive === 'boolean') out.chibi2dLive = entry.chibi2dLive;
   if (typeof entry.autoFinisher === 'boolean') out.autoFinisher = entry.autoFinisher;
   if (typeof entry.focusMode === 'boolean') out.focusMode = entry.focusMode;
   return Object.keys(out).length > 0 ? out : null;

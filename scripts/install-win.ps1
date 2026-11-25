@@ -1,5 +1,6 @@
 param(
-    [switch]$NoStartup
+    [switch]$NoStartup,
+    [switch]$RestartAntigravity
 )
 
 $ErrorActionPreference = 'Stop'
@@ -148,6 +149,18 @@ foreach ($SearchDir in $ShortcutSearchDirs) {
     }
 }
 
+$ProtoRegPath = 'HKCU:\Software\Classes\antigravity\shell\open\command'
+try {
+    if (Test-Path -LiteralPath $ProtoRegPath) {
+        $CurProtoCmd = (Get-ItemProperty -LiteralPath $ProtoRegPath -Name '(default)' -ErrorAction SilentlyContinue).'(default)'
+        if ($CurProtoCmd -and ($CurProtoCmd -imatch 'Antigravity\.exe') -and ($CurProtoCmd -notmatch '--remote-debugging-port')) {
+            $NewProtoCmd = $CurProtoCmd -replace '(Antigravity\.exe"?\s*)', '$1--remote-debugging-port=0 '
+            Set-ItemProperty -LiteralPath $ProtoRegPath -Name '(default)' -Value $NewProtoCmd -ErrorAction SilentlyContinue
+            Write-Host "[install-win] Patched CDP flag on antigravity:// protocol handler."
+        }
+    }
+} catch {}
+
 if (-not $NoStartup) {
     $StartupDir = [Environment]::GetFolderPath('Startup')
     $ShortcutPath = Join-Path $StartupDir 'AntigravityCustomTheme.lnk'
@@ -190,7 +203,19 @@ for ($i = 0; $i -lt 15; $i++) {
                 $PortFileUpper = Join-Path $AppDataDir 'Antigravity\DevToolsActivePort'
                 $PortFileLower = Join-Path $AppDataDir 'antigravity\DevToolsActivePort'
                 if ((-not (Test-Path -LiteralPath $PortFileUpper)) -and (-not (Test-Path -LiteralPath $PortFileLower))) {
-                    Write-Host "[install-win] Note: DevToolsActivePort not found yet. Quit Antigravity completely (System Tray -> Quit) and reopen it from Start Menu (if using a Taskbar pin, unpin and re-pin from Start Menu)."
+                    if ($RestartAntigravity) {
+                        $AgyExe = Join-Path $env:LOCALAPPDATA 'Programs\antigravity\Antigravity.exe'
+                        if (Test-Path -LiteralPath $AgyExe) {
+                            Write-Host "[install-win] Restarting Antigravity with --remote-debugging-port=0..."
+                            Get-Process -Name 'Antigravity' -ErrorAction SilentlyContinue | ForEach-Object { try { $_.CloseMainWindow() | Out-Null } catch {} }
+                            Start-Sleep -Milliseconds 900
+                            Get-Process -Name 'Antigravity' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                            Start-Sleep -Milliseconds 700
+                            Start-Process -FilePath $AgyExe -ArgumentList '--remote-debugging-port=0'
+                        }
+                    } else {
+                        Write-Host "[install-win] Note: DevToolsActivePort not found yet. Quit Antigravity completely (System Tray -> Quit) and reopen it from Start Menu (if using a Taskbar pin, unpin and re-pin from Start Menu)."
+                    }
                 }
                 exit 0
             }

@@ -138,6 +138,7 @@
   const STORAGE_MASTER_PERSONA = 'agy_master_persona_v1';
   const STORAGE_CHIBI_ENABLED = 'agy_chibi_enabled_v1';
   const STORAGE_CHIBI_3D = 'agy_chibi_3d_v1';
+  const STORAGE_CHIBI_2D_LIVE = 'agy_chibi_2d_live_v1';
   const STORAGE_FX_DENSITY = 'agy_fx_density_v1';
   const STORAGE_AUTO_FINISHER = 'agy_auto_finisher_v1';
   const STORAGE_BUBBLE_RADIUS = 'agy_bubble_radius_v1';
@@ -219,6 +220,7 @@
         fxDensity: clampInt(item.fxDensity, 0, 100, 100),
         chibiEnabled: item.chibiEnabled !== false,
         ...(typeof item.chibi3dEnabled === 'boolean' ? { chibi3dEnabled: item.chibi3dEnabled } : {}),
+        ...(typeof item.chibi2dLive === 'boolean' ? { chibi2dLive: item.chibi2dLive } : {}),
         autoFinisher: item.autoFinisher !== false,
         focusMode: Boolean(item.focusMode)
       };
@@ -376,6 +378,9 @@
       }
       if (typeof syncCfg.chibi3dEnabled === 'boolean') {
         localStorage.setItem(STORAGE_CHIBI_3D, String(syncCfg.chibi3dEnabled));
+      }
+      if (typeof syncCfg.chibi2dLive === 'boolean') {
+        localStorage.setItem(STORAGE_CHIBI_2D_LIVE, String(syncCfg.chibi2dLive));
       }
       if (typeof syncCfg.autoFinisher === 'boolean') {
         localStorage.setItem(STORAGE_AUTO_FINISHER, String(syncCfg.autoFinisher));
@@ -538,6 +543,11 @@
       ? storedChibi3d !== 'false'
       : (init.chibi3dEnabled !== undefined ? Boolean(init.chibi3dEnabled) : true);
 
+    const storedChibi2dLive = safeLsGet(STORAGE_CHIBI_2D_LIVE);
+    const chibi2dLive = storedChibi2dLive !== null
+      ? storedChibi2dLive !== 'false'
+      : (init.chibi2dLive !== undefined ? Boolean(init.chibi2dLive) : true);
+
     const storedFxDen = safeLsGet(STORAGE_FX_DENSITY);
     const rawFxDen = (storedFxDen !== null && storedFxDen !== '') ? storedFxDen : init.fxDensity;
     const fxDensity = rawFxDen !== undefined && rawFxDen !== null && rawFxDen !== '' ? clampInt(rawFxDen, 0, 100, 100) : 100;
@@ -605,6 +615,7 @@
       privacyShieldActive,
       chibiEnabled,
       chibi3dEnabled,
+      chibi2dLive,
       fxDensity,
       autoFinisher,
       bubbleRadius,
@@ -838,6 +849,7 @@
     st.transparentWorld = st.transparentWorld !== false;
     st.chibiEnabled = st.chibiEnabled !== false;
     st.chibi3dEnabled = st.chibi3dEnabled !== false;
+    st.chibi2dLive = st.chibi2dLive !== false;
     st.autoFinisher = st.autoFinisher !== false;
     st.ecoBattery = st.ecoBattery !== false;
     st.masterPersona = normalizeSafeMasterPersona(st.masterPersona);
@@ -860,7 +872,7 @@
     let syncedWsChibi3d = false;
     if (
       !isTransient &&
-      overrides.chibi3dEnabled !== undefined &&
+      (overrides.chibi3dEnabled !== undefined || overrides.chibi2dLive !== undefined) &&
       overrides.workspaceProfiles === undefined &&
       st.activeWorkspace &&
       st.workspaceProfiles &&
@@ -868,7 +880,8 @@
     ) {
       st.workspaceProfiles[st.activeWorkspace] = {
         ...st.workspaceProfiles[st.activeWorkspace],
-        chibi3dEnabled: Boolean(st.chibi3dEnabled)
+        ...(overrides.chibi3dEnabled !== undefined ? { chibi3dEnabled: Boolean(st.chibi3dEnabled) } : {}),
+        ...(overrides.chibi2dLive !== undefined ? { chibi2dLive: Boolean(st.chibi2dLive) } : {})
       };
       syncedWsChibi3d = true;
     }
@@ -888,6 +901,7 @@
       safeLsRemember(STORAGE_TRANSPARENT_WORLD, String(st.transparentWorld));
       safeLsRemember(STORAGE_CHIBI_ENABLED, String(st.chibiEnabled));
       safeLsRemember(STORAGE_CHIBI_3D, String(st.chibi3dEnabled));
+      safeLsRemember(STORAGE_CHIBI_2D_LIVE, String(st.chibi2dLive));
       safeLsRemember(STORAGE_FX_DENSITY, String(st.fxDensity));
       safeLsRemember(STORAGE_AUTO_FINISHER, String(st.autoFinisher));
       safeLsRemember(STORAGE_BUBBLE_RADIUS, String(st.bubbleRadius));
@@ -1700,12 +1714,12 @@
       }
 
       ${bubbleComposerHeaderBg ? `
-      .surface-composer > :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(agy-chibi-aura):not(agy-hashira-squad) {
+      .surface-composer > :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(agy-chibi-aura):not(.agy-chibi-live2d-overlay):not(agy-hashira-squad) {
         background: ${bubbleComposerHeaderBg} !important;
         border-radius: 14.5px 14.5px 0 0 !important;
         padding: 4px 8px !important;
       }
-      .surface-composer:has(> :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(agy-chibi-aura):not(agy-hashira-squad)) .surface-composer-card {
+      .surface-composer:has(> :first-child:not(.surface-composer-card):not(.agy-shinobu-npc-wrap):not(.agy-chibi-hitbox):not(#agy-token-context-bar):not(#agy-yoriichi-msg-echo):not(agy-chibi-aura):not(.agy-chibi-live2d-overlay):not(agy-hashira-squad)) .surface-composer-card {
         border-radius: 0 0 14.5px 14.5px !important;
       }
       ` : ''}
@@ -2027,6 +2041,7 @@
         fxDensity: clampInt(src.fxDensity, 0, 100, cur.fxDensity),
         chibiEnabled: src.chibiEnabled !== false,
         chibi3dEnabled: src.chibi3dEnabled !== false,
+        chibi2dLive: src.chibi2dLive !== false,
         autoFinisher: src.autoFinisher !== false,
         focusMode: Boolean(src.focusMode)
       };
@@ -2052,6 +2067,7 @@
         fxDensity: prof.fxDensity,
         chibiEnabled: prof.chibiEnabled,
         chibi3dEnabled: typeof prof.chibi3dEnabled === 'boolean' ? prof.chibi3dEnabled : cur.chibi3dEnabled,
+        chibi2dLive: typeof prof.chibi2dLive === 'boolean' ? prof.chibi2dLive : cur.chibi2dLive,
         autoFinisher: prof.autoFinisher !== false,
         focusMode: Boolean(prof.focusMode)
       });
@@ -2509,6 +2525,7 @@
     const personaList = forge && Array.isArray(forge.PERSONA_LIST) ? forge.PERSONA_LIST : [activePersona];
     const activeChibiCharId = resolveActiveChibiCharId(st);
     const is3dModeOn = st.chibi3dEnabled !== false;
+    const is2dLiveOn = st.chibi2dLive !== false;
     const glbApi = typeof window !== 'undefined' ? window.__AGY_KNY_CHIBI_3D__ : null;
     const glbInfo = (glbApi && typeof glbApi.getCustomGlbInfo === 'function')
       ? glbApi.getCustomGlbInfo(activeChibiCharId)
@@ -2805,6 +2822,19 @@
                   <button id="agy-chibi-mode-2d" type="button" data-chibi-mode="2d" aria-pressed="${!is3dModeOn ? 'true' : 'false'}" style="padding: 8px 10px; border-radius: 8px; font-size: 12px; font-weight: ${!is3dModeOn ? '700' : '500'}; color: ${!is3dModeOn ? '#f8fafc' : '#cbd5e1'}; background: ${!is3dModeOn ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${!is3dModeOn ? escMainPrimary : 'rgba(255,255,255,0.14)'}; cursor: pointer;">${esc(tr('chb2dM', 'Chế độ 2D (Ảnh gốc)'))}</button>
                   <button id="agy-chibi-mode-3d" type="button" data-chibi-mode="3d" aria-pressed="${is3dModeOn ? 'true' : 'false'}" style="padding: 8px 10px; border-radius: 8px; font-size: 12px; font-weight: ${is3dModeOn ? '700' : '500'}; color: ${is3dModeOn ? '#f8fafc' : '#cbd5e1'}; background: ${is3dModeOn ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${is3dModeOn ? escMainPrimary : 'rgba(255,255,255,0.14)'}; cursor: pointer;">${esc(tr('chb3dM', 'Chế độ 3D (.glb / .vrm)'))}</button>
                 </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 8px; padding: 11px 14px; border-radius: 10px; background: rgba(11,14,22,0.62); border: 1px solid rgba(255,255,255,0.09); grid-column: 1 / -1;">
+                <label style="display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 12.5px; color: #f1f5f9; cursor: pointer;">
+                  <span>✨ ${esc(tr('l2dTg', 'Chibi 2D Sống Động (Live2D-lite: nhịp thở, theo chuột & phản ứng code)'))}</span>
+                  <input id="agy-chibi-2d-live-toggle" type="checkbox" ${is2dLiveOn ? 'checked' : ''} style="accent-color: ${escMainPrimary}; cursor: pointer; width: 16px; height: 16px;" />
+                </label>
+                <div role="group" aria-label="Xem thử phản ứng Chibi 2D Sống Động" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;">
+                  <button id="agy-l2d-preview-happy" type="button" data-l2d-react="happy" style="padding: 6px 8px; border-radius: 8px; font-size: 11.5px; font-weight: 600; color: #f8fafc; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); cursor: pointer;">✨ Vui vẻ</button>
+                  <button id="agy-l2d-preview-thinking" type="button" data-l2d-react="thinking" style="padding: 6px 8px; border-radius: 8px; font-size: 11.5px; font-weight: 600; color: #f8fafc; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); cursor: pointer;">💭 AI suy luận</button>
+                  <button id="agy-l2d-preview-typing" type="button" data-l2d-react="combo" style="padding: 6px 8px; border-radius: 8px; font-size: 11.5px; font-weight: 600; color: #f8fafc; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); cursor: pointer;">⌨️ Gõ Combo</button>
+                  <button id="agy-l2d-preview-victory" type="button" data-l2d-react="victory" style="padding: 6px 8px; border-radius: 8px; font-size: 11.5px; font-weight: 600; color: #f8fafc; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); cursor: pointer;">🏆 Test PASS</button>
+                </div>
+                <div id="agy-l2d-preview-status" style="font-size: 11.5px; color: #94a3b8;">${is2dLiveOn ? 'Đang bật: Chibi 2D tự hít thở êm ái, nghiêng nhẹ theo con trỏ chuột và đổi biểu cảm theo trạng thái làm việc.' : 'Đang tắt: Hiển thị ảnh Chibi 2D tĩnh nguyên bản.'}</div>
               </div>
             </div>
             <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 14px; border-radius: 10px; background: rgba(11,14,22,0.62); border: 1px solid rgba(255,255,255,0.09);">
@@ -3671,6 +3701,41 @@
       });
     }
 
+    const chibi2dLiveToggle = container.querySelector('#agy-chibi-2d-live-toggle');
+    const l2dPreviewStatus = container.querySelector('#agy-l2d-preview-status');
+    if (chibi2dLiveToggle) {
+      chibi2dLiveToggle.addEventListener('change', (e) => {
+        const nextOn = Boolean(e.target.checked);
+        applyTheme({ chibi2dLive: nextOn });
+        if (nextOn && window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.triggerLive2dReaction === 'function') {
+          window.__AGY_KNY_CHIBI_AURA__.triggerLive2dReaction('happy', 1200);
+        }
+        renderThemePanels(container);
+      });
+    }
+    const L2D_PREVIEW_LABELS = {
+      happy: '✨ Đang diễn biểu cảm Vui vẻ (nhún nhảy & lấp lánh sao)!',
+      thinking: '💭 Đang diễn trạng thái AI suy luận (nghiêng đầu & bong bóng Hơi Thở 3 chấm)!',
+      combo: '⌨️ Đang diễn trạng thái Gõ phím Combo (nảy theo nhịp gõ & huy hiệu ×Combo)!',
+      victory: '🏆 Đang diễn trạng thái Test PASS / Chiến thắng (nhảy kép & pháo sáng rực rỡ)!'
+    };
+    container.querySelectorAll('[data-l2d-react]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const kind = btn.getAttribute('data-l2d-react') || 'happy';
+        if (getState().chibi2dLive === false) {
+          applyTheme({ chibi2dLive: true });
+          if (chibi2dLiveToggle) chibi2dLiveToggle.checked = true;
+        }
+        if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.triggerLive2dReaction === 'function') {
+          window.__AGY_KNY_CHIBI_AURA__.triggerLive2dReaction(kind, 2400);
+        }
+        if (l2dPreviewStatus) {
+          l2dPreviewStatus.textContent = L2D_PREVIEW_LABELS[kind] || L2D_PREVIEW_LABELS.happy;
+          l2dPreviewStatus.style.color = '#fde047';
+        }
+      });
+    });
+
     const glbInput = container.querySelector('#agy-chibi-glb-input');
     const glbUploadBtn = container.querySelector('#agy-chibi-glb-upload');
     const glbResetBtn = container.querySelector('#agy-chibi-glb-reset');
@@ -3921,6 +3986,9 @@
       if (typeof parsed.chibi3dEnabled === 'boolean') {
         allowed.chibi3dEnabled = parsed.chibi3dEnabled;
       }
+      if (typeof parsed.chibi2dLive === 'boolean') {
+        allowed.chibi2dLive = parsed.chibi2dLive;
+      }
       if (typeof parsed.autoFinisher === 'boolean') {
         allowed.autoFinisher = parsed.autoFinisher;
       }
@@ -4039,7 +4107,7 @@
           STORAGE_USER_AVATAR_SAVED, STORAGE_AGENT_AVATAR_SAVED, STORAGE_GLASS_BLUR,
           STORAGE_AVATAR_SIZE, STORAGE_AVATAR_RADIUS, STORAGE_THEME, STORAGE_BUBBLE,
           STORAGE_INPUT, STORAGE_DIMMING, STORAGE_WP_ENABLED, STORAGE_TRANSPARENT_WORLD,
-          STORAGE_CHIBI_ENABLED, STORAGE_CHIBI_3D, STORAGE_FX_DENSITY, STORAGE_AUTO_FINISHER,
+          STORAGE_CHIBI_ENABLED, STORAGE_CHIBI_3D, STORAGE_CHIBI_2D_LIVE, STORAGE_FX_DENSITY, STORAGE_AUTO_FINISHER,
           STORAGE_BUBBLE_RADIUS, STORAGE_ECO_BATTERY, STORAGE_MASTER_PERSONA,
           STORAGE_AI_PERSONA_MODE, STORAGE_FOCUS_MODE
         ].forEach((k) => localStorage.removeItem(k));
@@ -4063,6 +4131,7 @@
         transparentWorld: true,
         chibiEnabled: true,
         chibi3dEnabled: true,
+        chibi2dLive: true,
         fxDensity: 100,
         autoFinisher: true,
         bubbleRadius: 14,
@@ -4759,6 +4828,9 @@
         if (drawer && typeof drawer.resetClock === 'function') {
           drawer.resetClock();
         }
+        if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.resumeOrPauseAura === 'function') {
+          try { window.__AGY_KNY_CHIBI_AURA__.resumeOrPauseAura(); } catch (_) {}
+        }
       }
       resumeOrPause();
     };
@@ -5146,6 +5218,15 @@
         pointer-events: auto;
         transform-origin: bottom right;
       }
+      .surface-composer[data-agy-compact] .agy-npc-badge,
+      .surface-composer[data-agy-npc-stack="1"] .agy-npc-badge {
+        bottom: 38px;
+        right: 112px;
+      }
+      .surface-composer[data-agy-compact="2"] .agy-npc-badge {
+        bottom: 38px;
+        right: 98px;
+      }
       .surface-composer[data-agy-compact] .agy-npc-popover {
         right: 8px;
         bottom: 62px;
@@ -5282,7 +5363,7 @@
         font-size: 12.3px;
         line-height: 1.46;
         color: #f1f5f9;
-        min-height: 36px;
+        min-height: 54px;
         word-break: break-word;
       }
       .agy-npc-dialog-text[data-typing="1"]::after {
@@ -5713,6 +5794,8 @@
       const auraThemeCfg = {
         ...bTheme,
         chibi3dEnabled: st.chibi3dEnabled !== false,
+        chibi2dLive: st.chibi2dLive !== false,
+        ecoBattery: st.ecoBattery !== false,
         masterPersonaId: persona ? persona.id : 'yoriichi',
         personaRingColor: SEC.sanitizeCssValue(persona.ringColor, '#fde047'),
         personaGlowColor: SEC.sanitizeCssValue(persona.glowColor, 'rgba(239, 68, 68, 0.52)'),
@@ -5938,6 +6021,7 @@
           fxDensity: prof.fxDensity,
           chibiEnabled: prof.chibiEnabled !== false,
           chibi3dEnabled: typeof prof.chibi3dEnabled === 'boolean' ? prof.chibi3dEnabled : curState.chibi3dEnabled,
+          chibi2dLive: typeof prof.chibi2dLive === 'boolean' ? prof.chibi2dLive : curState.chibi2dLive,
           autoFinisher: prof.autoFinisher !== false,
           focusMode: Boolean(prof.focusMode)
         });
