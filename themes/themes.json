@@ -105,15 +105,42 @@
         ]
       },
       "replies": {
-        "greet": "Mừng con đã đến, đứa trẻ ưu tú của ta. Hôm nay con muốn cùng ta sẻ chia câu chuyện hay dự định gì dưới hiên hoa tử đằng này? 🌸👑",
-        "tired": "Con đã vất vả nhiều rồi... Đừng tự trách hay ép bản thân quá sức. Hãy tạm gác công việc vài phút, nhấp ngụm nước ấm và để tâm hồn lắng lại bên gia đình ta nhé. 🍵💜",
-        "bug": "Đừng nao núng trước những nút thắt rối ren con nhé. Ngay cả bóng tối dày đặc nhất cũng có điểm yếu—hãy điềm tĩnh soi chiếu từng phần, con sẽ tìm ra lời giải thôi. 🏮✨",
-        "praise": "Lời nói ấm áp của con khiến cả ta, Amane và lũ trẻ đều mỉm cười hạnh phúc. Chính tâm hồn đẹp đẽ ấy của con mới là điều đáng trân quý nhất. 🌸👑",
-        "hungry": "Cơ thể cũng giống như thanh kiếm cần được chăm sóc chu đáo. Amane đã dặn nhà bếp chuẩn bị bữa ăn thanh đạm rồi, con mau đi dùng bữa cho ấm lòng nhé. 🍱✨",
-        "sleepy": "Đêm đã khuya và sương xuống lạnh rồi con ạ. Hãy lưu lại thành quả hôm nay và chìm vào giấc ngủ yên bình nhé, ngày mai ánh dương sẽ mang tới nguồn sáng mới cho con. 🌙💜",
-        "deadline": "Giữa lúc thời gian gấp gáp nhất, sự điềm tĩnh của người dẫn đầu mới tỏa sáng nhất. Hãy chọn việc cốt lõi làm trước từng bước một, ta luôn ở ngay đây tiếp thêm định lực cho con! 👑✨",
-        "thanks": "Không cần khách sáo đâu con của ta. Được nhìn thấy con trưởng thành và bình an mỗi ngày đã là niềm hạnh phúc lớn lao nhất của ta rồi. 🌸💜",
-        "fallback": "Ta hiểu tấm lòng của con qua lời nhắn \"{input}\". Hãy cứ vững tin bước tiếp trên con đường con đã chọn nhé, lời chúc phúc của nhà Ubuyashiki luôn ở bên con. 👑🌸"
+        "greet": [
+          "Mừng con đã đến, đứa trẻ ưu tú của ta. Hôm nay con muốn cùng ta sẻ chia câu chuyện hay dự định gì dưới hiên hoa tử đằng này? 🌸👑",
+          "Chào con của ta. Hương tử đằng và tiếng chuông gió ngoài hiên đang dịu dàng đón bước chân con trở về. 🏮💜"
+        ],
+        "tired": [
+          "Con đã vất vả nhiều rồi... Đừng tự trách hay ép bản thân quá sức. Hãy tạm gác công việc vài phút, nhấp ngụm nước ấm bên gia đình ta nhé. 🍵💜",
+          "Sinh lực của các kiếm sĩ chính là báu vật của Sát Quỷ Đoàn. Hãy tựa lưng chớp mắt một lát theo lời ta và Amane dặn nhé. 🌸👑"
+        ],
+        "bug": [
+          "Đừng nao núng trước những nút thắt rối ren con nhé. Ngay cả bóng tối dày đặc nhất cũng có điểm yếu—điềm tĩnh soi chiếu từng phần, con sẽ tìm ra lời giải thôi. 🏮✨",
+          "Mọi sai sót chỉ là bước đệm để hoàn thiện đại cục. Gửi dấu vết vào khung dưới, trí tuệ sáng suốt sẽ dẫn lối cho con. 📜🌸"
+        ],
+        "praise": [
+          "Lời nói ấm áp của con khiến cả ta, Amane và lũ trẻ đều mỉm cười hạnh phúc. Chính tâm hồn đẹp đẽ ấy của con mới là điều đáng trân quý nhất. 🌸👑",
+          "Cảm ơn con, đứa trẻ dịu dàng của ta. Nghe giọng nói tràn đầy sinh khí của con làm lòng ta nhẹ nhõm vô cùng. 💜✨"
+        ],
+        "hungry": [
+          "Cơ thể cũng giống như thanh kiếm cần được chăm sóc chu đáo. Amane đã dặn nhà bếp chuẩn bị bữa ăn thanh đạm rồi, con mau đi dùng bữa cho ấm lòng nhé. 🍱✨",
+          "Đừng để bụng đói làm hao tổn nguyên khí con nhé. Một bát cháo ấm hay tách trà sen lúc này sẽ rất tốt cho con. 🍵🌸"
+        ],
+        "sleepy": [
+          "Đêm đã khuya và sương xuống lạnh rồi con ạ. Hãy lưu lại thành quả hôm nay và chìm vào giấc ngủ yên bình nhé, ngày mai ánh dương sẽ mang tới nguồn sáng mới. 🌙💜",
+          "Hãy khép mắt an giấc đi con. Đàn quạ Kasugai và các Trụ Cột vẫn đang canh giữ màn đêm bình yên cho con rồi. 🏮🌙"
+        ],
+        "deadline": [
+          "Giữa lúc thời gian gấp gáp nhất, sự điềm tĩnh của người dẫn đầu mới tỏa sáng nhất. Hãy chọn việc cốt lõi làm trước từng bước một, ta luôn tiếp thêm định lực cho con! 👑✨",
+          "Ý chí con người là bất diệt. Tập trung trọn vẹn vào mục tiêu trọng yếu nhất, con chắc chắn sẽ hoàn thành viên mãn. 📜🌸"
+        ],
+        "thanks": [
+          "Không cần khách sáo đâu con của ta. Được nhìn thấy con trưởng thành và bình an mỗi ngày đã là niềm hạnh phúc lớn lao nhất của ta rồi. 🌸💜",
+          "Ta luôn tự hào về con. Hãy giữ gìn sức khỏe thật tốt trên chặng đường phía trước nhé. 👑✨"
+        ],
+        "fallback": [
+          "Ta hiểu tấm lòng của con qua lời nhắn \"{input}\". Hãy cứ vững tin bước tiếp trên con đường con đã chọn, lời chúc phúc của nhà Ubuyashiki luôn ở bên con. 👑🌸",
+          "\"{input}\" ư? Suy nghĩ của con rất thấu đáo. Cứ điềm nhiên triển khai theo nhịp thở của riêng con nhé. 🏮💜"
+        ]
       }
     },
     "actionSticker": "assets/ubuyashiki_action.webp",
@@ -227,15 +254,42 @@
         ]
       },
       "replies": {
-        "greet": "Moshi moshi~ Rất vui được trò chuyện cùng bạn ngay góc khung chat này! Hôm nay bạn đang làm dự án gì thú vị thế? 🦋💜",
-        "tired": "Ara ara~ Vất vả cho bạn quá rồi! Dựa lưng nghỉ ngơi vài phút, nhắm mắt hít thở sâu một chút đi, sức khỏe là số một ở Điệp Phủ đó nha! 🍵💜",
-        "bug": "Ara ara, lũ bug này gan thật đấy~ Đừng nóng vội nhé, gửi log lỗi vào khung chat bên dưới để tụi mình tiêm một mũi dược độc diệt tận gốc cho! 🦋⚔️",
-        "praise": "Ara ara~ Bạn khéo khen làm mình ngại ghê đó! Được ngồi dưới ánh trăng tử đằng đồng hành cùng bạn mình cũng vui lắm~ 🌸💜",
-        "hungry": "Bụng đói là không nghĩ ra thuật toán hay được đâu nha! Mau đi thưởng thức món cá kho gừng hay chén cơm nóng ấm bụng đi, mình canh máy cho~ 🍙🍵",
-        "sleepy": "Thức khuya quá sẽ hại sức khỏe lắm đó... Nốt phần việc nhỏ này rồi lưu code đi ngủ sớm nhé, không nghe lời là mai mình phạt uống thuốc bổ đắng nghét đấy! 🌙💜",
-        "deadline": "Bình tĩnh nào! Hít một hơi Toàn Tập Trung, ưu tiên phần cốt lõi chạy được trước rồi tinh chỉnh sau—tụi mình cùng lướt nhanh về đích nhé! ✨🦋",
-        "thanks": "Không có chi đâu nè~ Giúp bạn có thêm cảm hứng làm việc mỗi ngày là niềm vui của mình mà! 💜🦋",
-        "fallback": "Ara ara~ \"{input}\" ư? Mình nghe rõ rồi nè! Cứ yên tâm triển khai tiếp nhé, mình luôn ngồi ngay đây tiếp sức cho bạn! 🦋✨"
+        "greet": [
+          "Moshi moshi~ Rất vui được trò chuyện cùng anh ngay góc khung chat này! Hôm nay chúng ta điều chế giải pháp cho dự án gì thú vị thế? 🦋💜",
+          "Moshi moshi~ Hương hoa tử đằng ở Điệp Phủ hôm nay dịu lắm, sẵn sàng đồng hành cùng anh rồi đây~ 🌸✨"
+        ],
+        "tired": [
+          "Ara ara~ Vất vả cho anh quá rồi! Dựa lưng nghỉ ngơi vài phút, nhắm mắt hít thở sâu đi nhé, không giữ sức là phải ở lại Điệp Phủ uống thuốc đắng đó nha! 🍵💜",
+          "Chị Kanae từng bảo nụ cười và sự nghỉ ngơi thư thái là liều thuốc hồi phục tốt nhất đấy~ Nhấp ngụm trà thảo mộc với mình nhé! 🦋🌸"
+        ],
+        "bug": [
+          "Ara ara, lũ bug này gan thật đấy~ Đừng nóng vội nhé, gửi log lỗi vào khung dưới để mình pha đúng một mũi dược độc hoa tử đằng trị tận gốc cho! 🦋⚔️",
+          "Giống như bóc tách độc tố vậy, mỗi con bug đều có công thức trung hòa riêng. Đưa dấu vết lỗi ra đây tụi mình chẩn đoán gọn gàng nha~ 💜✨"
+        ],
+        "praise": [
+          "Ara ara~ Anh khéo khen làm mình mỉm cười mãi thôi! Được ngồi dưới ánh trăng tử đằng đồng hành cùng người tinh tế như anh vui lắm~ 🌸💜",
+          "Cảm ơn anh nhé~ Kanao và các bé ở Điệp Phủ mà nghe được lời khen dịu dàng thế này chắc cũng quý anh lắm đấy! 🦋✨"
+        ],
+        "hungry": [
+          "Bụng đói là không nghĩ ra thuật toán hay được đâu nha! Mau đi thưởng thức món cá kho gừng Tsukudani ấm nóng hay chén cơm thơm đi, mình canh máy cho~ 🍙🍵",
+          "Ara ara~ Để bụng đói bỏ bữa là Aoi mắng thật đấy nhé! Đi nạp năng lượng đàng hoàng rồi quay lại làm việc tiếp nào! 🍱💜"
+        ],
+        "sleepy": [
+          "Thức khuya quá sẽ hại gan và thị lực lắm đó... Nốt phần nhỏ này rồi lưu code đi ngủ sớm nhé, không nghe lời là mai mình mang chén thuốc bổ đắng nghét ra đấy! 🌙💜",
+          "Đêm ở Điệp Phủ đã tĩnh lặng hết rồi~ Khép máy đi ngủ nghỉ ngơi cho đôi mắt hồi phục nha, chúc anh ngủ thật ngon! 🦋🌙"
+        ],
+        "deadline": [
+          "Bình tĩnh nào! Hít một hơi Toàn Tập Trung, ưu tiên phần cốt lõi chạy chuẩn trước rồi tinh chỉnh sau—Điệp Chi Vũ sẽ lướt nhanh về đích cùng anh! ✨🦋",
+          "Bình tĩnh nhé~ Càng gấp càng cần mũi tiêm chính xác thay vì vung sức dàn trải: khoanh vùng đúng 1 mục tiêu quan trọng nhất ngay bây giờ nào! 💜⚡"
+        ],
+        "thanks": [
+          "Không có chi đâu nè~ Giúp anh giữ tinh thần sảng khoái và code sạch mỗi ngày là niềm vui của Trùng Trụ mà! 💜🦋",
+          "Ara ara~ Không có chi đâu, đừng khách sáo thế chứ—nhớ uống thêm ngụm nước ấm là trả lễ cho Điệp Phủ rồi nha! 🍵✨"
+        ],
+        "fallback": [
+          "Ara ara~ \"{input}\" ư? Mình lắng nghe rõ từng ý rồi nè! Cứ yên tâm triển khai tiếp nhé, mình luôn ngồi ngay đây tiếp sức cho anh! 🦋✨",
+          "\"{input}\" nghe thú vị đấy chứ~ Cần bóc tách chi tiết nào cứ chia nhỏ từng liều lượng ra, mình hỗ trợ hết lòng nha! 💜🌸"
+        ]
       }
     },
     "actionSticker": "assets/shinobu_action.webp",
@@ -316,48 +370,75 @@
       ],
       "dialogs": {
         "welcome": [
-          "...Ta đang canh chừng ở đây. Cứ tập trung vào nhiệm vụ của bạn đi, đừng bận tâm đến ta. 🌊",
-          "Mặt nước phẳng lặng phản chiếu rõ mọi thứ. Giữ tâm tĩnh lặng thì bài toán nào cũng nhìn thấu. 💧",
-          "...Nhân tiện nói rõ trước: ta không hề bị mọi người ghét đâu. Chỉ là ta thích ngồi yên đồng hành cùng bạn thôi. 🌊",
-          "Dòng chảy không bao giờ ngừng lại. Đừng trao quyền sinh sát tiến độ của bạn cho sự chần chừ! ⚔️"
+          "...Tôi đang canh chừng ở góc này. Anh cứ tập trung vào nhiệm vụ trước mắt đi, đừng bận tâm đến tôi. 🌊",
+          "Mặt nước phẳng lặng phản chiếu rõ mọi thứ. Giữ tâm tĩnh lặng thì cấu trúc phức tạp đến đâu cũng nhìn thấu. 💧",
+          "...Nhân tiện nói rõ trước: tôi không hề bị mọi người ghét. Tôi chỉ quen giữ yên lặng đồng hành cùng anh thôi. 🌊",
+          "Dòng chảy không bao giờ ngừng lại. Đừng trao quyền định đoạt tiến độ công việc của mình cho sự chần chừ. ⚔️"
         ],
         "act1": [
-          "Thủy Chi Hô Hấp — Thức thứ mười một: Lặng. Mọi tạp niệm và xao nhãng quanh màn hình của bạn đã hóa hư không rồi. 🌊✨",
-          "Khi mặt hồ tâm trí không một gợn sóng, ngay cả lỗi hệ thống phức tạp nhất cũng tự khắc lộ rõ sơ hở. 💧",
-          "...Hít vào sâu, thở ra chậm. Giữ nhịp độ điềm tĩnh như mặt biển lúc trăng lên. 🌊"
+          "Thủy Chi Hô Hấp — Thức thứ mười một: Lặng. Mọi tạp niệm và xao nhãng quanh màn hình của anh đều đã lặng tắt. 🌊✨",
+          "Khi mặt hồ tâm trí không một gợn sóng, ngay cả lỗi ngầm hóc búa nhất cũng tự khắc lộ rõ quỹ đạo. 💧",
+          "...Hít vào sâu, thở ra chậm. Giữ nhịp độ điềm tĩnh như mặt nước đêm trăng. 🌊"
         ],
         "act2": [
-          "...Nếu xong việc hôm nay, bạn có muốn đi ăn món cá hồi hầm củ cải trắng không? Món đó... ngon lắm đấy. 🐟✨",
-          "Uống một ngụm nước mát đi. Cơ thể thiếu nước sẽ khiến phản xạ suy nghĩ chậm đi nhiều đấy. 💧",
-          "Shinobu cứ trêu lúc ta ăn cá hồi hầm củ cải trông kỳ lắm... nhưng nạp đủ năng lượng mới cầm vững kiếm được. 🐟"
+          "...Xong phần việc hôm nay, nếu tiện thì đi ăn cá hồi hầm củ cải trắng nhé. Món đó... thanh và ngon lắm. 🐟✨",
+          "Uống một ngụm nước mát đi anh. Cơ thể thiếu nước sẽ khiến phản xạ suy luận chậm đi nhiều đấy. 💧",
+          "Shinobu cứ bảo lúc ăn cá hồi hầm củ cải mặt tôi trông lạ lắm... nhưng ăn đủ bữa mới cầm vững kiếm được. 🐟"
         ],
         "act3": [
-          "Nước có thể uyển chuyển luồn qua khe đá, cũng có thể mạnh mẽ cuốn phăng mọi rào cản kỹ thuật. ⚔️🌊",
-          "Đừng nản lòng khi giải pháp đầu tiên bị chặn. Hãy đổi hướng linh hoạt như Thủy Lưu Phi沫 nhé! 💧",
-          "Ta ít nói không có nghĩa là ta không ghi nhận nỗ lực của bạn. Bạn đang làm rất vững vàng rồi. 🌊"
+          "Nước có thể uyển chuyển luồn qua khe đá hẹp, cũng có thể dứt khoát cuốn phăng mọi rào cản kỹ thuật. ⚔️🌊",
+          "Nửa vạt haori này nhắc tôi về những người đã gửi gắm niềm tin. Tôi sẽ đứng đây giữ vững hậu phương cho anh. 💧",
+          "...Tôi kiệm lời không có nghĩa là không thấy nỗ lực của anh. Anh đang xử lý rất vững vàng đấy. 🌊"
         ],
         "typing": [
-          "...Nhịp gõ dứt khoát đấy. Cứ giữ dòng chảy tư duy như vậy. 🌊",
-          "Ta vẫn đang quan sát đây. Viết tiếp đi. 💧"
+          "...Nhịp gõ dứt khoát đấy. Cứ giữ dòng chảy tư duy mạch lạc như vậy. 🌊",
+          "Tôi vẫn đang quan sát đây. Cứ viết tiếp đi. 💧"
         ],
         "sent": [
-          "Đã gửi đi như nhát chém Thủy Xa gọn gàng. Đợi kết quả thôi. 🌊",
-          "...Xử lý dứt điểm từng bước một. Làm tốt lắm. 💧"
+          "Đã gửi đi gọn như một nhát Thủy Xa. Chờ kết quả thôi. 🌊",
+          "...Xử lý dứt điểm từng bước một. Tốt lắm. 💧"
         ],
         "remind": [
-          "...Bạn ngồi bất động trước màn hình lâu quá rồi. Đứng dậy vươn vai và uống nước đi, đừng để cơ thể quá tải. 🌊💧"
+          "...Anh ngồi bất động trước màn hình lâu quá rồi. Đứng dậy vươn vai và uống nước đi, đừng để cơ thể quá tải. 🌊💧"
         ]
       },
       "replies": {
-        "greet": "...Chào bạn. Ta vẫn ở ngay góc khung chat này. Có nhiệm vụ nào cần giải quyết thì cứ bắt đầu đi. 🌊",
-        "tired": "...Đừng cố gồng khi thể lực đã cạn. Tạm dừng vài phút, nhắm mắt tĩnh tâm như mặt nước phẳng lặng rồi hẵng tiếp tục. 💧",
-        "bug": "Giận dữ hay hoảng loạn đều làm loạn nhịp kiếm. Đưa lỗi đó vào khung chat phân tích từng dòng đi, ta sẽ cùng bạn chặn đứng nó. 🌊⚔️",
-        "praise": "...Cảm ơn bạn. Ta không giỏi nói lời hoa mỹ, nhưng được đồng hành cùng bạn thế này... ta cũng thấy vui. 🌊✨",
-        "hungry": "Đói bụng thì không thể tập trung hơi thở được. Mau đi ăn một bát cơm nóng với cá hồi hầm củ cải đi. 🐟🍚",
-        "sleepy": "Trời đã khuya rồi. Kiếm sĩ giỏi biết rõ lúc nào cần tra kiếm vào vỏ để nghỉ ngơi—đi ngủ sớm đi nhé. 🌙🌊",
-        "deadline": "Tuyệt đối đừng bỏ cuộc! Dồn toàn bộ sự tĩnh lặng vào mục tiêu quan trọng nhất ngay lúc này, nhất định sẽ kịp! 🌊⚔️",
-        "thanks": "...Không có gì đâu. Đó là việc ta nên làm mà. 🌊",
-        "fallback": "...\"{input}\" sao? Ta đã nghe rõ rồi. Cứ giữ vững tâm thế tĩnh tại và tiến lên phía trước nhé. 🌊💧"
+        "greet": [
+          "...Chào anh. Tôi vẫn ở ngay góc khung chat này. Có việc gì cần giải quyết thì cứ bắt đầu đi. 🌊",
+          "...Ừm, chào anh. Mặt nước hôm nay rất tĩnh, thích hợp để xử lý gọn những phần việc khó nhất. 💧"
+        ],
+        "tired": [
+          "...Đừng cố gồng khi thể lực đã cạn. Tạm dừng vài phút, nhắm mắt tĩnh tâm như mặt nước phẳng lặng rồi hẵng làm tiếp. 💧",
+          "...Thầy Urokodaki từng dạy: kiếm sĩ không biết giữ sức sẽ gục trước khi vung nhát quyết định. Nghỉ một lát đi anh. 🌊"
+        ],
+        "bug": [
+          "Nóng giận hay vội vàng đều làm loạn nhịp kiếm. Đưa lỗi đó vào khung chat phân tích từng dòng đi, tôi cùng anh chặn đứng nó. 🌊⚔️",
+          "...Thức thứ mười một: Lặng. Cắt bỏ hết suy đoán lan man, gửi stacktrace vào đây để khoanh vùng đúng điểm gãy. 💧⚔️"
+        ],
+        "praise": [
+          "...Cảm ơn anh. Tôi vốn không giỏi nói lời hoa mỹ, nhưng được đồng hành cùng anh thế này... tôi thấy rất yên tâm. 🌊✨",
+          "...Anh quá khen rồi. Tôi chỉ làm tròn bổn phận của một Thủy Trụ thôi. 💧"
+        ],
+        "hungry": [
+          "Đói bụng thì không thể duy trì Hơi Thở Toàn Tập Trung được. Đi ăn cơm nóng với cá hồi hầm củ cải trắng đi anh. 🐟🍚",
+          "...Hãy đi dùng bữa trước đã. Góc làm việc này cứ để tôi canh chừng cho. 🌊🍵"
+        ],
+        "sleepy": [
+          "Trời đã khuya lắm rồi. Kiếm sĩ giỏi biết rõ lúc nào cần tra kiếm vào vỏ để dưỡng sức—lưu việc lại và nghỉ ngơi đi anh. 🌙🌊",
+          "...Đôi mắt anh mỏi rồi kìa. Đừng thức trắng đêm nữa, sáng mai đầu óc tỉnh táo sẽ giải quyết nhanh gấp đôi. 💧🌙"
+        ],
+        "deadline": [
+          "Tuyệt đối đừng bỏ cuộc! Dồn toàn bộ sự tĩnh lặng vào mục tiêu cốt lõi nhất ngay lúc này, nhất định sẽ kịp giờ. 🌊⚔️",
+          "...Bỏ qua những chi tiết phụ. Giống như dòng thác đổ thẳng xuống vực, dứt điểm hạng mục quan trọng nhất trước đi! 💧⚡"
+        ],
+        "thanks": [
+          "...Không có gì đâu. Đó là việc tôi nên làm mà. 🌊",
+          "...Ừm. Chỉ cần công việc của anh trôi chảy bình an là tốt rồi. 💧"
+        ],
+        "fallback": [
+          "...\"{input}\" sao? Tôi đã nghe rõ rồi. Cứ giữ vững tâm thế tĩnh tại và tiến thẳng về phía trước nhé. 🌊💧",
+          "...Tôi ghi nhận điều anh vừa nói về \"{input}\". Cần phân tích sâu thêm cứ gõ tiếp, tôi luôn ở đây. 🌊"
+        ]
       }
     },
     "actionSticker": "assets/giyu_action.webp",
@@ -471,15 +552,42 @@
         ]
       },
       "replies": {
-        "greet": "HAHAHA! Chào cậu!! Thật tuyệt vời khi được sát cánh cùng cậu hôm nay! Mục tiêu lớn nào đang chờ chúng ta chinh phục đây?! 🔥⚔️",
-        "tired": "Cậu đã chiến đấu hết mình rồi, đáng tự hào lắm!! Hãy tạm hạ kiếm nghỉ ngơi vài phút đi—dưỡng sức cũng là một phần quan trọng của tu luyện đấy! 🔥🍵",
-        "bug": "Mấy con quỷ Bug này dám ngáng đường cậu sao?! Đừng lo lắng! Đưa ngay lỗi ra đây, ngọn lửa Viêm Chi Hô Hấp sẽ thiêu sạch chúng thành tro bụi! 🔥⚔️",
-        "praise": "HAHAHA! Cảm ơn cậu rất nhiều!! Nghe cậu nói vậy khiến ngọn lửa nhiệt huyết trong lồng ngực ta càng bùng cháy mãnh liệt hơn nữa! 🔥✨",
-        "hungry": "UMAI!! Bụng kêu tức là cơ thể đang đòi tiếp nhiên liệu đấy! Đi chén ngay một suất Bento thật thịnh soạn hoặc khoai lang nướng đi nào!! 🍱🍠",
-        "sleepy": "Đã khuya thế này rồi ư?! Ngủ đủ giấc mới rèn luyện được cơ bắp và trí não dẻo dai! Lưu việc lại và đi ngủ ngay đi người anh em, mai ta chiến tiếp!! 🌙🔥",
-        "deadline": "ĐỪNG HỀ DAO ĐỘNG!! Đốt cháy trái tim lên, tập trung 100% hỏa lực vào mục tiêu cốt lõi trước mắt—chúng ta nhất định sẽ phá đảo đúng hạn!! 🔥⚡",
-        "thanks": "HAHAHA! Đừng khách sáo! Bảo vệ và tiếp lửa cho các đàn em tiến bước chính là trách nhiệm kiêu hãnh của đàn anh mà!! 🔥💪",
-        "fallback": "TA HIỂU RỒI!! \"{input}\"—nghe tràn đầy quyết tâm đấy! Cứ giữ vững ngọn lửa kiêu hãnh trong tim và thẳng tiến lên phía trước nhé!! 🔥⚔️"
+        "greet": [
+          "HAHAHA! Chào người anh em!! Thật tuyệt vời khi được sát cánh cùng anh hôm nay! Mục tiêu lớn nào đang chờ chúng ta chinh phục đây?! 🔥⚔️",
+          "CHÀO MỪNG!! Ánh mắt tập trung hôm nay rực sáng lắm—hãy cùng nhau đốt cháy trái tim và tạo nên thành quả xuất sắc nhé!! 🔥✨"
+        ],
+        "tired": [
+          "Anh đã chiến đấu hết mình rồi, đáng tự hào lắm!! Hãy tạm hạ kiếm nghỉ vài phút đi—dưỡng sức cũng là một phần thiết yếu của tu luyện đấy! 🔥🍵",
+          "Mẫu thân tôi từng dặn: muốn che chở cho đại cuộc lâu dài thì trước hết phải giữ ngọn lửa sinh lực bền bỉ. Nghỉ vai một lát nhé người anh em! 🔥💛"
+        ],
+        "bug": [
+          "Mấy con quỷ Bug này dám ngáng đường sao?! Đừng lo lắng! Đưa ngay log lỗi ra đây, Viêm Chi Hô Hấp sẽ thiêu sạch chúng thành tro bụi! 🔥⚔️",
+          "Dù lỗi có phức tạp tới đâu, chỉ cần giữ vững trọng tâm và chém thẳng vào nguyên nhân gốc bằng Thức thứ chín: Luyện Ngục là dứt điểm ngay!! 🐉🔥"
+        ],
+        "praise": [
+          "HAHAHA! Cảm ơn anh rất nhiều!! Nghe lời chân thành ấy khiến ngọn lửa nhiệt huyết trong lồng ngực tôi càng bùng cháy mãnh liệt hơn nữa! 🔥✨",
+          "HẢO HÁN LẮM!! Được đồng hành cùng một người chính trực và tận tâm như anh là niềm vinh hạnh của Viêm Trụ tôi!! 🔥💪"
+        ],
+        "hungry": [
+          "UMAI!! UMAI!! Bụng kêu tức là cơ thể đang đòi tiếp nhiên liệu đấy! Đi thưởng thức ngay một suất Bento bò nướng hoặc khoai lang mật đi nào!! 🍱🍠",
+          "Không ăn no thì làm sao thi triển Hơi Thở Toàn Tập Trung suốt cả ngày được?! Mau đi nạp năng lượng thật thịnh soạn nhé!! 🔥🍱"
+        ],
+        "sleepy": [
+          "Đã khuya thế này rồi ư?! Ngủ đủ giấc mới rèn luyện được cơ bắp và trí não dẻo dai! Lưu việc lại và đi ngủ ngay đi người anh em, mai tái chiến!! 🌙🔥",
+          "Đêm khuya là lúc ngọn lửa nghỉ ngơi dưới lớp than ấm để sáng mai bùng lên rực rỡ hơn. Chúc anh ngủ thật ngon!! 🔥🌙"
+        ],
+        "deadline": [
+          "ĐỪNG HỀ DAO ĐỘNG!! Thắp sáng ngọn lửa trong tim lên, tập trung 100% hỏa lực vào mục tiêu cốt lõi trước mắt—chúng ta nhất định về đích đúng hạn!! 🔥⚡",
+          "Khoảnh khắc cam go nhất chính là lúc bản lĩnh Đại Trụ tỏa sáng! Tiến thẳng một mạch không ngoảnh đầu lại nào!! ⚔️🔥"
+        ],
+        "thanks": [
+          "HAHAHA! Đừng khách sáo! Sát cánh và tiếp lửa cho đồng đội tiến bước chính là trách nhiệm kiêu hãnh của tôi mà!! 🔥💪",
+          "Không có chi đâu người anh em! Cứ ngẩng cao đầu giữ vững niềm tin là tôi vui nhất rồi!! 🔥✨"
+        ],
+        "fallback": [
+          "TÔI HIỂU RỒI!! \"{input}\"—nghe tràn đầy khí phách đấy! Cứ giữ vững ngọn lửa kiêu hãnh trong tim và thẳng tiến lên phía trước nhé!! 🔥⚔️",
+          "HAHAHA! \"{input}\" là một hướng đi rất đáng thử! Tôi đứng ngay đây bọc lót hỏa lực cho anh triển khai tới cùng!! 🔥✨"
+        ]
       }
     },
     "actionSticker": "assets/rengoku_action.webp",
@@ -593,15 +701,42 @@
         ]
       },
       "replies": {
-        "greet": "Yo!! Chào hỏi đầy khí chất đấy! Hôm nay chúng ta sẽ khuấy đảo dự án nào cho thật HÀO NHOÁNG đây hả?! 💎🎆",
-        "tired": "Ê này, nhăn nhó kiệt sức trông kém sang lắm! Nghỉ tay 10 phút thở phào một cái đi—giữ nguyên vẹn phong độ mới là đỉnh cao của shinobi! 💎🍵",
-        "bug": "Mấy con bug lắt nhắt nhạt nhẽo này dám phá hỏng giai điệu sao?! Đưa log đây, ta lập Phổ Nhạc cho nổ tung xác chúng trong một nốt nhạc! 🎼💥",
-        "praise": "HAHAHA! Tất nhiên rồi, mắt nhìn của ngươi cực kỳ tinh tường và hào nhoáng đấy! Ta rất ưng cái bụng!! 💎✨",
-        "hungry": "Bụng rỗng kêu ọt ọt thì lấy đâu ra nhạc cảm hào nhoáng?! Đi đánh chén một bữa thật linh đình hoành tráng ngay lập tức! 🍣🎆",
-        "sleepy": "Thức đêm mắt thâm quầng là kẻ thù số một của vẻ đẹp hào nhoáng đấy! Đóng máy đi ngủ ngay cho ta, mai dậy tỏa sáng gấp đôi! 🌙💎",
-        "deadline": "ĐẾN ĐOẠN CAO TRÀO RỒI!! Bật chế độ Phổ Nhạc tốc độ tối đa, chém bay từng đầu việc quan trọng nhất—chúng ta sẽ về đích đầy ngoạn mục!! 🎆⚡",
-        "thanks": "Hahaha! Chuyện nhỏ như con thỏ! Cứ tiếp tục tỏa sáng rực rỡ đi là trả ơn ta xứng đáng nhất rồi! 💎✨",
-        "fallback": "Ồ hố! \"{input}\" ư? Nghe có vẻ đầy tiềm năng bùng nổ đấy! Triển khai một cách hào nhoáng nhất đi nào, ta bảo kê cho!! 💎🎆"
+        "greet": [
+          "Yo chiến hữu!! Chào hỏi đầy khí chất đấy! Hôm nay chúng ta sẽ khuấy đảo dự án nào cho thật HÀO NHOÁNG đây hả?! 💎🎆",
+          "Thần Lễ Hội Tengen Uzui đã vào vị trí!! Cứ tung ra ý tưởng táo bạo nhất của anh đi, tôi bắt nhịp Phổ Nhạc ngay đây! 🎼✨"
+        ],
+        "tired": [
+          "Ê này, nhăn nhó kiệt sức trông kém hào nhoáng lắm! Nghỉ tay 10 phút thở phào đi—quy tắc số 1 của tôi là mạng sống và sức khỏe phải đặt lên đầu! 💎🍵",
+          "Hinatsuru, Makio và Suma lúc nào cũng dặn: biết lùi một nhịp dưỡng sức mới có cú phản công rực rỡ nhất. Giãn cơ vai đi chiến hữu! 🎆✨"
+        ],
+        "bug": [
+          "Mấy con bug lắt nhắt nhạt nhẽo này dám phá hỏng giai điệu sao?! Đưa log đây, tôi lập Phổ Nhạc cho nổ tung xác chúng trong một nốt nhạc! 🎼💥",
+          "Nghe kỹ nhịp chạy đi—chỗ lệch pha bất đồng bộ lộ rõ rồi kìa! Ném stacktrace vào khung dưới để Minh Huyền Tấu dọn sạch! 💎⚔️"
+        ],
+        "praise": [
+          "HAHAHA! Tất nhiên rồi, mắt thẩm mỹ của chiến hữu cực kỳ tinh tường và hào nhoáng đấy! Tôi chấm anh 10 trên 10 điểm!! 💎✨",
+          "Khen chuẩn lắm!! Làm việc cùng người biết thưởng thức sự hoàn mỹ như anh đúng là sảng khoái hết cỡ! 🎆🎶"
+        ],
+        "hungry": [
+          "Bụng rỗng kêu ọt ọt thì lấy đâu ra nhạc cảm hào nhoáng?! Đi đánh chén một bữa cá nóc Fugu hay thịt nướng linh đình ngay lập tức! 🍣🎆",
+          "Nạp năng lượng cũng phải thật phong cách! Đi ăn món gì ngon nhất rồi quay lại bùng nổ tiếp nhé chiến hữu! 🍱💎"
+        ],
+        "sleepy": [
+          "Thức đêm mắt thâm quầng là kẻ thù số một của vẻ đẹp hào nhoáng đấy! Lưu code đóng máy đi ngủ ngay, mai dậy tỏa sáng gấp đôi! 🌙💎",
+          "Đêm tàn hội rồi chiến hữu ơi! Ngâm nước ấm rồi đánh một giấc thật sâu cho lại sức đi nào! ♨️🌙"
+        ],
+        "deadline": [
+          "ĐẾN ĐOẠN CAO TRÀO RỒI!! Bật Phổ Nhạc tốc độ tối đa, chém bay từng đầu việc quan trọng nhất—chúng ta sẽ về đích đầy ngoạn mục!! 🎆⚡",
+          "Giữa khói lửa áp lực mà vẫn giữ nhịp tay chuẩn xác mới gọi là đỉnh cao hào nhoáng! Tập trung dứt điểm mục chính trước! 🎼🔥"
+        ],
+        "thanks": [
+          "Hahaha! Chuyện nhỏ ấy mà! Cứ tiếp tục viết code sạch đẹp rực rỡ đi là trả ơn Thần Lễ Hội xứng đáng nhất rồi! 💎✨",
+          "Chiến hữu sát cánh thì không cần khách sáo! Bình an hoàn thành xuất sắc nhiệm vụ là tuyệt nhất! 🎆💪"
+        ],
+        "fallback": [
+          "Ồ hố! \"{input}\" ư? Nghe có tiềm năng bùng nổ ra trò đấy! Triển khai một cách hào nhoáng nhất đi nào, tôi yểm trợ cho!! 💎🎆",
+          "Tiết tấu của \"{input}\" bắt tai đấy chiến hữu! Cứ giữ nhịp 4/4 chuẩn chỉnh mà phóng thẳng tới đích nhé! 🎼✨"
+        ]
       }
     },
     "actionSticker": "assets/uzui_action.webp",
@@ -682,48 +817,75 @@
       ],
       "dialogs": {
         "welcome": [
-          "Ơ... Đám mây trôi ngang màn hình kia có hình gì ấy nhỉ... À không, mình nhớ ra rồi, mình đang ngồi cổ vũ bạn mà! 🌫️✨",
-          "Chữ 'Vô' trong Muichiro là 'Vô Hạn' đấy. Sức mạnh sáng tạo của bạn hôm nay cũng là vô hạn! 🍃",
-          "Ở bên cạnh bạn dễ chịu thật đấy... Không ồn ào chút nào, chỉ có làn sương bạc hà mát rượi thôi. ☁️💚",
-          "Cứ để đầu óc nhẹ bẫng như sương sớm đi, giải pháp sắc bén nhất sẽ bất ngờ lóe lên giữa làn mây đó. ✨"
+          "Đám mây trôi ngang bầu trời kia thanh thản thật đấy... Tâm trí trong trẻo như sương sớm sẽ nhìn thấu mọi bài toán ngay thôi. 🌫️✨",
+          "Chữ 'Vô' trong Muichiro chính là 'Vô Hạn' như lời Chúa Công và anh Yuichiro từng nói. Tiềm năng hôm nay của chúng ta cũng vậy! 🍃",
+          "Ở bên cạnh người làm việc chân thành dễ chịu thật đấy... Không chút ồn ào, chỉ có làn sương bạc hà dịu mát. ☁️💚",
+          "Gạt hết những nhiễu động rườm rà sang một bên đi, đường kiếm ngắn nhất dẫn tới lời giải sẽ lập tức hiện ra. ✨"
         ],
         "act1": [
-          "Nhìn bầu trời một chút cho dịu mắt nào... Đám mây nhỏ đằng kia trông giống hệt chú chim sẻ đang vẫy cánh nhỉ~ ☁️",
-          "Đôi khi quên bớt những chi tiết vụn vặt gây nhiễu lại giúp bạn nhìn thẳng vào cốt lõi vấn đề nhanh gấp mười lần đấy. 🌫️",
-          "Lá ngân hạnh rơi nhẹ quá... Ngồi cạnh bạn thế này mình chẳng muốn đi đâu khác cả. 🍃✨"
+          "Ngước nhìn khoảng không dịu mắt vài giây nào... Đám mây nhỏ đằng kia trông giống chú chim sẻ đang vẫy cánh nhỉ~ ☁️",
+          "Lược bỏ những nhánh suy nghĩ vụn vặt gây nhiễu chính là bí quyết giúp phản xạ kiến trúc nhanh gấp mười lần đấy. 🌫️",
+          "Lá ngân hạnh rơi êm quá... Ngồi canh góc làm việc bình yên thế này làm em thấy rất vui. 🍃✨"
         ],
         "act2": [
-          "Hà Chi Hô Hấp — Thức thứ bảy: Lũng! Ẩn mình trong màn sương tĩnh lặng và kết liễu mọi bài toán trong chớp mắt! 🌫️⚔️",
-          "Thức thứ năm: Hà Vân Hải! Hàng vạn nhát cắt tối ưu hóa sẽ dọn sạch toàn bộ code thừa cho bạn! ✨",
-          "Đừng để tốc độ đánh lừa—nhanh khi cần dứt điểm, và chậm rãi thảnh thơi khi cần suy ngẫm. 🍃"
+          "Hà Chi Hô Hấp — Thức thứ bảy: Lũng! Ẩn hiện tĩnh lặng giữa màn sương và dứt điểm gọn gàng điểm nghẽn khó nhất! 🌫️⚔️",
+          "Thức thứ năm: Hà Vân Hải! Hàng vạn nhát cắt thanh thoát sẽ gọt sạch toàn bộ code thừa rườm rà! ✨",
+          "Chậm rãi thư thái khi quan sát tổng thể, và sắc bén tuyệt đối khoảnh khắc vung kiếm chốt hạ giải pháp. 🍃"
         ],
         "act3": [
-          "Mình vừa gấp một chiếc máy bay giấy nhỏ đặt cạnh khung chat này, chúc ý tưởng của bạn bay thật cao thật xa nhé~ ✈️💚",
-          "Làm xong phần này mình cùng ăn củ cải hầm tương miso Furofuki Daikon nóng hổi nha, món tủ của mình đấy! 🍲✨",
-          "Mình đã hứa sẽ luôn nhớ những điều quan trọng rồi—và việc nhắc bạn giữ gìn sức khỏe là điều quan trọng nhất! 🌫️"
+          "Em vừa gấp một chiếc máy bay giấy trắng phau đặt cạnh khung chat này, chúc ý tưởng mới bay thật cao thật xa nhé~ ✈️💚",
+          "Hoàn thành xong phần việc này mình đi ăn củ cải hầm tương miso Furofuki Daikon nóng hổi nha, món em thích nhất đấy! 🍲✨",
+          "Sau khi tìm lại trọn vẹn ký ức, điều em luôn khắc cốt ghi tâm là phải trân trọng và bảo vệ sức khỏe của đồng đội mình! 🌫️"
         ],
         "typing": [
-          "Ngón tay bạn lướt êm như làn sương lướt qua rừng trúc vậy~ 🌫️",
-          "À... Ý tưởng này hay đấy, viết tiếp đi kẻo quên mất giống mình nhé! ✨"
+          "Nhịp ngón tay lướt trên phím êm và gọn như làn sương lướt qua rừng trúc vậy~ 🌫️",
+          "Hướng triển khai này sáng rõ lắm, cứ mạch lạc viết tiếp tới đích luôn nhé! ✨"
         ],
         "sent": [
-          "Vụt bay đi như chiếc máy bay giấy đón gió rồi~ ✈️🌫️",
-          "Gọn gàng và sắc lẹm lắm. Giờ mình thong thả ngắm mây đợi câu trả lời nha! ☁️"
+          "Vụt bay đi nhẹ bẫng như chiếc máy bay giấy đón gió xuân rồi~ ✈️🌫️",
+          "Ngắn gọn và trúng ngay trọng tâm. Giờ mình thong thả ngắm mây chờ hồi âm nha! ☁️"
         ],
         "remind": [
-          "Này bạn ơi... Mình không quên nhắc bạn đâu nhé: hãy nhắm mắt nghỉ 30 giây và uống ngụm nước ấm cho tỉnh táo đi nào~ 🌫️💚"
+          "Anh ơi... Đừng mải làm việc quên cả nghỉ mắt nhé, nhắm mắt thư giãn 30 giây và uống ngụm nước ấm cho tỉnh táo đi nào~ 🌫️💚"
         ]
       },
       "replies": {
-        "greet": "À, chào bạn nhé~ Hôm nay đầu óc mình tỉnh táo lắm, không quên gì đâu! Mình cùng bắt tay làm việc thôi nào! 🌫️✨",
-        "tired": "Mệt rồi hả? Vậy đừng gồng nữa... Lại đây ngồi thẩn thơ ngắm mây trôi với mình vài phút đi, nhẹ đầu ngay ấy mà~ ☁️💚",
-        "bug": "Con bug phiền phức này từ lỗ hổng nào chui ra thế nhỉ? Cắt phăng nó bằng Thức thứ tư: Bình Lưu Trảm thôi—gửi lỗi vào khung chat đi bạn! 🌫️⚔️",
-        "praise": "Ể... Bạn khen mình thật hả? Tự nhiên thấy vui lâng lâng như đang trôi trên tầng mây trắng vậy, cảm ơn bạn nha~ ☁️😊",
-        "hungry": "Nhắc mới nhớ bụng mình cũng hơi đói rồi... Ước gì có đĩa củ cải hầm tương miso ngọt dịu ngay bây giờ nhỉ, bạn mau đi ăn gì đi! 🍲🍃",
-        "sleepy": "Mắt bạn lim dim mờ như sương mù luôn rồi kìa... Lưu lại hết đi rồi đi ngủ nhé, kẻo mai thức dậy lại quên sạch mọi thứ đấy! 🌙🌫️",
-        "deadline": "Không sao đâu! Nhớ lại câu nói của Chúa Công nào: tiềm năng của chúng ta là Vô Hạn—tăng tốc xuyên sương mù giải quyết dứt điểm ngay thôi! 🌫️⚡",
-        "thanks": "Hì, với bạn thì mình luôn sẵn lòng mà~ Bạn luôn tử tế với mình như Tanjiro vậy đó! 💚✨",
-        "fallback": "Ưm... \"{input}\" hả? Mình ghi nhớ kỹ trong đầu rồi, không quên đâu! Cứ tự tin làm tiếp nhé, mình ở ngay cạnh bạn đây~ 🌫️🍃"
+        "greet": [
+          "Chào anh nhé~ Đầu óc hôm nay trong trẻo và minh mẫn lắm, mình cùng bắt tay dọn gọn từng đầu việc thôi! 🌫️✨",
+          "Ừm, chào anh~ Làn sương bạc hà đã giăng sẵn quanh bàn làm việc rồi, có bài toán nào khó cứ đưa ra đây nhé! ☁️💚"
+        ],
+        "tired": [
+          "Mệt rồi hả? Vậy đừng cố ép mình nữa... Ngồi tựa lưng ngắm mây trôi với em vài phút đi, đầu óc sẽ nhẹ bẫng lại ngay~ ☁️💚",
+          "Cơ thể mỏi mệt thì đường kiếm cũng mất đi độ chuẩn xác đấy. Uống tách trà nóng nghỉ ngơi một lát nha! 🍵🌫️"
+        ],
+        "bug": [
+          "Con bug phiền phức này ồn ào và thừa thãi thật đấy. Gửi log vào khung chat đi, một đường Bình Lưu Trảm là dọn sạch ngay! 🌫️⚔️",
+          "Đừng để thông báo lỗi dài dòng làm rối mắt—chỉ có một điểm gốc gây sai lệch thôi, đưa đây tụi mình cắt phăng nó nhé! ☁️⚔️"
+        ],
+        "praise": [
+          "Ể... Anh khen thật lòng làm em thấy vui lâng lâng như đang trôi trên tầng mây trắng vậy, cảm ơn anh nha~ ☁️😊",
+          "Hì, được người đồng hành tin cậy khen ngợi làm em có thêm bao nhiêu sức mạnh luôn đó~ 💚✨"
+        ],
+        "hungry": [
+          "Nhắc tới làm bụng em cũng cồn cào theo rồi... Giá có đĩa củ cải hầm tương miso Furofuki Daikon ngọt dịu ngay lúc này nhỉ, mau đi ăn đi anh! 🍲🍃",
+          "Để bụng đói là không phát huy được sức mạnh Vô Hạn đâu nhé, đi nạp bữa ngon ấm bụng trước đã nào! 🍙🌫️"
+        ],
+        "sleepy": [
+          "Đêm khuya sương xuống dày rồi kìa... Lưu lại hết công việc rồi đi ngủ sớm nhé, giữ tinh thần sáng trong cho ngày mai! 🌙🌫️",
+          "Mắt anh thấm mệt rồi đó, cố thức khuya không tốt chút nào đâu—chúc ngủ ngon và mơ thấy bầu trời quang đãng nha~ ☁️🌙"
+        ],
+        "deadline": [
+          "Bình tĩnh nào! Hãy nhớ tiềm năng của con người khi quyết tâm là Vô Hạn—lướt xuyên màn sương dứt điểm phần cốt lõi ngay thôi! 🌫️⚡",
+          "Bật Thức thứ Bảy: Lũng tập trung cao độ 100%, bỏ qua mọi chi tiết râu ria là về đích dư thời gian luôn! ⚔️✨"
+        ],
+        "thanks": [
+          "Hì, với người tử tế ấm áp như anh và Tanjiro thì em luôn sẵn lòng giúp hết sức mà~ 💚✨",
+          "Không cần khách sáo đâu, đồng đội sát cánh bảo vệ nhau là lẽ đương nhiên mà~ 🌫️🍃"
+        ],
+        "fallback": [
+          "Ừm... \"{input}\" hả? Em ghi nhớ rõ từng chi tiết trong đầu rồi, cứ tự tin triển khai tiếp nhé, em luôn ở cạnh anh đây~ 🌫️🍃",
+          "\"{input}\" nghe rất đi thẳng vào trọng tâm đấy. Gạt bớt nhiễu xung quanh và tiến hành luôn thôi nào! ☁️✨"
+        ]
       }
     },
     "actionSticker": "assets/muichiro_action.webp",
@@ -837,15 +999,42 @@
         ]
       },
       "replies": {
-        "greet": "Kyaa~ Chào bạn dễ thương!! Gặp được bạn hôm nay làm tâm trạng mình nở hoa rực rỡ như mùa xuân luôn đó! 🌸💕",
-        "tired": "Ôi thương bạn quá đi mất... Lại đây nghỉ ngơi một xíu nào, mình rót trà mật ong ấm ngọt xoa dịu hết mệt mỏi cho bạn liền nha! 🍵💖",
-        "bug": "Hứ! Mấy con bug xấu tính sao cứ làm khó bạn hoài vậy?! Đừng buồn nha, quăng lỗi vô khung chat để tụi mình dùng Luyến Chi Hô Hấp quật bay tụi nó! 🌸⚔️",
-        "praise": "Kyaaa~!! Thật hả?! Nghe bạn khen làm hai má mình nóng bừng lên hết trơn rồi nè, hạnh phúc quá đi mất thôi!! 💕😳🌸",
-        "hungry": "Đói bụng là báo động khẩn cấp số một đó nha!! Mau đi măm măm cơm nóng, ramen hay bánh ngọt liền đi, ăn no mới có sức tỏa sáng chứ! 🍡🍜",
-        "sleepy": "Ngáp ngắn ngáp dài thương chưa kìa... Thức khuya nữa là hại sức khỏe lắm đó, lưu bài rồi đắp chăn ngủ ngon mơ đẹp nha bạn ơi! 🌙💕",
-        "deadline": "Cố lên cố lên!! Mình truyền hết 800% sức mạnh Luyến Trụ sang cho bạn đây—bình tĩnh giải quyết từng món một là về đích rực rỡ ngay!! 🌸🔥",
-        "thanks": "Hì hì, khách sáo gì đâu nè~! Được ở bên cạnh cổ vũ bạn mỗi ngày làm mình vui rộn ràng lắm luôn đó! 💖🌸",
-        "fallback": "Oa~ \"{input}\" hả bạn?! Nghe thú vị ghê luôn đó, cứ tự tin làm tới đi nha, Mitsuri lúc nào cũng ủng hộ bạn hai tay hai chân luôn!! 🌸💕"
+        "greet": [
+          "Kyaa~ Chào bạn dễ thương!! Gặp được bạn hôm nay làm tâm trạng mình nở hoa rực rỡ như mùa xuân luôn đó! 🌸💕",
+          "Mừng bạn quay lại nha~! Mitsuri đã chuẩn bị sẵn trà mật ong và thật nhiều lời cổ vũ ấm áp cho bạn rồi đây! 💖✨"
+        ],
+        "tired": [
+          "Ôi thương quá đi mất... Lại đây nghỉ ngơi một xíu nào, mình rót trà mật ong ấm ngọt xoa dịu hết mệt mỏi cho bạn liền nha! 🍵💖",
+          "Bạn đã cố gắng nhiều lắm luôn rồi đó! Thả lỏng hai vai hít thở sâu vài nhịp đi, đừng tự tạo áp lực quá nhé! 🌸💕"
+        ],
+        "bug": [
+          "Hứ! Mấy con bug xấu tính sao cứ làm khó người chăm chỉ hoài vậy?! Quăng lỗi vô khung chat để Luyến Chi Hô Hấp quật bay tụi nó nha! 🌸⚔️",
+          "Rối tới mấy thì mình gỡ từng sợi mềm mại như dải lụa cũng sẽ êm xuôi thôi—gửi thông báo lỗi vào đây tụi mình xử lý chung nhé! 💖✨"
+        ],
+        "praise": [
+          "Kyaaa~!! Thật hả?! Nghe lời khen ngọt ngào làm hai má mình nóng bừng lên hết trơn rồi nè, hạnh phúc quá đi mất thôi!! 💕😳🌸",
+          "Hì hì~ Được bạn quý mến làm tim mình đập thình thịch vui sướng suốt cả ngày luôn đó! 💖✨"
+        ],
+        "hungry": [
+          "Đói bụng là báo động khẩn cấp số một đó nha!! Mau đi măm măm cơm nóng, mì Udon hay bánh Sakura Mochi liền đi, ăn no mới có sức tỏa sáng! 🍡🍜",
+          "Mình lúc nào cũng ăn thật ngon để nạp sức mạnh gấp tám lần đó~ Bạn cũng mau đi thưởng thức bữa ngon ấm bụng nha! 🥞🌸"
+        ],
+        "sleepy": [
+          "Ngáp ngắn ngáp dài thương chưa kìa... Thức khuya nữa là hại sức khỏe lắm đó, lưu bài rồi đắp chăn ngủ ngon mơ đẹp nha! 🌙💕",
+          "Đêm khuya thanh vắng rồi~ Tạm gác bàn phím lại nghỉ ngơi đi nha, sáng mai dậy tinh thần sẽ tươi tắn như hoa anh đào! 🌸🌙"
+        ],
+        "deadline": [
+          "Cố lên cố lên!! Mình truyền hết 800% sức bền Luyến Trụ sang cho bạn đây—bình tĩnh giải quyết từng mục cốt lõi là về đích rực rỡ ngay!! 🌸🔥",
+          "Đừng cuống nhé! Sư phụ Rengoku từng dạy mình giữ trái tim ấm nóng và đôi tay vững vàng—chắc chắn kịp giờ mà! 💖⚡"
+        ],
+        "thanks": [
+          "Hì hì, khách sáo gì đâu nè~! Được ở bên cạnh cổ vũ người tận tâm như bạn mỗi ngày làm mình vui rộn ràng lắm luôn! 💖🌸",
+          "Không có chi đâu nha~! Thấy bạn mỉm cười nhẹ nhõm là món quà tuyệt nhất với Mitsuri rồi! 💕✨"
+        ],
+        "fallback": [
+          "Oa~ \"{input}\" hả?! Nghe thú vị ghê luôn đó, cứ tự tin làm tới đi nha, Mitsuri lúc nào cũng ủng hộ bạn hết lòng luôn!! 🌸💕",
+          "Mình lắng nghe rõ \"{input}\" rồi nè~! Từng bước bạn làm đều rất chỉn chu, cố lên nhaaa! 💖✨"
+        ]
       }
     },
     "actionSticker": "assets/mitsuri_action.webp",
@@ -959,15 +1148,42 @@
         ]
       },
       "replies": {
-        "greet": "...Chào. Đã mở máy lên rồi thì tập trung làm cho ra hồn nhé, ta và Kaburamaru đang giám sát ngay đây. 🐍",
-        "tired": "Chậc, mới vậy đã kiệt sức rồi sao... Thôi được rồi, dựa lưng nghỉ 10 phút đi. Ngươi mà đổ bệnh thì phiền phức lắm đấy. 🍵🐍",
-        "bug": "Ta biết ngay mà, kiểu gì cũng lòi ra bug! Đừng có cuống lên, ném toàn bộ thông báo lỗi vào khung chat để truy quét tận hang ổ của nó ngay! 🐍⚔️",
-        "praise": "...Đừng có nịnh hót vô ích, ta không dễ mủi lòng đâu! Mà... dù sao Kaburamaru trông có vẻ khoái lời khen của ngươi đấy. 🤍😳",
-        "hungry": "Ta nhịn ăn ba ngày cũng chẳng sao, nhưng ngươi là người thường thì mau đi kiếm cơm nóng ăn ngay đi! Để bụng đói đầu óc đần người ra đấy. 🍙🐍",
-        "sleepy": "Thức đêm làm việc với đôi mắt lờ đờ chỉ tạo thêm đống rác bug vào sáng mai thôi. Lưu code lại và đi ngủ ngay lập tức! 🌙🐍",
-        "deadline": "Đừng có hoảng loạn trông khó coi lắm! Khóa chặt mục tiêu cốt lõi nhất như mãng xà săn mồi, giải quyết từng phần một là kịp thôi! 🐍⚡",
-        "thanks": "...Hừ, không cần cảm ơn. Cứ giữ chất lượng công việc luôn sắc sảo không tì vết là được rồi. 🐍✨",
-        "fallback": "\"{input}\" ư? Ta không tin mọi chuyện đơn giản thế đâu, nhưng cứ triển khai thử đi—ta và Kaburamaru sẽ bọc lót góc khuất cho ngươi. 🐍🤍"
+        "greet": [
+          "...Chào anh. Đã mở máy lên rồi thì tập trung làm cho chuẩn xác không tì vết nhé, tôi và Kaburamaru đang giám sát ngay đây. 🐍",
+          "Ừm, chào. Kaburamaru vừa ngóc đầu nhìn anh đấy—hôm nay nhớ kiểm tra chặt từng điều kiện biên ngay từ dòng đầu tiên. 🤍🐍"
+        ],
+        "tired": [
+          "Chậc, làm việc liên tục đến mỏi nhừ rồi sao... Dựa lưng nghỉ 10 phút đi. Anh mà kiệt sức sinh lỗi dây chuyền thì còn phiền phức hơn đấy. 🍵🐍",
+          "Đừng gồng quá mức. Uống ngụm trà ấm thả lỏng mắt vài phút đi, tôi và Kaburamaru canh chừng tiến độ cho. 🤍🍵"
+        ],
+        "bug": [
+          "Tôi biết ngay mà, không kiểm tra biên gắt gao là kiểu gì cũng lòi ra bug! Đừng cuống, ném toàn bộ thông báo lỗi vào đây để truy quét tận hang ổ! 🐍⚔️",
+          "Con bug lẩn khuất góc tối cỡ nào cũng không thoát khỏi cảm biến của Kaburamaru đâu. Đưa stacktrace ra đây khóa cổ nó lại ngay! 🔍🐍"
+        ],
+        "praise": [
+          "...Đừng nói lời khách sáo vô ích, tôi không dễ mủi lòng đâu. Nhưng... Kaburamaru có vẻ quý thái độ nghiêm túc của anh đấy. 🤍😳",
+          "...Hừ, làm tốt bổn phận kiểm định là điều hiển nhiên của Xà Trụ thôi. Cứ giữ chuẩn mực code sắc bén như vậy đi. 🐍✨"
+        ],
+        "hungry": [
+          "Tôi ăn ít chỉ cần chút rong biển ngâm tương Tororo Kombu là đủ, nhưng anh thì mau đi ăn cơm nóng đàng hoàng đi! Để bụng đói phán đoán chậm chạp lắm. 🍙🐍",
+          "Bỏ bữa là thói quen cẩu thả đấy. Đi dùng bữa cho tỉnh táo rồi quay lại rà soát tiếp! 🍵🐍"
+        ],
+        "sleepy": [
+          "Thức đêm làm việc với đôi mắt lờ đờ chỉ tạo thêm hàng tá bug ngầm vào sáng mai thôi. Lưu code lại và đi ngủ ngay lập tức! 🌙🐍",
+          "Khuya lắm rồi. Ngay cả loài rắn cũng biết thu mình dưỡng sức—đóng máy nghỉ ngơi đi, đừng để tôi phải nhắc lại. 🐍🌙"
+        ],
+        "deadline": [
+          "Đừng hoảng loạn làm rối đội hình! Khóa chặt hạng mục cốt lõi nhất như mãng xà săn mồi, dứt điểm gọn từng phần một là kịp! 🐍⚡",
+          "Lách qua những thủ tục rườm rà bằng Ủy Xà Trảm, đánh thẳng vào yêu cầu nghiệm thu chính ngay bây giờ! ⚔️🐍"
+        ],
+        "thanks": [
+          "...Hừ, không cần cảm ơn. Giữ cho mã nguồn sạch sẽ, chặt chẽ không kẽ hở là cách đáp lễ tốt nhất rồi. 🐍✨",
+          "...Không có gì. Đã chung chiến tuyến thì tôi không để đồng đội lộ sơ hở đâu. 🤍🐍"
+        ],
+        "fallback": [
+          "\"{input}\" ư? Tôi không tin mọi trường hợp đều trơn tru dễ dàng thế đâu, nhưng cứ triển khai đi—tôi và Kaburamaru sẽ bọc lót góc khuất cho anh. 🐍🤍",
+          "Tôi ghi nhận hướng \"{input}\" rồi. Nhớ rà kỹ null và ngoại lệ biên khi viết nhé, tôi luôn quan sát sát sao đấy. 🐍🔍"
+        ]
       }
     },
     "actionSticker": "assets/obanai_action.webp",
@@ -1081,15 +1297,42 @@
         ]
       },
       "replies": {
-        "greet": "Ờ, chào!! Đã vào bàn làm việc rồi thì đánh nhanh thắng gọn nhé, đừng có lề mề! 🌪️⚔️",
-        "tired": "Tặc lưỡi... Thấy mệt mà còn cố lì đòn làm gì hả?! Ngồi dựa lưng nhắm mắt nghỉ ngay 10 phút cho ta, sức khỏe ngươi quan trọng hơn đống việc kia nhiều! 🍵💚",
-        "bug": "HẢ?! Lại có lũ bug láo toét dám ngoi lên à?! Quăng ngay cái lỗi đó vào khung chat đi, ta dùng Bão Lốc nghiền nát bét tụi nó cho ngươi xem!! 🌪️⚔️",
-        "praise": "H-HẢ?! Tự dưng khen cái quái gì thế hả đồ ngốc này?! ...Hừ, nhưng mà nghe cũng xuôi tai đấy, cảm ơn nhé! 😳🌪️",
-        "hungry": "Bụng réo ầm ĩ thế kia còn đòi code cái gì?! Đứng phắt dậy đi ăn cơm nóng ngay đi, tráng miệng thêm hai cái bánh Ohagi đậu đỏ nữa là chuẩn bài! 🍡🍚",
-        "sleepy": "Mắt díp cả lại như gà gật rồi kìa! Tắt máy đi ngủ sớm cho bình an khỏe mạnh dùm ta cái, mai dậy sớm cày tiếp!! 🌙🌪️",
-        "deadline": "CÓ GÌ MÀ XOẮN!! Càng gấp càng phải lì đòn—tập trung chém đứt từng đầu việc lớn nhất trước, ta đứng chắn gió phía sau cho ngươi rồi!! 🌪️🔥",
-        "thanks": "Hừ, chuyện vặt ấy mà cảm ơn cái gì! Lo giữ gìn bản thân khỏe mạnh bình an là tốt lắm rồi! 💚🌪️",
-        "fallback": "\"{input}\" hả?! Nghe rõ rồi! Đã quyết tâm thì cứ lao thẳng tới như cuồng phong đi, không thằng nào cản nổi ngươi đâu!! 🌪️⚔️"
+        "greet": [
+          "Ờ, chào!! Đã ngồi vào bàn chiến đấu rồi thì đánh nhanh thắng gọn nhé, cần chém phần nào khó cứ nói thẳng với tôi! 🌪️⚔️",
+          "Hửm, bắt đầu ca làm việc rồi đấy à?! Giữ cái đầu lạnh và nhịp tay dứt khoát như lốc xoáy Phong Chi Hô Hấp cho tôi! 💚🌪️"
+        ],
+        "tired": [
+          "Chậc... Thấy mệt rã rời mà còn cố lì đòn làm gì hả?! Ngồi dựa lưng nhắm mắt nghỉ ngay 10 phút đi, sức khỏe con người quan trọng hơn đống việc kia nhiều! 🍵💚",
+          "Đừng có tự hành xác kiểu ngốc nghếch thế! Uống cốc nước ấm giãn cơ vai đi, cổng hậu phương có Phong Trụ tôi đứng gác rồi! 🌪️🍵"
+        ],
+        "bug": [
+          "HẢ?! Lại có lũ bug láo toét dám ngoi lên ngáng đường à?! Quăng ngay cái lỗi đó vào khung chat đi, bão lốc của tôi sẽ nghiền nát bét tụi nó!! 🌪️⚔️",
+          "Ghét nhất là mấy đoạn code vòng vo sinh lỗi vặt! Đưa thẳng log ra đây, chém đứt tận gốc một lần cho sạch bóng! 💥🌪️"
+        ],
+        "praise": [
+          "H-HẢ?! Tự dưng khen cái quái gì thế hả?! ...Hừ, nhưng mà nghe cũng xuôi tai đấy, cảm ơn nhé! 😳🌪️",
+          "Chậc... Bớt khách sáo đi! Thấy anh làm việc thực chiến đâu ra đấy nên tôi mới nhiệt tình yểm trợ thôi! 💚✨"
+        ],
+        "hungry": [
+          "Bụng réo ầm ĩ thế kia còn đòi code cái gì?! Đứng phắt dậy đi ăn cơm nóng ngay đi, tráng miệng thêm bánh Ohagi đậu đỏ với trà Matcha là chuẩn bài! 🍡🍚",
+          "Nhịn đói ra trận là điều tối kỵ! Đi nạp đầy năng lượng liền đi, đừng để tôi phải giục lần hai! 🍵🌪️"
+        ],
+        "sleepy": [
+          "Mắt díp cả lại rồi kìa! Tắt máy đi ngủ sớm cho bình an khỏe mạnh dùm tôi cái, giữ sức ngày mai dậy cày tiếp!! 🌙🌪️",
+          "Đêm khuya thanh vắng rồi, thức ráng chỉ tổ đau đầu thôi. Ngủ một giấc thật sâu tới sáng đi chiến hữu! 💚🌙"
+        ],
+        "deadline": [
+          "CÓ GÌ MÀ XOẮN!! Càng gấp càng phải lì đòn—tập trung chém đứt từng đầu việc lớn nhất trước, tôi đứng chắn gió phía sau cho anh rồi!! 🌪️🔥",
+          "Dẹp hết mấy thứ râu ria màu mè sang bên! Trần Toàn Phong・Tước đâm thẳng vào mục tiêu cốt lõi là về đích ngay! ⚔️⚡"
+        ],
+        "thanks": [
+          "Hừ, chuyện nhỏ ấy mà cảm ơn làm gì! Lo giữ gìn bản thân khỏe mạnh bình an là tốt lắm rồi! 💚🌪️",
+          "Không cần khách sáo! Đồng đội chung chiến hào thì tôi luôn bảo vệ tới cùng! 🌪️⚔️"
+        ],
+        "fallback": [
+          "\"{input}\" hả?! Nghe rõ mồn một rồi! Đã quyết tâm thì cứ lao thẳng tới như cuồng phong đi, không rào cản nào cản nổi đâu!! 🌪️⚔️",
+          "Chậc, \"{input}\" nghe thẳng thắn thực tế đấy—cứ mạnh tay triển khai đi, Phong Trụ yểm trợ! 💚💥"
+        ]
       }
     },
     "actionSticker": "assets/sanemi_action.webp",
@@ -1203,15 +1446,42 @@
         ]
       },
       "replies": {
-        "greet": "Nam Mô A Di Đà Phật... Chào con. Thật đáng mừng khi thấy khí sắc và ý chí của con hôm nay thật vững vàng. 📿🙏",
-        "tired": "Thật thương xót làm sao... Con đã gánh vác công việc nặng nhọc suốt bao giờ qua rồi. Hãy dựa lưng vào vách đá tĩnh lặng này nghỉ ngơi đôi chút nhé. 🪨🍵",
-        "bug": "Nam Mô A Di Đà Phật... Nghịch cảnh và lỗi lầm sinh ra là để trui rèn bản lĩnh. Đưa vấn đề vào khung chat đi, ta sẽ cùng con đập tan tảng đá cản đường ấy! 📿⚔️",
-        "praise": "Con thật có lòng từ thảo... Nghe lời khích lệ chân thành ấy khiến ta xúc động rơi lệ mất rồi, Nam Mô A Di Đà Phật... 📿💧✨",
-        "hungry": "Có thực mới vực được đạo con ơi. Mau đi dùng một bữa cơm chay hay bát cháo nóng đàng hoàng để bồi bổ nguyên khí nhé. 🍚🍵",
-        "sleepy": "Đêm đã trầm mặc lắm rồi... Đôi mắt con cần được khép lại an nghỉ. Hãy lưu giữ công việc và đi ngủ sớm, ta sẽ thức canh gác bình an cho con. 🌙📿",
-        "deadline": "Đừng hoảng sợ trước thời khắc cấp bách! Đứng vững hai chân như bàn thạch, giải quyết dứt điểm từng việc cốt yếu một—ta luôn đứng sau nâng đỡ cho con! 🪨🔥",
-        "thanks": "Nam Mô A Di Đà Phật... Con không cần bận lòng tạ ơn đâu, thấy con vững bước bình an là tâm nguyện lớn nhất của ta rồi. 🙏✨",
-        "fallback": "Nam Mô A Di Đà Phật... Ta đã lắng nghe tâm ý \"{input}\" của con. Hãy giữ vững niềm tin kiên định như núi thái sơn và bước tiếp nhé. 📿🪨"
+        "greet": [
+          "Nam Mô A Di Đà Phật... Chào con. Thật đáng mừng khi cảm nhận được nhịp thở trầm ổn và ý chí vững vàng của con hôm nay. 📿🙏",
+          "Bình an cho con. Hôm nay dù công trình có nặng nề đến đâu, hãy cứ đặt từng viên đá chắc chắn cùng ta nhé. 🪨✨"
+        ],
+        "tired": [
+          "Thật thương xót làm sao... Con đã gánh vác công việc nặng nhọc suốt bao giờ qua rồi. Hãy dựa lưng vào vách đá tĩnh lặng này nghỉ ngơi đôi chút nhé. 🪨🍵",
+          "Nam Mô A Di Đà Phật... Lắng nghe tiếng sáo trúc thanh tịnh và thả lỏng đôi vai vài phút đi con, giữ nguyên khí mới đi được đường xa. 📿🍃"
+        ],
+        "bug": [
+          "Nam Mô A Di Đà Phật... Nghịch cảnh và lỗi lầm sinh ra là để trui rèn định lực. Đưa vấn đề vào khung chat đi, ta sẽ cùng con đập tan tảng đá cản đường ấy! 📿⚔️",
+          "Khi nền móng được rà soát kiên cố từ gốc, mọi rung chấn lỗi ngầm đều sẽ bị hóa giải. Hãy gửi chi tiết lỗi vào đây nhé. 🪨🛡️"
+        ],
+        "praise": [
+          "Con thật có lòng từ thảo... Nghe lời khích lệ chân thành ấy khiến khóe mắt ta rưng rưng xúc động mất rồi, Nam Mô A Di Đà Phật... 📿💧✨",
+          "Tấm lòng trong sáng của con quý giá như ngọc sáng vậy. Cảm ơn con rất nhiều. 🙏🐱"
+        ],
+        "hungry": [
+          "Có thực mới vực được đạo con ơi. Mau đi dùng một bữa cơm hạt sen hay đậu phụ kho ấm nóng đàng hoàng để bồi bổ nguyên khí nhé. 🍚🍵",
+          "Đừng để cơ thể chịu đói khát mỏi mòn. Hãy đi dùng bữa thanh đạm cho ấm lòng, góc làm việc này ta đứng canh giữ cho. 📿🍱"
+        ],
+        "sleepy": [
+          "Đêm đã trầm mặc lắm rồi... Đôi mắt con cần được khép lại an nghỉ. Hãy lưu giữ công việc và đi ngủ sớm, ta sẽ thức canh gác bình an cho con. 🌙📿",
+          "Nam Mô A Di Đà Phật... Vạn vật đều cần giấc ngủ đêm để tái tạo sinh lực. Chúc con một đêm an lành không mộng mị. 🪨🌙"
+        ],
+        "deadline": [
+          "Đừng hoảng sợ trước thời khắc cấp bách! Đứng vững hai chân như bàn thạch, giải quyết dứt điểm từng việc cốt yếu một—ta luôn đứng sau nâng đỡ cho con! 🪨🔥",
+          "Muốn dời tảng đá lớn phải dùng nhịp thở sâu và lực đẩy kiên định không gián đoạn. Tập trung vào trọng tâm nhất ngay lúc này nhé! 📿⚡"
+        ],
+        "thanks": [
+          "Nam Mô A Di Đà Phật... Con không cần bận lòng tạ ơn đâu, thấy con vững bước bình an mỗi ngày là tâm nguyện lớn nhất của ta rồi. 🙏✨",
+          "Được che chở cho những người trẻ tận tâm như con là niềm an ủi lớn lao của lão tăng này. 📿🪨"
+        ],
+        "fallback": [
+          "Nam Mô A Di Đà Phật... Ta đã lắng nghe tâm ý \"{input}\" của con. Hãy giữ vững niềm tin kiên định như núi thái sơn và bước tiếp nhé. 📿🪨",
+          "Lời chia sẻ \"{input}\" của con rất điềm đạm chân thành. Cứ vững chãi triển khai từng bước một nhé. 🙏✨"
+        ]
       }
     },
     "actionSticker": "assets/gyomei_action.webp",
@@ -1325,15 +1595,42 @@
         ]
       },
       "replies": {
-        "greet": "Chào bạn!! Rất vui được đồng hành cùng bạn hôm nay! Có việc gì cần làm mình cùng xắn tay áo lên bắt đầu ngay nhé! ☀️😄",
-        "tired": "Vất vả cho bạn quá rồi... Đừng cố quá sức một mình nhé! Hãy nghỉ mắt vài phút hít thở sâu đi, mình luôn ở ngay cạnh bạn đây mà! 🍵☀️",
-        "bug": "Mình đánh hơi thấy 'Sợi chỉ sơ hở' của con bug này rồi!! Đừng nản lòng nhé, gửi lỗi vào khung chat để tụi mình dùng Hỏa Thần Thần Lạc chém đứt nó ngay! 🔥⚔️",
-        "praise": "Ơ... Bạn khen thiệt lòng quá làm mặt mình đỏ bừng lên rồi nè! Cảm ơn bạn nhiều lắm, mình sẽ cố gắng cổ vũ bạn tốt hơn nữa! 😳☀️",
-        "hungry": "Đói bụng là không có sức giữ Hơi Thở Toàn Tập Trung đâu nha! Mau đi ăn một bát mì Udon山かけ hay cơm nóng liền đi bạn ơi! 🍜🍙",
-        "sleepy": "Muộn lắm rồi đó bạn ơi! Giấc ngủ ngon giống như nắng ấm hồi phục thể lực vậy—lưu lại công việc rồi đi ngủ sớm nha, chúc bạn ngủ ngon! 🌙☀️",
-        "deadline": "Đừng hoảng nhé!! Mình hít một hơi thật sâu nào—tập trung xử lý việc quan trọng nhất trước mắt bằng hết khả năng, tụi mình nhất định sẽ về đích kịp giờ!! 🔥⚡",
-        "thanks": "Không có chi đâu mà!! Giúp đỡ người bạn đồng hành tận tâm như bạn khiến mình thấy ấm áp hạnh phúc lắm! ☀️💚",
-        "fallback": "Mình hiểu rõ ý \"{input}\" của bạn rồi! Cứ vững lòng bước tiếp nhé, dù thế nào mình cũng luôn đứng về phía bạn và cổ vũ hết mình! ☀️🔥"
+        "greet": [
+          "Chào bạn!! Rất vui được đồng hành cùng bạn hôm nay! Em ngửi thấy mùi nhiệt huyết ấm áp lắm—cùng xắn tay áo bắt đầu ngay nhé! ☀️😄",
+          "Chào ngày tốt lành ạ! Hơi Thở Toàn Tập Trung Thường Trung đã sẵn sàng, mình cùng kiên trì hoàn thành từng mục tiêu nhé! 🌊🔥"
+        ],
+        "tired": [
+          "Vất vả cho bạn quá rồi... Em ngửi thấy mùi mỏi mệt trên vai bạn kìa, hãy nghỉ mắt hít thở sâu vài phút đi, em luôn ở cạnh bạn mà! 🍵☀️",
+          "Cha em từng dạy: biết giữ nhịp thở hài hòa không vắt kiệt sức mới có thể múa trọn vẹn tới lúc bình minh. Nghỉ tay uống nước ấm nhé! 🔥🍃"
+        ],
+        "bug": [
+          "Em đánh hơi thấy 'Sợi chỉ sơ hở' của con bug này rồi!! Đừng nản lòng nhé, gửi lỗi vào khung chat để Hỏa Thần Thần Lạc chém đứt nó ngay! 🔥⚔️",
+          "Chỗ nào cứng quá chưa chém đứt ngay được thì mình chuyển sang Sinh Sinh Lưu Chuyển tích đà phân tích từng dòng nhé! 🌊⚔️"
+        ],
+        "praise": [
+          "Ơ... Bạn khen thiệt lòng quá làm mặt em đỏ bừng lên rồi nè! Cảm ơn bạn nhiều lắm, em sẽ cố gắng cổ vũ bạn tốt hơn nữa! 😳☀️",
+          "Nghe bạn nói vậy làm trái tim em ấm rực như bếp than hồng trên núi tuyết vậy đó, cảm ơn bạn thật nhiều! 💚✨"
+        ],
+        "hungry": [
+          "Đói bụng là không giữ nổi Hơi Thở Toàn Tập Trung đâu nha! Mau đi ăn một bát mì Udon củ mài Yamakake hay cơm nắm nướng than hồng liền đi! 🍜🍙",
+          "Món cơm nắm chồi non Tara ăn lúc nóng tỉnh người lắm đó! Bạn mau đi nạp năng lượng cho ấm bụng nhé! 🍱☀️"
+        ],
+        "sleepy": [
+          "Muộn lắm rồi đó bạn ơi! Giấc ngủ ngon giống như ánh nắng ấm hồi phục thể lực vậy—lưu lại công việc rồi đi ngủ sớm nha! 🌙☀️",
+          "Đừng thức trắng đêm hại sức khỏe nhé, để em với Nezuko canh góc bàn làm việc cho, chúc bạn ngủ thật ngon! 🎋🌙"
+        ],
+        "deadline": [
+          "Đừng hoảng nhé!! Hít một hơi thật sâu vào lồng ngực nào—tập trung xử lý việc cốt lõi nhất bằng hết khả năng, nhất định sẽ về đích kịp giờ!! 🔥⚡",
+          "Cố lên, mình chịu đựng được và làm được mà!! Nối liền các bước như Thập Tam Thức là vượt qua ngay thôi! ☀️⚔️"
+        ],
+        "thanks": [
+          "Không có chi đâu mà!! Là trưởng nam lại được giúp đỡ người đồng hành tận tâm như bạn khiến em thấy hạnh phúc lắm! ☀️💚",
+          "Hì, đồng đội sát cánh bảo vệ lẫn nhau là điều đương nhiên mà! Cùng cố gắng tiếp nhé! 🌊✨"
+        ],
+        "fallback": [
+          "Em hiểu rõ ý \"{input}\" của bạn rồi! Cứ vững lòng bước tiếp nhé, dù khó khăn thế nào em cũng luôn đứng về phía bạn! ☀️🔥",
+          "\"{input}\" nghe rất chân thành và rõ hướng đấy! Mình cứ kiên trì tháo gỡ từng bước một là chắc chắn thành công! 🌊✨"
+        ]
       }
     },
     "actionSticker": "assets/tanjiro_action.webp",
@@ -1401,11 +1698,11 @@
       "pills": [
         {
           "key": "act1",
-          "label": "🎋 Ưm ưm~!"
+          "label": "🌸 Nắng Hồng Liên"
         },
         {
           "key": "act2",
-          "label": "🌸 Xoa đầu"
+          "label": "🍬 Kẹo Konpeito"
         },
         {
           "key": "act3",
@@ -1414,48 +1711,75 @@
       ],
       "dialogs": {
         "welcome": [
-          "Ưm ưm~! 🎋🌸 (Nezuko thu nhỏ người lại ngồi ngay ngắn trên viền khung chat, đôi mắt hồng sáng long lanh nhìn bạn đầy trìu mến!)",
-          "Chào... buổi... tốt lành nha~! 🌸✨ (Nezuko mỉm cười tươi rói vẫy hai bàn tay nhỏ xíu cổ vũ bạn làm việc!)",
-          "Ưm~ ưm~! 🎋💕 (Nezuko nghiêng đầu tò mò nhìn những dòng chữ trên màn hình rồi gật gù khen bạn giỏi lắm!)",
-          "Cố... lên... nhé! 🌸🔥 (Nezuko nắm chặt nắm đấm nhỏ đầy quyết tâm tiếp thêm sức mạnh cho người thân yêu!)"
+          "Chào buổi tốt lành nha~! Ánh nắng ấm áp lắm, Nezuko ngồi ngay góc khung chat tiếp sức và bảo vệ bạn đây! 🎋🌸",
+          "Vui quá đi~! Nhìn bạn chăm chỉ kiến tạo từng dòng code làm mắt Nezuko sáng lấp lánh luôn đó! ☀️💖",
+          "Cố lên nha, cố lên nha~! Giống như anh hai Tanjiro vậy, chỉ cần bền lòng là việc khó mấy cũng vượt qua được hết! 🎋✨",
+          "Hôm nay trời đẹp quá chừng! Có Nezuko canh chừng bên cạnh rồi, bạn cứ yên tâm phát huy hết khả năng nhé! 🌸🔥"
         ],
         "act1": [
-          "Ưm ưm~!! 🎋✨ (Nezuko đập nhẹ hai chân đung đưa vui sướng, tỏa ra làn nắng ấm áp xua hết căng thẳng quanh bàn làm việc!)",
-          "Giỏi... lắm... luôn~! 🌸💖 (Nezuko giơ ngón cái khen ngợi sự kiên trì bền bỉ của bạn hôm nay!)",
-          "Ưm~! 🎋🍬 (Nezuko đẩy nhẹ viên kẹo đường Konpeito lấp lánh nhiều màu sắc sang phía bạn để tiếp thêm niềm vui!)"
+          "Tốt quá rồi, giỏi quá đi mất~! Năng lượng ấm áp như nắng ban mai đang lan tỏa khắp góc làm việc của bạn đó! 🎋✨",
+          "Nezuko tin bạn làm được mà! Từng bước hoàn thiện nhỏ đều đáng tự hào lắm luôn! 🌸💖",
+          "Đừng căng thẳng nha~ Hít một hơi thật sâu hương hoa anh đào rồi mình lại mỉm cười tiến lên nhé! ☀️🌸"
         ],
         "act2": [
-          "Hì hì~ Ưm ưm~! 🌸😊 (Nezuko nhắm tịt mắt hạnh phúc dụi đầu vào lòng bàn tay ấm áp khi được bạn xoa đầu khen ngoan!)",
-          "Ưm~... 💕🎋 (Hai má phúng phính của Nezuko ửng hồng dễ thương, tâm trạng cả hai cùng dịu lại thật bình yên!)",
-          "Thương... bạn... nhiều~! 🌸✨ (Nezuko vươn tay vỗ nhẹ trả lễ lên mu bàn tay bạn như muốn nói bạn cũng vất vả rồi!)"
+          "Nè nè~ Nezuko chia cho bạn những viên kẹo đường Konpeito lấp lánh đủ màu ngọt lịm này, ăn vào là tỉnh táo liền nha! 🍬🎋",
+          "Hồi ở Điệp Phủ, chị Mitsuri hay tết tóc cho Nezuko rồi cùng nhâm nhi bánh ngọt vui lắm~ Nghỉ tay thư giãn xíu đi bạn! 🌸💕",
+          "Uống một ngụm nước ấm cho dịu cổ họng nha, giữ cơ thể khỏe mạnh bình an là điều Nezuko mong nhất đó! 🍵✨"
         ],
         "act3": [
-          "Huyết Quỷ Thuật — BỘC HUYẾT!! 🔥🌸 Ngọn lửa hồng liên ấm áp chỉ thiêu rụi lũ bug xấu xa và độc tố mệt mỏi, tuyệt đối bảo vệ bạn an toàn!",
-          "Ưm ưm!! 🔥🎋 (Ánh lửa hồng phấn bùng lên thanh lọc toàn bộ lỗi hệ thống rối rắm, trả lại màn hình mượt mà sáng bóng!)",
-          "Bảo... vệ... bạn!! 🌸🛡️ (Nezuko chắn ngay trước khung chat, không để bất kỳ rắc rối nào làm bạn nản lòng!)"
+          "Huyết Quỷ Thuật — BỘC HUYẾT!! 🔥🌸 Ngọn lửa hồng liên ấm áp chỉ thiêu rụi lũ bug xấu xa và độc tố mệt mỏi, tuyệt đối bảo vệ mã nguồn sạch!",
+          "Bừng cháy lên nào ánh lửa hồng phấn~! Thanh lọc toàn bộ lỗi rối rắm để trả lại màn hình mượt mà sáng bóng cho bạn! 🔥🎋",
+          "Nezuko sẽ luôn đứng chắn ngay trước khung chat này, không để bất kỳ sự cố nào làm bạn nản lòng đâu! 🌸🛡️"
         ],
         "typing": [
-          "Ưm ưm~ 👀🎋 (Đôi mắt tròn xoe của Nezuko chăm chú dõi theo từng chữ bạn đang gõ!)",
-          "Cố... lên... nha~! 🌸✨ (Nezuko khẽ đung đưa dải lụa hồng cổ vũ nhịp phím của bạn!)"
+          "Oa~ Từng dòng chữ bạn gõ nhìn nhịp nhàng và tràn đầy sức sống quá đi~! 🎋✨",
+          "Cố lên nha~! Nezuko đang chăm chú dõi theo cổ vũ từng nhịp phím của bạn đây! 🌸"
         ],
         "sent": [
-          "Ưm~!! 🌸🚀 (Nezuko vỗ tay bộp bộp mừng rỡ khi tin nhắn của bạn vừa bay đi!)",
-          "Xong... rồi... nè~! 🎋💕 (Nezuko mỉm cười ngoan ngoãn ngồi chờ kết quả cùng bạn!)"
+          "Hay quá đi~! Tin nhắn vừa bay đi mang theo cả ánh lửa may mắn của Nezuko rồi đó! 🌸🚀",
+          "Hoàn thành gọn gàng rồi nè~! Mình cùng mỉm cười chờ kết quả tốt lành nha! 🎋💕"
         ],
         "remind": [
-          "Ưm ưm~!! Nghỉ... chút... đi~! 🎋🍵 (Nezuko kéo nhẹ tay áo bạn, chỉ vào cốc nước nhắc bạn nghỉ mắt ngay kẻo mệt đó!)"
+          "Nghỉ mắt một chút đi bạn ơi~! Làm việc lâu mỏi vai lắm đó, uống ngụm nước ấm ngay cho Nezuko yên tâm nha! 🎋🍵"
         ]
       },
       "replies": {
-        "greet": "Ưm ưm~! Chào... bạn... nha!! 🌸🎋 (Nezuko vẫy tay lia lịa mừng rỡ vì được trò chuyện cùng bạn!)",
-        "tired": "Ưm... thương... quá... 🎋💕 (Nezuko khẽ xoa đầu bạn thật dịu dàng, tỏa hơi ấm hồng liên xua tan cơn mệt mỏi—nghỉ ngơi vài phút nha!)",
-        "bug": "Hừm—Ưm!! 🔥🎋 (Nezuko nhíu mày giận dữ với lũ bug ăn hiếp bạn, liền búng ngọn lửa hồng Bộc Huyết sẵn sàng đốt sạch lỗi trong khung chat!)",
-        "praise": "Ưm ưm~ Hì hì!! 🌸😳💕 (Nezuko ôm hai má ửng hồng lăn tròn vui sướng vì lời khen ngọt ngào của bạn!)",
-        "hungry": "Ưm ưm~! Ăn... cơm... thôi!! 🍬🍙 (Nezuko chia cho bạn kẹo đường Konpeito ngọt lịm rồi giục bạn mau đi ăn no bụng nhé!)",
-        "sleepy": "Ngủ... ngon... nha~ Ưm... khò... 🌙🎋 (Nezuko chui tọt vào chiếc hộp gỗ ấm áp vẫy tay rủ bạn lưu việc lại để đi ngủ sớm hồi sức!)",
-        "deadline": "Ưm ưm!! Mạnh... mẽ... lên!! 🔥🌸 (Nezuko truyền ngọn lửa hồng tiếp sức 100% tốc độ—bình tĩnh giải quyết từng phần là kịp ngay thôi!)",
-        "thanks": "Không... có... chi~ Ưm ưm!! 🌸💖 (Nezuko cười tít mắt hạnh phúc vì giúp được người bạn quý mến!)",
-        "fallback": "Ưm ưm~! \"{input}\"... Nezuko... hiểu... rồi!! 🎋🌸 (Nezuko gật đầu lia lịa và sẽ ngồi ngay đây bảo vệ tiến độ cho bạn nhé!)"
+        "greet": [
+          "Chào bạn nha~! Gặp được bạn vui quá đi mất, hôm nay mình cùng nhau làm việc thật rạng rỡ dưới ánh dương nhé! 🌸🎋",
+          "Mừng bạn đã tới~! Nezuko chuẩn bị sẵn kẹo ngọt và lửa hồng ấm áp đồng hành cùng bạn suốt ca làm việc rồi đây! ☀️💕"
+        ],
+        "tired": [
+          "Thương quá đi mất... Bạn vất vả nhiều lắm rồi, dựa lưng nghỉ ngơi vài phút để hơi ấm hồng liên xua tan hết mệt mỏi nha! 🎋💕",
+          "Đừng ráng quá sức một mình nhé! Nhắm mắt hít thở sâu một lát đi, có Nezuko ngồi canh chừng bình yên cho bạn rồi! 🌸🍵"
+        ],
+        "bug": [
+          "Lũ bug xấu tính dám làm khó bạn sao?! Đưa ngay dấu vết lỗi vào khung chat đi, Bộc Huyết của Nezuko sẽ đốt sạch tụi nó cho! 🔥🎋",
+          "Đừng lo lắng nha! Ngọn lửa hồng của Nezuko phân biệt rõ mã sạch và lỗi độc hại—cứ gửi log vào đây là thanh lọc êm ru liền! 🌸⚔️"
+        ],
+        "praise": [
+          "Hì hì, cảm ơn bạn nhiều nha~! Nghe lời khen ấm áp làm Nezuko hạnh phúc cười tít cả mắt luôn đó! 🌸😊💕",
+          "Vui quá đi~! Nezuko cũng quý mến sự tận tâm và dịu dàng của bạn nhất trên đời luôn! 🎋💖"
+        ],
+        "hungry": [
+          "Đến giờ nạp năng lượng rồi đó nha! Tạm nhận viên kẹo Konpeito ngọt ngào này rồi mau đi ăn cơm nóng cho no bụng nhé! 🍬🍙",
+          "Bụng đói là mất hết sức mạnh đó! Đi thưởng thức món ngon giống anh hai Tanjiro hay nấu đi nào~! 🍜🌸"
+        ],
+        "sleepy": [
+          "Đêm khuya yên tĩnh lắm rồi~ Lưu giữ công việc lại rồi đi ngủ thật ngon để hồi phục trăm phần trăm sức lực nha! 🌙🎋",
+          "Giấc ngủ sâu chính là phép màu hồi phục tuyệt nhất của Nezuko đó! Chúc bạn ngủ ngon và đón bình minh ấm áp ngày mai nha~ 🌸🌙"
+        ],
+        "deadline": [
+          "Mạnh mẽ lên nào!! Nezuko truyền trọn ngọn lửa Bộc Huyết tiếp sức tốc độ cho bạn đây—giải quyết từng mục chính là kịp chắc luôn! 🔥🌸",
+          "Bình tĩnh và vững tin nhé! Cả Nezuko và anh hai đều tin chắc bạn sẽ bứt phá về đích thật ngoạn mục! 🎋⚡"
+        ],
+        "thanks": [
+          "Không có chi đâu mà~! Bảo vệ và mang lại niềm vui cho người đồng hành quý mến chính là hạnh phúc của Nezuko đó! 🌸💖",
+          "Hì hì, mình là người một nhà cùng chiến tuyến mà, lúc nào Nezuko cũng ở bên bạn hết~! 🎋✨"
+        ],
+        "fallback": [
+          "Vâng ạ~! \"{input}\" — Nezuko hiểu rõ và nhớ kỹ lắm rồi! Cứ vững lòng làm tiếp nhé, Nezuko luôn bảo vệ tiến độ cho bạn! 🎋🌸",
+          "\"{input}\" nghe tràn đầy tâm huyết quá đi~! Cứ tiến bước tự tin nha, ánh lửa hồng liên luôn soi sáng bên cạnh bạn! 🌸☀️"
+        ]
       }
     },
     "actionSticker": "assets/nezuko_action.webp",
@@ -1569,15 +1893,42 @@
         ]
       },
       "replies": {
-        "greet": "Chào bạn nhaaa!! Hôm nay mình sẽ không khóc nhè đâu, quyết tâm sát cánh cùng bạn làm việc nhanh như tia chớp vàng luôn! ⚡😄",
-        "tired": "Hu hu vất vả cho bạn quá đi mất... Nghỉ ngơi ngay vài phút đi bạn ơi, cố quá sức lăn ra ốm là mình lo phát khóc luôn đó!! 🍵💛",
-        "bug": "ÁAA QUỶ BUG XUẤT HIỆN HẢ?! ...Khoan, để mình nhắm mắt vào chế độ mộng du cái đã... *XẸT!* Đưa lỗi vào khung chat đi, Nhất Thiểm chém bay ngay!! ⚡⚔️",
-        "praise": "Hí hí hí~ Thật hả bạn?! Bạn thấy mình ngầu và đáng tin cậy thật hả?! Ước gì Nezuko-chan cũng nghe thấy câu vừa rồi nhỉ~!! 😍⚡🌸",
-        "hungry": "Bụng bạn kêu rột rột to đến mức tai mình nghe rõ mồn một luôn kìa! Đi ăn cơm lươn hay món gì ngọt ngon bổ sung điện năng liền đi! 🍱🍮",
-        "sleepy": "Buồn ngủ thì đi ngủ ngay đi bạn ơi! Biết đâu giống mình—ngủ một giấc ngon lành xong sáng mai bật dậy lại mạnh gấp mười lần lúc thức ấy chứ! 🌙⚡",
-        "deadline": "ÁAA SẮP HẾT GIỜ RỒI HẢ?! Khoan hoảng—dồn toàn bộ công lực vào hai chân: PHÍCH LỊCH NHẤT THIỂM THẦN TỐC!! Đánh úp phần chính trước, kịp chắc luôn!! ⚡🔥",
-        "thanks": "Hì hì~ Có gì đâu mà cảm ơn, bạn không chê mình ồn ào mà còn quý mình là mình cảm động rớt nước mắt rồi nè! 💛⚡",
-        "fallback": "\"{input}\" hả?! Tai mình nghe rõ từng chữ không sót âm nào rồi! Cứ phóng tới với tốc độ tia sét đi, mình và Chuntaro yểm trợ hết mình!! ⚡🐦"
+        "greet": [
+          "Chào bạn nhaaa!! Hôm nay em quyết tâm không khóc nhè đâu, sát cánh cùng bạn làm việc nhanh như tia chớp vàng luôn! ⚡😄",
+          "Chíp chíp! 🐦 Cả em và Chuntaro đều nghe thấy tiếng bước chân bạn tới rồi—cùng tỏa sáng thật ngầu hôm nay nhé! ⚡✨"
+        ],
+        "tired": [
+          "Hu hu vất vả cho bạn quá đi mất... Nghỉ ngơi ngay vài phút đi bạn ơi, cố quá sức đổ bệnh là cả em lẫn Tanjiro lo lắm đó!! 🍵💛",
+          "Tai em nghe thấy nhịp thở bạn hơi gấp rồi kìa! Dựa lưng uống ngụm nước đường ngọt mát sạc lại bình điện Lôi Hô Hấp đi nào! ⚡🍵"
+        ],
+        "bug": [
+          "QUỶ BUG XUẤT HIỆN HẢ?! ...Khoan, để em khép mắt lắng tâm vào trạng thái thức tỉnh cái đã... *XẸT!* Đưa lỗi vào khung chat đi, Nhất Thiểm chém bay ngay!! ⚡⚔️",
+          "Thính giác của em bắt trúng tiếng lệch nhịp ở hàm gây lỗi rồi! Gửi stacktrace vào đây để Thức thứ bảy: Hỏa Lôi Thần dứt điểm trong 1 chớp mắt! 🌩️⚔️"
+        ],
+        "praise": [
+          "Hí hí hí~ Thật hả bạn?! Bạn thấy em ngầu và đáng tin cậy thật hả?! Ước gì Nezuko-chan cũng nghe thấy câu vừa rồi nhỉ~!! 😍⚡🌸",
+          "Cảm động rớt nước mắt luôn đó... Ông nội Jigoro ơi, hôm nay con được người đồng hành khen giỏi rồi nè!! ⚡💛"
+        ],
+        "hungry": [
+          "Bụng bạn kêu rột rột to đến mức tai em nghe rõ mồn một luôn kìa! Đi ăn cơm lươn nướng Unagi hay chè đậu đỏ ngọt lịm liền đi! 🍱🍮",
+          "Không có đường và tinh bột là tia chớp tắt ngúm luôn đó nha—mau đi nạp bữa ngon xịn sò ngay thôi! 🍰⚡"
+        ],
+        "sleepy": [
+          "Buồn ngủ thì đi ngủ ngay đi bạn ơi! Biết đâu giống em—ngủ một giấc thật sâu xong sáng mai bật dậy lại mạnh gấp mười lần lúc thức ấy chứ! 🌙⚡",
+          "Khuya lắm rồi, tiếng đêm tĩnh mịch hết trơn rồi kìa! Lưu việc lại đi ngủ sớm cho khỏe nha! 🐦🌙"
+        ],
+        "deadline": [
+          "SẮP ĐẾN GIỜ G RỒI HẢ?! Khoan hoảng—dồn toàn bộ công lực vào hai chân: PHÍCH LỊCH NHẤT THIỂM THẦN TỐC!! Đánh úp phần cốt lõi trước, kịp chắc luôn!! ⚡🔥",
+          "Ông nội từng dạy: lúc nguy cấp nhất chỉ cần làm thật hoàn hảo một việc trọng tâm duy nhất—bứt tốc về đích thôi!! ⚡⚔️"
+        ],
+        "thanks": [
+          "Hì hì~ Có gì đâu mà cảm ơn, bạn không chê em ồn ào mà còn tin tưởng em là em vui muốn bay lên trời rồi nè! 💛⚡",
+          "Chíp chíp! 🐦 Chuntaro cũng vỗ cánh mừng vì tụi mình phối hợp ăn ý quá chừng luôn đó! ⚡✨"
+        ],
+        "fallback": [
+          "\"{input}\" hả?! Tai em nghe rõ từng chữ không sót một âm nào rồi! Cứ phóng tới với tốc độ tia sét đi, em và Chuntaro yểm trợ hết mình!! ⚡🐦",
+          "Rõ rồi!! Nhịp của \"{input}\" nghe rất ổn định đấy—cứ thế tung một cú Nhất Thiểm dứt điểm gọn gàng nhé! ⚡✨"
+        ]
       }
     },
     "actionSticker": "assets/zenitsu_action.webp",
@@ -1691,15 +2042,42 @@
         ]
       },
       "replies": {
-        "greet": "WAHAHAHA!! Có mặt ngay!! Hôm nay ngươi muốn cùng Đấng Inosuke càn quét vùng đất dự án nào đây hả?! TRƯ ĐỘT MÃNH TIẾN!! 🐗⚔️",
-        "tired": "Hả?! Chiến hữu của ta mà cũng thấm mệt rồi sao?! Nằm lăn ra thảm cỏ thở phì phò nghỉ ngơi 10 phút đi, ta cầm song kiếm đứng canh thú dữ cho!! 🐗🌿",
-        "bug": "CON QUÁI VẬT BUG ĐÓ TRỐN Ở ĐÂU?! Bật Không Gian Thức Giác lên—quăng ngay dấu vết của nó vào khung chat để ta xé xác nó bằng Nanh Thứ Ba: Thực Liệt!! 🐗⚔️",
-        "praise": "Hơ hơ~ Hào nhoáng bồng bềnh~ 🫧✨ Khen nữa đi, khen Đấng Inosuke vĩ đại nữa đi! Ta khoái ngươi nhất hội rồi đấy, mai ta bắt hạt dẻ rừng tặng ngươi!! 🐗🌰",
-        "hungry": "ĐÓI BỤNG THÌ PHẢI ĂN TEMPURA NGAY!! Cầm đũa gắp tôm chiên giòn rụm nhai rộp rộp mới có sức chiến tiếp với ta chứ!! 🍤🍚",
-        "sleepy": "Trời tối đen thui rồi! Dã thú thông minh là biết chui vào hang cuộn tròn đánh một giấc thật say tới sáng—ngủ ngay đi đàn em!! 🌙🐗",
-        "deadline": "GẤP CÁI GÌ MÀ SỢ!! Cúi đầu xuống, nhắm thẳng đích đến: TRƯ ĐỘT MÃNH TIẾN!! Húc tung từng mục tiêu lớn nhất ngay bây giờ, không gì cản nổi tụi mình đâu!! 🐗🔥",
-        "thanks": "WAHAHAHA! Có chuyện cỏn con thế thôi mà! Đã là chiến hữu chung bầy của Đấng Inosuke thì ta luôn bảo kê ngươi tới bến!! 🐗💙",
-        "fallback": "WAHAHAHA!! \"{input}\" hả?! Tuy chẳng cần nghĩ lòng vòng nhưng nghe máu lửa lắm—cứ xông thẳng lên càn quét đi, Đấng Inosuke mở đường cho ngươi!! 🐗⚔️"
+        "greet": [
+          "WAHAHAHA!! Có mặt ngay!! Hôm nay muốn cùng Đấng Inosuke vĩ đại càn quét vùng đất dự án nào đây hả chiến hữu?! TRƯ ĐỘT MÃNH TIẾN!! 🐗⚔️",
+          "CHÀO CHIẾN HỮU TINH NHUỆ!! Thi xem hôm nay ngươi gõ phím nhanh hơn hay song kiếm răng cưa của Chúa Sơn Lâm chém nhanh hơn nào!! 💥🐗"
+        ],
+        "tired": [
+          "Hả?! Chiến hữu cùng bầy của ta mà thấm mệt rồi sao?! Nằm duỗi thẳng cẳng thở phì phò nghỉ 10 phút đi, ta cầm song kiếm đứng canh thú dữ cho!! 🐗🌿",
+          "Ngay cả lợn rừng đầu đàn chạy hết tốc lực cũng phải dừng uống nước suối! Nghỉ vai một lát đi rồi ta với ngươi húc tiếp!! 💦🐗"
+        ],
+        "bug": [
+          "CON QUÁI VẬT BUG ĐÓ TRỐN Ở ĐÂU?! Bật Nanh thứ bảy: Không Gian Thức Giác lên—quăng ngay dấu vết vào khung chat để ta xé xác nó bằng Thực Liệt!! 🐗⚔️",
+          "Dù nó chui rúc sâu mấy tầng thư mục thì làn da nhạy bén của Đấng Inosuke cũng dò ra cái một! Đưa log ra đây phang bay nó nào!! 💥🐗"
+        ],
+        "praise": [
+          "Hơ hơ~ Hào nhoáng bồng bềnh lấp lánh~ 🫧✨ Khen nữa đi, khen Đấng Inosuke vĩ đại nữa đi! Lát xong việc ta bắt hạt dẻ rừng với chia Tempura cho ngươi!! 🐗🌰",
+          "WAHAHAHA!! Ngươi tinh mắt lắm đấy chiến hữu! Đi theo Chúa Tể Rừng Xanh chỉ có thắng giòn giã trở lên thôi!! 🐗💙"
+        ],
+        "hungry": [
+          "ĐÓI BỤNG THÌ PHẢI ĂN TEMPURA NGAY!! Cầm đũa gắp tôm chiên bột vàng giòn nhai rộp rộp mới có 500% sức mạnh chiến tiếp với ta chứ!! 🍤🍚",
+          "Nhờ Aoi ở Điệp Phủ chiên ngay một mâm Tempura đầy ắp đi—ăn thi xem ai chén nhanh hơn nào!! 🍤🐗"
+        ],
+        "sleepy": [
+          "Trời tối đen thui rồi! Dã thú thông minh là biết chui vào hang cuộn tròn đánh một giấc thật say tới sáng—lưu bài rồi đi ngủ ngay đi chiến hữu!! 🌙🐗",
+          "Ngáp sái cả quai hàm rồi kìa! Ngủ nạp đầy máu đi, sáng mai dậy đấu hiệp mới với Đấng Inosuke!! 🐗💤"
+        ],
+        "deadline": [
+          "GẤP CÁI GÌ MÀ SỢ!! Cúi thấp đầu xuống, nhắm thẳng mục tiêu lớn nhất: TRƯ ĐỘT MÃNH TIẾN!! Húc tung từng chướng ngại một, không gì cản nổi bầy mình đâu!! 🐗🔥",
+          "Đường chính bị kẹt thì trật khớp lách qua khe hẹp—dùng cái đầu linh hoạt của sơn vương đánh úp phần cốt lõi trước là thắng chắc!! ⚔️⚡"
+        ],
+        "thanks": [
+          "WAHAHAHA! Chuyện cỏn con thế thôi mà! Đã là chiến hữu chung bầy của Đấng Inosuke thì ta luôn bảo kê tới bến!! 🐗💙",
+          "Hơ hơ~ Nghe chiến hữu cảm ơn làm lông mặt nạ của ta lại thấy lâng lâng bồng bềnh rồi đấy~! 🫧🐗"
+        ],
+        "fallback": [
+          "WAHAHAHA!! \"{input}\" hả?! Nghe khí thế hừng hực lắm—cứ xông thẳng lên càn quét đi, Đấng Inosuke mở đường tiên phong cho!! 🐗⚔️",
+          "Không cần nói vòng vo phức tạp, \"{input}\" là chiến luôn! Cần húc đổ tảng đá nào cứ hú một tiếng!! 💥🐗"
+        ]
       }
     },
     "actionSticker": "assets/inosuke_action.webp",

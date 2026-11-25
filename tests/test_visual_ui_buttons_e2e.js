@@ -1220,15 +1220,51 @@ describe('F24 — Kiểm Thử Thực Chiến E2E Trình Duyệt Chromium Toàn 
         /Chibi 2D Sống Động/i
       );
 
-      // Kiểm chứng nghiêng theo chuột thực tế (Mouse Parallax) từ góc trái sang góc phải
-      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 180, y: 520 });
-      await sleep(160);
-      const lookLeft = await cdp.eval(`window.__AGY_KNY_CHIBI_AURA__.getChibi2dLiveState()`);
-      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1380, y: 520 });
-      await sleep(160);
+      // Kiểm chứng toàn diện LiveChibi 2.5D Articulated Mesh & Eye-Anchored Gaze theo 4 hướng chuột
+      const composerBox = await cdp.eval(`(() => {
+        const r = document.querySelector('.surface-composer').getBoundingClientRect();
+        return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+      })()`);
+      // Điểm ngay bên trái mặt Chibi nhưng nằm ở nửa bên phải khung chat (vùng từng gây lỗi nhìn ngược sang phải ở bản cũ)
+      const nearLeftOfFaceX = Math.round(composerBox.right - 155);
+      const faceLevelY = Math.round(composerBox.top - 36);
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: nearLeftOfFaceX, y: faceLevelY });
+      await sleep(220);
+      const lookNearLeft = await cdp.eval(`window.__AGY_KNY_CHIBI_AURA__.getChibi2dLiveState()`);
+      assert.equal(lookNearLeft.meshActive, true, 'Lưới biến dạng 2.5D LiveChibi (meshActive) phải giải mã SVG và kích hoạt thực tế trên canvas');
+      assert.equal(
+        await cdp.eval(`document.querySelector('.surface-composer')?.getAttribute('data-chibi-live2d-mesh')`),
+        '1',
+        'Composer phải gắn data-chibi-live2d-mesh="1" để cố định dải hoa văn bên trái bằng clip-path'
+      );
+      assert.ok(
+        lookNearLeft.eyeLookX < -0.35 && lookNearLeft.lookX < -0.22,
+        `Chuột ngay bên trái mặt Chibi (nửa phải khung chat) bắt buộc phải nhìn sang TRÁI âm (eyeLookX=${lookNearLeft.eyeLookX}, lookX=${lookNearLeft.lookX})`
+      );
+
+      // Di chuột sang mép phải ngoài mặt Chibi -> mắt và đầu phải xoay sang PHẢI dương
+      const rightOfFaceX = Math.min(1432, Math.round(composerBox.right + 45));
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: rightOfFaceX, y: faceLevelY });
+      await sleep(220);
       const lookRight = await cdp.eval(`window.__AGY_KNY_CHIBI_AURA__.getChibi2dLiveState()`);
-      assert.ok(lookRight.lookX > lookLeft.lookX + 0.45, `Di chuột từ trái sang phải phải làm Chibi 2D nghiêng theo chuột (${lookLeft.lookX} -> ${lookRight.lookX})`);
-      assert.ok(lookRight.tx > lookLeft.tx + 2.5, `Dịch chuyển ngang CSS --agy-l2d-tx phải lướt theo chuột (${lookLeft.tx}px -> ${lookRight.tx}px)`);
+      assert.ok(
+        lookRight.eyeLookX > 0.35 && lookRight.lookX > 0.22,
+        `Di chuột sang bên phải mặt Chibi phải làm mắt và đầu hướng sang PHẢI dương (eyeLookX=${lookRight.eyeLookX}, lookX=${lookRight.lookX})`
+      );
+      assert.ok(lookRight.tx > lookNearLeft.tx + 3.0, `Thông số --agy-l2d-tx phải phản ánh biên độ theo chuột (${lookNearLeft.tx}px -> ${lookRight.tx}px)`);
+
+      // Kiểm chứng nhìn LÊN (trên đỉnh màn hình) vs nhìn XUỐNG (đáy khung soạn thảo)
+      const faceCenterX = Math.round(composerBox.right - 46);
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: faceCenterX, y: 90 });
+      await sleep(200);
+      const lookUp = await cdp.eval(`window.__AGY_KNY_CHIBI_AURA__.getChibi2dLiveState()`);
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: faceCenterX, y: Math.min(892, Math.round(composerBox.bottom - 6)) });
+      await sleep(200);
+      const lookDown = await cdp.eval(`window.__AGY_KNY_CHIBI_AURA__.getChibi2dLiveState()`);
+      assert.ok(
+        lookUp.eyeLookY < -0.30 && lookDown.eyeLookY > 0.25 && lookDown.lookY > lookUp.lookY + 0.40,
+        `Di chuột Lên/Xuống phải đổi dấu trục dọc chuẩn xác (up=${lookUp.eyeLookY}/${lookUp.lookY} -> down=${lookDown.eyeLookY}/${lookDown.lookY})`
+      );
 
       // Kiểm chứng gõ phím vật lý liên hoàn trong khung Lexical -> kích hoạt Combo & vẽ huy hiệu biểu cảm lên canvas
       await realMouseClick(cdp, '#lexical-chat-editor', 'Focus khung soạn thảo để kiểm chứng gõ phím Combo Live2D-lite');
@@ -1266,6 +1302,14 @@ describe('F24 — Kiểm Thử Thực Chiến E2E Trình Duyệt Chromium Toàn 
         await cdp.eval(`window.__AGY_KNY_CHIBI_AURA__.getChibi2dLiveState().mood`),
         'thinking',
         'Khi SSE báo AI đang suy luận (isWorking: true) thì Chibi 2D phải chuyển sang trạng thái thinking'
+      );
+      // Ngay cả khi đang ở trạng thái thinking, di chuột sang bên trái mặt Chibi vẫn phải ưu tiên nhìn theo chuột (không bị lắc ngược sang phải)
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: nearLeftOfFaceX, y: faceLevelY });
+      await sleep(200);
+      const thinkingGaze = await cdp.eval(`window.__AGY_KNY_CHIBI_AURA__.getChibi2dLiveState()`);
+      assert.ok(
+        thinkingGaze.eyeLookX < -0.30 && thinkingGaze.lookX < -0.18 && thinkingGaze.rot < 0,
+        `Khi mood=thinking vẫn phải ưu tiên nhìn về phía chuột bên trái thay vì lắc ngược (eyeLookX=${thinkingGaze.eyeLookX}, rot=${thinkingGaze.rot})`
       );
       await captureAuditScreenshot(
         cdp,
@@ -1463,6 +1507,7 @@ describe('F24 — Kiểm Thử Thực Chiến E2E Trình Duyệt Chromium Toàn 
 
       const studioCardCount = await cdp.eval(`document.querySelectorAll('#themes-grid .th-btn').length`);
       assert.equal(studioCardCount, 16, 'MCP Studio App phải hiển thị đủ 16 thẻ chủ đề ở 0ms');
+      assert.equal(await cdp.eval(`Boolean(document.getElementById('live2d-btn'))`), true, 'MCP Studio App phải có nút điều khiển nhanh #live2d-btn');
       await realMouseClick(cdp, '#themes-grid .th-btn:nth-child(2)', 'Chọn thẻ chủ đề trong MCP Studio App');
       await realMouseClick(cdp, '.lang-btn[data-lang="vi"]', 'Chọn ngôn ngữ Tiếng Việt trong MCP Studio App');
 
@@ -1498,7 +1543,10 @@ describe('F24 — Kiểm Thử Thực Chiến E2E Trình Duyệt Chromium Toàn 
       for (const c of sseClients) {
         try { c.end(); } catch (_) {}
       }
-      try { server.close(); } catch (_) {}
+      try {
+        if (typeof server.closeAllConnections === 'function') server.closeAllConnections();
+        server.close();
+      } catch (_) {}
       try { chrome.kill(); } catch (_) {}
     }
   });

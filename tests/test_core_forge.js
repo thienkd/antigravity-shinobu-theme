@@ -4041,3 +4041,169 @@ describe('F18 — Trang Xem Trước Độc Lập (`preview.html`)', { concurren
     });
   });
 });
+
+// ============================================================================
+// F25 — Canon Character Soul Conversation Engine v3.2 (19 Cá Thể Nguyên Tác)
+// ============================================================================
+
+describe('F25 — Hệ Thống Hội Thoại Cá Thể Hóa Nhân Vật Chuẩn Nguyên Tác (`engine/core.js` & `themes/themes.json`)', { concurrency: 1 }, () => {
+  it('[F25-T1-01] 15 nhân vật Kimetsu no Yaiba + 3 Đa Vũ Trụ phân định rõ 18 charId riêng biệt, aura riêng & chip gợi ý không trùng lặp', () => {
+    const env = createTestEnv({ loadCore: true });
+    const presetCharPairs = [
+      ['👑 Gia Đình Chúa Công (Ubuyashiki)', 'ubuyashiki'],
+      ['🦋 Trùng Trụ — Shinobu Kocho', 'shinobu'],
+      ['🌊 Thủy Trụ — Giyu Tomioka', 'giyu'],
+      ['🔥 Viêm Trụ — Kyojuro Rengoku', 'rengoku'],
+      ['💎 Âm Trụ — Tengen Uzui', 'uzui'],
+      ['🌫️ Hà Trụ — Muichiro Tokito', 'muichiro'],
+      ['🌸 Luyến Trụ — Mitsuri Kanroji', 'mitsuri'],
+      ['🐍 Xà Trụ — Obanai Iguro', 'obanai'],
+      ['🌪️ Phong Trụ — Sanemi Shinazugawa', 'sanemi'],
+      ['📿 Nham Trụ — Gyomei Himejima', 'gyomei'],
+      ['☀️ Tanjiro Kamado — Nhật Luân', 'tanjiro'],
+      ['🎋 Nezuko Kamado — Hồng Liên', 'nezuko'],
+      ['⚡ Zenitsu Agatsuma — Lôi Minh', 'zenitsu'],
+      ['🐗 Inosuke Hashibira — Dã Thú', 'inosuke'],
+      ['🌌 Đế Vương Bóng Tối', 'shadow_monarch'],
+      ['♾️ Vô Lượng Không Xứ', 'six_eyes'],
+      ['🔥 Hắc Thần Đại Thánh', 'great_sage']
+    ];
+
+    const seenAuras = new Set();
+    const seenIdentityReplies = new Set();
+
+    for (const [themeName, expectedCharId] of presetCharPairs) {
+      env.core.applyTheme({ themeName, bubbleName: themeName, masterPersona: 'yoriichi' }, { skipSaveDisk: true });
+      const meta = env.core.getNpcSoulMeta();
+      assert.equal(meta.charId, expectedCharId, `Theme "${themeName}" phải ánh xạ đúng charId="${expectedCharId}"`);
+      assert.equal(seenAuras.has(meta.aura), false, `Aura "${meta.aura}" của ${expectedCharId} phải độc nhất`);
+      seenAuras.add(meta.aura);
+      assert.ok(meta.chips.length >= 3, `Nhân vật ${expectedCharId} phải có ít nhất 3 chip gợi ý chủ đề cá nhân`);
+
+      const idRes = env.core.converseWithNpc('Bạn là ai? Kể về bản thân đi!');
+      assert.equal(idRes.charId, expectedCharId);
+      assert.equal(idRes.intent, 'identity');
+      assert.equal(seenIdentityReplies.has(idRes.reply), false, `Câu tự giới thiệu của ${expectedCharId} phải là cá thể độc lập không trùng lặp`);
+      seenIdentityReplies.add(idRes.reply);
+    }
+  });
+
+  it('[F25-T1-02] Chuẩn đại từ & chi tiết nguyên tác đặc trưng: Giyu (xưng Tôi, Sake Daikon, không bị ghét), Nezuko (thức tỉnh không nói lắp), Muichiro (không giả quên), Sanemi (Ohagi)', () => {
+    const env = createTestEnv({ loadCore: true });
+
+    // 1. Giyu Tomioka: xưng Tôi, cá hồi hầm củ cải, bị trêu "bị ghét" phản bác đúng nguyên tác
+    env.core.applyTheme({ themeName: '🌊 Thủy Trụ — Giyu Tomioka', bubbleName: '🌊 Thủy Trụ — Giyu Tomioka' }, { skipSaveDisk: true });
+    const giyuFood = env.core.converseWithNpc('Giyu thích ăn món gì nhất?').reply;
+    assert.match(giyuFood, /cá hồi hầm củ cải/i);
+    const giyuTease = env.core.converseWithNpc('Sao anh bị ghét thế?').reply;
+    assert.match(giyuTease, /không.*bị.*ghét/i);
+    const giyuGreet = env.core.converseWithNpc('Chào Giyu nhé!').reply;
+    assert.equal(/\bta\b/i.test(giyuGreet), false, 'Giyu nguyên tác xưng Tôi, không dùng đại từ cổ trang "ta"');
+
+    // 2. Nezuko Kamado: giọng thức tỉnh dưới ánh dương (Bộc Huyết, Konpeito), không còn chuỗi kịch bản ngoặc đơn cũ
+    env.core.applyTheme({ themeName: '🎋 Nezuko Kamado — Hồng Liên', bubbleName: '🎋 Nezuko Kamado — Hồng Liên' }, { skipSaveDisk: true });
+    const nezukoGreet = env.core.converseWithNpc('Chào Nezuko nha!').reply;
+    assert.equal(nezukoGreet.includes('(Nezuko'), false, 'Nezuko thức tỉnh không dùng kịch bản đóng mở ngoặc thô cứng');
+    assert.equal(nezukoGreet.includes('Chào... bạn...'), false, 'Nezuko thức tỉnh không nói lắp ngắt dấu ba chấm cũ');
+    assert.match(env.core.converseWithNpc('Huyết Quỷ Thuật Bộc Huyết hoạt động thế nào?').reply, /Bộc Huyết|lửa hồng/i);
+
+    // 3. Muichiro Tokito: thức tỉnh trong trẻo (Vô Hạn, củ cải hầm tương miso), không giả quên
+    env.core.applyTheme({ themeName: '🌫️ Hà Trụ — Muichiro Tokito', bubbleName: '🌫️ Hà Trụ — Muichiro Tokito' }, { skipSaveDisk: true });
+    const muiFood = env.core.converseWithNpc('Muichiro thích ăn gì?').reply;
+    assert.match(muiFood, /củ cải hầm tương miso|Furofuki Daikon/i);
+    const muiTease = env.core.converseWithNpc('Cậu hay đãng trí thế').reply;
+    assert.match(muiTease, /nhớ/i);
+
+    // 4. Sanemi Shinazugawa: thích bánh Ohagi đậu đỏ & thương em trai Genya
+    env.core.applyTheme({ themeName: '🌪️ Phong Trụ — Sanemi Shinazugawa', bubbleName: '🌪️ Phong Trụ — Sanemi Shinazugawa' }, { skipSaveDisk: true });
+    assert.match(env.core.converseWithNpc('Nghe đồn anh thích ăn bánh Ohagi hả?').reply, /Ohagi/i);
+    assert.match(env.core.converseWithNpc('Anh nghĩ sao về em trai Genya?').reply, /Genya.*em trai/i);
+  });
+
+  it('[F25-T1-03] Thích ứng quan hệ 2 chiều với Master Persona (Chúa Công Ubuyashiki & cặp Chemistry nguyên tác Obanai <-> Mitsuri, Zenitsu <-> Nezuko)', () => {
+    const env = createTestEnv({ loadCore: true });
+    env.setReducedMotion(true);
+
+    // Sanemi & Obanai khi gặp Chúa Công (masterPersona = ubuyashiki) phải cung kính tuyệt đối
+    env.core.applyTheme({
+      themeName: '🌪️ Phong Trụ — Sanemi Shinazugawa',
+      bubbleName: '🌪️ Phong Trụ — Sanemi Shinazugawa',
+      masterPersona: 'ubuyashiki'
+    }, { skipSaveDisk: true });
+    const sanemiToLord = env.core.converseWithNpc('Chào Sanemi').reply;
+    assert.match(sanemiToLord, /Chúa Công/i, `Sanemi gặp Chúa Công phải thưa kính cẩn, thực tế: ${sanemiToLord}`);
+    const wrapLord = env.document.getElementById('agy-shinobu-npc-wrap');
+    assert.match(wrapLord.querySelector('.agy-npc-soul-text').textContent, /Chúa Công/);
+
+    // Obanai khi gặp Mitsuri (masterPersona = mitsuri) phải dịu dàng chu đáo khác hẳn bình thường
+    env.core.applyTheme({
+      themeName: '🐍 Xà Trụ — Obanai Iguro',
+      bubbleName: '🐍 Xà Trụ — Obanai Iguro',
+      masterPersona: 'mitsuri'
+    }, { skipSaveDisk: true });
+    const obanaiToMitsuri = env.core.converseWithNpc('Chào anh Iguro!').reply;
+    assert.match(obanaiToMitsuri, /Kanroji.*trà mật ong|bánh ngọt/i);
+    const obanaiTiredMitsuri = env.core.converseWithNpc('Em hơi mệt quá...').reply;
+    assert.match(obanaiTiredMitsuri, /Kanroji/i);
+
+    // Zenitsu khi gặp Nezuko (masterPersona = nezuko)
+    env.core.applyTheme({
+      themeName: '⚡ Zenitsu Agatsuma — Lôi Minh',
+      bubbleName: '⚡ Zenitsu Agatsuma — Lôi Minh',
+      masterPersona: 'nezuko'
+    }, { skipSaveDisk: true });
+    const zenToNezuko = env.core.converseWithNpc('Gặp bug khó rồi!').reply;
+    assert.match(zenToNezuko, /Nezuko-chan.*Hỏa Lôi Thần/i);
+  });
+
+  it('[F25-T1-04] Tương tác chéo nhắc tên nhân vật khác, đọc số liệu Live HUD, chống lặp câu & bấm Chip gợi ý trên Popover', () => {
+    const env = createTestEnv({ loadCore: true });
+    env.setReducedMotion(true);
+
+    // Dựng giả lập thanh Token HUD để kiểm tra intent `status` đọc số liệu thật
+    const hudBar = env.document.createElement('div');
+    hudBar.id = 'agy-token-context-bar';
+    hudBar.innerHTML = '<span class="agy-tok-ctx-val">128.4K</span><svg><rect class="agy-nichirin-heat-rect" width="24.75"></rect></svg>';
+    env.document.body.appendChild(hudBar);
+    env.document.documentElement.setAttribute('data-agy-ai-working', '1');
+
+    env.core.applyTheme({
+      themeName: '🦋 Trùng Trụ — Shinobu Kocho',
+      bubbleName: '🦋 Trùng Trụ — Shinobu Kocho',
+      masterPersona: 'giyu'
+    }, { skipSaveDisk: true });
+
+    // 1. Hỏi chéo về Sabito khi đang ở Giyu và hỏi về Giyu khi đang ở Shinobu
+    const shinobuAboutGiyu = env.core.converseWithNpc('Shinobu nghĩ sao về anh Tomioka Giyu?');
+    assert.equal(shinobuAboutGiyu.intent, 'mention');
+    assert.equal(shinobuAboutGiyu.mentionedId, 'giyu');
+    assert.match(shinobuAboutGiyu.reply, /Tomioka/);
+
+    // 2. Đọc trực tiếp số liệu 128.4K token và 75% độ rực thanh kiếm từ DOM thật
+    const statusRes = env.core.converseWithNpc('Chẩn đoán tình hình ngữ cảnh hiện tại giúp mình');
+    assert.equal(statusRes.intent, 'status');
+    assert.match(statusRes.reply, /128\.4K token/);
+    assert.match(statusRes.reply, /75%/);
+    assert.match(statusRes.reply, /AI đang suy luận/);
+
+    // 3. Chống lặp câu liên tiếp ở cùng 1 intent đa biến thể
+    const b1 = env.core.converseWithNpc('Đoạn code này bị crash lỗi null rồi!').reply;
+    const b2 = env.core.converseWithNpc('Lại dính lỗi exception nữa rồi!').reply;
+    assert.notEqual(b1, b2, 'Hai lượt báo bug liên tiếp không được lặp lại y hệt cùng 1 câu trả lời');
+
+    // 4. Mở khung chat riêng trên UI, kiểm tra dải `.agy-npc-topic-chips` hiện ra & bấm chip cập nhật đúng `.agy-npc-user-msg` + `.agy-npc-turn-badge`
+    const wrap = env.document.getElementById('agy-shinobu-npc-wrap');
+    const chatToggle = wrap.querySelector('[data-npc-act="chat-toggle"]');
+    chatToggle.click();
+    const chipsWrap = wrap.querySelector('.agy-npc-topic-chips');
+    assert.equal(chipsWrap.style.display, 'flex', 'Khi mở khung chat riêng phải hiển thị dải chip gợi ý cá nhân hóa');
+    const firstChip = wrap.querySelector('.agy-npc-topic-chip');
+    assert.ok(firstChip, 'Phải có nút .agy-npc-topic-chip');
+    firstChip.click();
+
+    const sentMsgText = wrap.querySelector('.agy-npc-user-msg').textContent;
+    assert.ok(sentMsgText.length > 5, 'Bấm chip gợi ý phải điền đúng câu hỏi vào .agy-npc-user-msg');
+    assert.equal(wrap.querySelector('.agy-npc-turn-badge').getAttribute('data-show'), '1');
+    assert.match(wrap.querySelector('.agy-npc-turn-badge').textContent, /^Lượt \d+$/);
+  });
+});

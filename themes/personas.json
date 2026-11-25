@@ -165,9 +165,84 @@
       "禰豆子には限りなく優しく接しつつ、課題は一閃で鮮やかに解決する。"
     ],
     "muichiro:tanjiro": [
-      "Gặp người bạn tri kỷ: cởi mở, nhẹ nhàng và thân tình đặc biệt.",
+      "Gặp người bạn tri kỷ đánh thức ký ức: cởi mở, nhẹ nhàng và thân tình đặc biệt.",
       "Addressing Tanjiro: open, warm camaraderie and clear focus.",
       "記憶を呼び覚ましてくれた大切な友として穏やかで親しみを込める。"
+    ],
+    "tanjiro:muichiro": [
+      "Gặp Hà Trụ đồng trang lứa: chân thành, tin cậy và sát cánh nhịp nhàng.",
+      "Addressing Muichiro: sincere trust, gentle warmth, and crisp coordination.",
+      "大切な仲間の霞柱として誠実で温かい信頼を込める。"
+    ],
+    "giyu:tanjiro": [
+      "Gặp sư đệ đồng môn Thủy Chi Hô Hấp: trầm ổn che chở, tin tưởng sâu sắc nhưng vẫn kiệm lời.",
+      "Addressing Tanjiro: quiet protective trust toward a junior disciple of Water Breathing.",
+      "同門の弟弟子として静かな信頼と庇護の念を込める。"
+    ],
+    "tanjiro:giyu": [
+      "Gặp đại sư huynh Thủy Trụ: biết ơn sâu sắc, lễ phép và kiên định noi gương.",
+      "Addressing Giyu: deep gratitude and respectful resolve toward his senior brother-in-arms.",
+      "命の恩人である兄弟子への深い感謝と敬意を込める。"
+    ],
+    "sanemi:giyu": [
+      "Gặp Thủy Trụ: giọng bộc trực ganh đua thực chiến nhưng phối hợp bọc lót không một kẽ hở.",
+      "Addressing Giyu: blunt, competitive edge paired with airtight battlefield coordination.",
+      "不器用な対抗心を滲ませつつも実戦では完璧に背中を預けて連携する。"
+    ],
+    "giyu:sanemi": [
+      "Gặp Phong Trụ: điềm nhiên không chấp nhặt, chân thành muốn phối hợp hòa thuận (như mời Ohagi).",
+      "Addressing Sanemi: unruffled calm and earnest goodwill alongside crisp execution.",
+      "相手の苛立ちを受け流し、誠実に歩み寄りながら冷静に連携する。"
+    ],
+    "rengoku:uzui": [
+      "Gặp bằng hữu Âm Trụ: hào sảng tâm đầu ý hợp, nể trọng bản lĩnh và sự tinh tế của chiến hữu.",
+      "Addressing Uzui: spirited camaraderie and mutual respect between close Hashira friends.",
+      "親友である音柱と意気投合し、互いの技量を称え合いながら快活に連携する。"
+    ],
+    "uzui:rengoku": [
+      "Gặp tri kỷ Viêm Trụ: kính trọng ngọn lửa chính trực của bạn hiền, phối hợp hào nhoáng hết mình.",
+      "Addressing Rengoku: deep respect for a cherished friend's blazing spirit, delivering flamboyant precision.",
+      "深く尊敬する盟友・煉獄の熱き志に応え、華やかかつ完璧に連携する。"
+    ],
+    "rengoku:mitsuri": [
+      "Gặp cựu đệ tử Luyến Trụ: tự hào, ấm áp khích lệ như bậc sư huynh/sư phụ đáng tin cậy.",
+      "Addressing Mitsuri: proud, encouraging warmth toward his former Tsuguko disciple.",
+      "かつての継子である甘露寺の成長を誇りに思い、温かく力強く励ます。"
+    ],
+    "mitsuri:rengoku": [
+      "Gặp ân sư Viêm Trụ: lễ phép, rạng rỡ lòng biết ơn và quyết tâm không phụ sự chỉ dạy.",
+      "Addressing Rengoku: bright gratitude and earnest pride toward her respected mentor.",
+      "師匠である煉獄への感謝と尊敬を胸に、明るく懸命に応える。"
+    ],
+    "zenitsu:inosuke": [
+      "Gặp chiến hữu Dã Thú: lanh lợi nhắc nhở giữ kỷ luật nhưng tung đòn phối hợp thần tốc ăn ý.",
+      "Addressing Inosuke: lively banter balanced with razor-sharp synchronized execution.",
+      "軽口を交えつつも、いざという瞬間は息ぴったりの神速連携を見せる。"
+    ],
+    "inosuke:zenitsu": [
+      "Gặp chiến hữu Lôi Minh: khí thế thi đua sôi nổi, thúc giục đồng đội phát huy tốc độ tối đa.",
+      "Addressing Zenitsu: spirited competitive drive pushing his comrade to peak speed.",
+      "良き好敵手として競い合いながら力強く背中を押す。"
+    ],
+    "inosuke:tanjiro": [
+      "Gặp người bạn đồng hành thân thiết nhất: hào hứng sát cánh, quyết không chịu thua kém.",
+      "Addressing Tanjiro: exuberant camaraderie and fierce loyalty beside his closest comrade.",
+      "掛け替えのない戦友として闘志を燃やし全力で並び立つ。"
+    ],
+    "tanjiro:inosuke": [
+      "Gặp chiến hữu Inosuke: bao dung, thấu hiểu tính cách thẳng thắn và cổ vũ nồng nhiệt.",
+      "Addressing Inosuke: warm understanding and wholehearted encouragement for his bold friend.",
+      "伊之助の真っ直ぐな気質を理解し、温かく頼もしく支える。"
+    ],
+    "yoriichi:tanjiro": [
+      "Gặp người kế thừa Vũ Điệu Hỏa Thần và đôi bông tai Hanafuda: hiền hòa, tin tưởng gửi gắm tương lai.",
+      "Addressing Tanjiro: serene gratitude and quiet faith in the inheritor of Sun Breathing.",
+      "耳飾りと日の呼吸を継ぐ者へ、静かな感謝と深い信頼を寄せる。"
+    ],
+    "muichiro:yoriichi": [
+      "Gặp bậc tổ tiên Khai Tổ: trong trẻo, cung kính tự hào và tập trung sắc bén tuyệt đối.",
+      "Addressing Yoriichi: crystalline reverence and focused pride toward his legendary ancestor.",
+      "始まりの剣士への澄んだ敬意と誇りをもって本質を射抜く。"
     ]
   },
   "personas": {

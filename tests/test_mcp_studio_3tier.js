@@ -216,7 +216,7 @@ function mountStudioHtmlInVm(htmlText) {
 
   const knownIds = [
     'cdp-badge', 'refresh-btn', 'doctor-box', 'doc-title', 'doctor-msg', 'doctor-fix-btn',
-    'ctrl-lbl', 'persona-sel', 'ai-tone-sel', 'focus-btn', 'chibi-btn',
+    'ctrl-lbl', 'persona-sel', 'ai-tone-sel', 'focus-btn', 'chibi-btn', 'live2d-btn',
     'dim-lbl', 'dimming-val', 'dimming-range', 'fx-lbl', 'fx-val', 'fx-range',
     'lang-lbl', 'toast', 'ws-lbl', 'ws-input', 'ws-bind-btn', 'ws-list',
     'gal-lbl', 'themes-grid'
@@ -799,6 +799,7 @@ describe('F22 — Bộ Kiểm Thử 3 Tầng: Antigravity Theme Studio MCP App &
       assert.equal(vmApp.elementsById.get('dimming-val').textContent, '42%');
       assert.equal(vmApp.elementsById.get('fx-val').textContent, '85%');
       assert.equal(vmApp.elementsById.get('chibi-btn').getAttribute('aria-pressed'), 'false');
+      assert.equal(vmApp.elementsById.get('live2d-btn').getAttribute('aria-pressed'), 'true');
       assert.equal(vmApp.elementsById.get('ctrl-lbl').textContent, 'クイック操作・化身・AIトーン', 'Ngôn ngữ ja phải dịch ngay từ 0ms');
 
       const activeBtn = vmApp.elementsById.get('themes-grid').children.find((b) => b.getAttribute('aria-pressed') === 'true');

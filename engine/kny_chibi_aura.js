@@ -30,8 +30,10 @@
   const AURA_H = 84;
   const CHIBI_3D_W = 136;
   const CHIBI_3D_H = 112;
-  const LIVE2D_W = 162;
-  const LIVE2D_H = 108;
+  const LIVE2D_W = 188;
+  const LIVE2D_H = 124;
+  const LIVE2D_TOP = -106;
+  const LIVE2D_RIGHT = -10;
   const CHIBI_3D_STORAGE_KEY = 'agy_chibi_3d_v1';
   const CHIBI_2D_LIVE_STORAGE_KEY = 'agy_chibi_2d_live_v1';
   const STYLE_ID = 'antigravity-kny-chibi-aura-style';
@@ -1506,6 +1508,658 @@
     ctx.restore();
   }
 
+  /* ==========================================================================
+   * TRUE LIVE2D-GRADE 2.5D ARTICULATED MESH DEFORMER & EYE-GAZE ENGINE (v3.4)
+   * - Calibrated per-character eye sockets, 3D spherical face foreshortening,
+   *   pinned resting hands, spring-damper hair physics & specular catchlights.
+   * ========================================================================== */
+
+  const CHIBI_ANATOMY_MAP = {
+    nezuko: {
+      eyes: [
+        { u: 0.361, v: 0.530, ru: 0.086, rv: 0.082 },
+        { u: 0.638, v: 0.530, ru: 0.086, rv: 0.082 }
+      ],
+      faces: [{ u: 0.500, v: 0.520, ru: 0.34, rv: 0.30, neckU: 0.50, neckV: 0.78 }]
+    },
+    shinobu: {
+      eyes: [
+        { u: 0.350, v: 0.578, ru: 0.072, rv: 0.098 },
+        { u: 0.586, v: 0.576, ru: 0.076, rv: 0.098 }
+      ],
+      faces: [{ u: 0.472, v: 0.560, ru: 0.31, rv: 0.32, neckU: 0.48, neckV: 0.79 }]
+    },
+    mitsuri: {
+      eyes: [
+        { u: 0.334, v: 0.419, ru: 0.096, rv: 0.068 },
+        { u: 0.662, v: 0.419, ru: 0.096, rv: 0.068 }
+      ],
+      faces: [{ u: 0.498, v: 0.425, ru: 0.34, rv: 0.27, neckU: 0.50, neckV: 0.68 }],
+      hairSwayBoost: 1.35
+    },
+    giyu: {
+      eyes: [
+        { u: 0.320, v: 0.466, ru: 0.085, rv: 0.064 },
+        { u: 0.589, v: 0.466, ru: 0.085, rv: 0.064 }
+      ],
+      faces: [{ u: 0.458, v: 0.465, ru: 0.32, rv: 0.28, neckU: 0.48, neckV: 0.72 }]
+    },
+    rengoku: {
+      eyes: [
+        { u: 0.374, v: 0.443, ru: 0.084, rv: 0.074 },
+        { u: 0.624, v: 0.443, ru: 0.084, rv: 0.074 }
+      ],
+      faces: [{ u: 0.500, v: 0.450, ru: 0.33, rv: 0.29, neckU: 0.50, neckV: 0.73 }],
+      hairSwayBoost: 1.2
+    },
+    uzui: {
+      eyes: [
+        { u: 0.344, v: 0.490, ru: 0.090, rv: 0.072 },
+        { u: 0.634, v: 0.494, ru: 0.090, rv: 0.072 }
+      ],
+      faces: [{ u: 0.492, v: 0.485, ru: 0.33, rv: 0.29, neckU: 0.50, neckV: 0.74 }],
+      hairSwayBoost: 1.25
+    },
+    muichiro: {
+      eyes: [
+        { u: 0.345, v: 0.446, ru: 0.082, rv: 0.068 },
+        { u: 0.614, v: 0.448, ru: 0.084, rv: 0.068 }
+      ],
+      faces: [{ u: 0.482, v: 0.455, ru: 0.32, rv: 0.28, neckU: 0.49, neckV: 0.71 }],
+      hairSwayBoost: 1.3
+    },
+    obanai: {
+      eyes: [
+        { u: 0.347, v: 0.522, ru: 0.090, rv: 0.068 },
+        { u: 0.641, v: 0.522, ru: 0.090, rv: 0.068 }
+      ],
+      faces: [{ u: 0.494, v: 0.520, ru: 0.33, rv: 0.29, neckU: 0.50, neckV: 0.76 }],
+      hairSwayBoost: 1.18
+    },
+    sanemi: {
+      eyes: [
+        { u: 0.341, v: 0.502, ru: 0.094, rv: 0.064 },
+        { u: 0.660, v: 0.500, ru: 0.094, rv: 0.064 }
+      ],
+      faces: [{ u: 0.500, v: 0.495, ru: 0.34, rv: 0.27, neckU: 0.50, neckV: 0.73 }]
+    },
+    gyomei: {
+      blindEyes: true,
+      eyes: [
+        { u: 0.398, v: 0.328, ru: 0.068, rv: 0.050 },
+        { u: 0.597, v: 0.328, ru: 0.068, rv: 0.050 }
+      ],
+      faces: [{ u: 0.498, v: 0.355, ru: 0.29, rv: 0.25, neckU: 0.50, neckV: 0.58 }]
+    },
+    tanjiro: {
+      eyes: [
+        { u: 0.337, v: 0.575, ru: 0.090, rv: 0.070 },
+        { u: 0.660, v: 0.575, ru: 0.092, rv: 0.070 }
+      ],
+      faces: [{ u: 0.498, v: 0.560, ru: 0.34, rv: 0.28, neckU: 0.50, neckV: 0.80 }],
+      hairSwayBoost: 1.22
+    },
+    zenitsu: {
+      eyes: [
+        { u: 0.338, v: 0.663, ru: 0.090, rv: 0.072 },
+        { u: 0.660, v: 0.663, ru: 0.092, rv: 0.072 }
+      ],
+      faces: [{ u: 0.499, v: 0.640, ru: 0.35, rv: 0.27, neckU: 0.50, neckV: 0.84 }],
+      hairSwayBoost: 1.25
+    },
+    inosuke: {
+      maskEyes: true,
+      eyes: [
+        { u: 0.346, v: 0.326, ru: 0.092, rv: 0.092 },
+        { u: 0.653, v: 0.326, ru: 0.092, rv: 0.092 }
+      ],
+      faces: [{ u: 0.500, v: 0.380, ru: 0.36, rv: 0.32, neckU: 0.50, neckV: 0.72 }]
+    },
+    yoriichi: {
+      eyes: [
+        { u: 0.314, v: 0.572, ru: 0.076, rv: 0.058 },
+        { u: 0.565, v: 0.570, ru: 0.082, rv: 0.058 }
+      ],
+      faces: [{ u: 0.445, v: 0.555, ru: 0.31, rv: 0.28, neckU: 0.47, neckV: 0.79 }],
+      hairSwayBoost: 1.28
+    },
+    ubuyashiki: {
+      dualFaces: true,
+      eyes: [
+        { u: 0.186, v: 0.500, ru: 0.058, rv: 0.058, faceIdx: 0 },
+        { u: 0.347, v: 0.500, ru: 0.056, rv: 0.058, faceIdx: 0 },
+        { u: 0.668, v: 0.537, ru: 0.061, rv: 0.061, faceIdx: 1 },
+        { u: 0.835, v: 0.538, ru: 0.061, rv: 0.061, faceIdx: 1 }
+      ],
+      faces: [
+        { u: 0.266, v: 0.495, ru: 0.21, rv: 0.28, neckU: 0.27, neckV: 0.74 },
+        { u: 0.751, v: 0.528, ru: 0.21, rv: 0.28, neckU: 0.75, neckV: 0.76 }
+      ]
+    }
+  };
+  CHIBI_ANATOMY_MAP.moon = CHIBI_ANATOMY_MAP.obanai;
+
+  const L2D_GRID_U = new Float32Array([0, 0.12, 0.22, 0.29, 0.35, 0.42, 0.50, 0.58, 0.65, 0.71, 0.78, 0.88, 1.0]);
+  const L2D_GRID_V = new Float32Array([0, 0.14, 0.25, 0.35, 0.44, 0.52, 0.60, 0.69, 0.78, 0.88, 1.0]);
+  const L2D_COLS = L2D_GRID_U.length;
+  const L2D_ROWS = L2D_GRID_V.length;
+  const L2D_VERT_COUNT = L2D_COLS * L2D_ROWS;
+  const _svgTextCache = new Map();
+
+  function smooth01(e0, e1, x) {
+    const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0 || 1e-6)));
+    return t * t * (3 - 2 * t);
+  }
+
+  function decodeInlineSvgDataUri(uri) {
+    const commaIdx = uri.indexOf(',');
+    if (commaIdx < 0) return '';
+    const metaPart = uri.slice(0, commaIdx).toLowerCase();
+    const bodyPart = uri.slice(commaIdx + 1);
+    try {
+      if (metaPart.includes(';base64')) {
+        return typeof atob === 'function' ? atob(bodyPart) : '';
+      }
+      return decodeURIComponent(bodyPart);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function parseSvgChibiDescriptor(svgText) {
+    if (!svgText || typeof svgText !== 'string') return null;
+    const vbMatch = svgText.match(/viewBox\s*=\s*["']\s*([0-9.+-]+)\s+([0-9.+-]+)\s+([0-9.+-]+)\s+([0-9.+-]+)\s*["']/i);
+    const vbW = vbMatch ? (parseFloat(vbMatch[3]) || 180) : 180;
+    const vbH = vbMatch ? (parseFloat(vbMatch[4]) || 88) : 88;
+
+    const groupIdx = svgText.indexOf('chibi-group');
+    const searchSlice = groupIdx >= 0 ? svgText.slice(groupIdx) : svgText;
+    const imgTagMatch = searchSlice.match(/<image\b([^>]+)>/i);
+    if (!imgTagMatch) return null;
+    const attrs = imgTagMatch[1];
+    const hrefMatch = attrs.match(/(?:xlink:)?href\s*=\s*["']([^"']+)["']/i);
+    if (!hrefMatch || !hrefMatch[1]) return null;
+    const numAttr = (name, fb) => {
+      const m = attrs.match(new RegExp(`\\b${name}\\s*=\\s*["']([0-9.+-]+)["']`, 'i'));
+      return m ? (parseFloat(m[1]) || fb) : fb;
+    };
+    const ix = numAttr('x', 80);
+    const iy = numAttr('y', 5.5);
+    const iw = numAttr('width', 96);
+    const ih = numAttr('height', 75);
+    return {
+      vbW,
+      vbH,
+      ix,
+      iy,
+      iw,
+      ih,
+      hasPedestal: groupIdx >= 0 && ix > 24,
+      imgHref: hrefMatch[1]
+    };
+  }
+
+  function readComposerStickerMetrics(composer, themeCfg) {
+    const cfg = themeCfg && typeof themeCfg === 'object' ? themeCfg : {};
+    const parseNum = (v, fb) => {
+      if (v === undefined || v === null || v === '' || typeof v === 'boolean') return fb;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fb;
+    };
+    const isChibiNpc = cfg.isChibiNpc !== false;
+    let sTop = parseNum(cfg.stickerTop, -56);
+    let sRight = isChibiNpc ? parseNum(cfg.stickerRight, 10) : 16;
+    let sW = parseNum(cfg.stickerW, 136);
+    let sH = parseNum(cfg.stickerH, 64);
+    if (!isChibiNpc && cfg.isOrnament) {
+      sW += 8;
+      sH += 2;
+    }
+    if (composer && typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+      try {
+        const cs = window.getComputedStyle(composer, '::before');
+        if (cs && cs.display !== 'none') {
+          const cw = parseFloat(cs.width);
+          const ch = parseFloat(cs.height);
+          const ct = parseFloat(cs.top);
+          const cr = parseFloat(cs.right);
+          if (cw > 24 && ch > 16) {
+            sW = cw;
+            sH = ch;
+          }
+          if (Number.isFinite(ct)) sTop = ct;
+          if (Number.isFinite(cr)) sRight = cr;
+        }
+      } catch (_) {}
+    }
+    return { sTop, sRight, sW, sH };
+  }
+
+  function createLive2dMeshRig(charId, themeCfg, meta, onReady) {
+    const canonicalChar = (CHAR_META[charId] && CHAR_META[charId].charId) || charId || 'shinobu';
+    const anatomy = CHIBI_ANATOMY_MAP[canonicalChar] || CHIBI_ANATOMY_MAP.shinobu;
+    const dstX = new Float32Array(L2D_VERT_COUNT);
+    const dstY = new Float32Array(L2D_VERT_COUNT);
+    const activeCells = new Uint8Array((L2D_COLS - 1) * (L2D_ROWS - 1));
+    activeCells.fill(1);
+
+    const rig = {
+      ready: false,
+      disposed: false,
+      img: null,
+      imgW: 240,
+      imgH: 240,
+      svgDesc: null,
+      isDirectRaster: false,
+      clipRightPx: 0,
+      lastHeadTopX: 128,
+      lastHeadTopY: 24,
+      eyeScreenPts: anatomy.eyes.map(() => ({ x: 0, y: 0, r: 6 }))
+    };
+
+    function populateNonEmptyCells(imgEl) {
+      if (typeof document === 'undefined') return;
+      try {
+        const probeCv = document.createElement('canvas');
+        const pw = Math.max(1, imgEl.naturalWidth || imgEl.width || 240);
+        const ph = Math.max(1, imgEl.naturalHeight || imgEl.height || 240);
+        probeCv.width = pw;
+        probeCv.height = ph;
+        const pCtx = probeCv.getContext('2d');
+        if (!pCtx) return;
+        pCtx.drawImage(imgEl, 0, 0, pw, ph);
+        const data = pCtx.getImageData(0, 0, pw, ph).data;
+        for (let r = 0; r < L2D_ROWS - 1; r++) {
+          const y0 = Math.max(0, Math.floor(L2D_GRID_V[r] * ph) - 1);
+          const y1 = Math.min(ph - 1, Math.ceil(L2D_GRID_V[r + 1] * ph) + 1);
+          for (let c = 0; c < L2D_COLS - 1; c++) {
+            const x0 = Math.max(0, Math.floor(L2D_GRID_U[c] * pw) - 1);
+            const x1 = Math.min(pw - 1, Math.ceil(L2D_GRID_U[c + 1] * pw) + 1);
+            let hasPixel = 0;
+            for (let py = y0; py <= y1 && !hasPixel; py += 2) {
+              const rowBase = py * pw;
+              for (let px = x0; px <= x1; px += 2) {
+                if (data[(rowBase + px) * 4 + 3] > 6) {
+                  hasPixel = 1;
+                  break;
+                }
+              }
+            }
+            activeCells[r * (L2D_COLS - 1) + c] = hasPixel;
+          }
+        }
+      } catch (_) {
+        activeCells.fill(1);
+      }
+    }
+
+    function finalizeImageLoad(imgEl, svgDesc, isDirectRaster) {
+      if (rig.disposed) return;
+      const nw = imgEl.naturalWidth || imgEl.width || 0;
+      const nh = imgEl.naturalHeight || imgEl.height || 0;
+      if (!(nw > 8 && nh > 8)) return;
+      rig.img = imgEl;
+      rig.imgW = nw;
+      rig.imgH = nh;
+      rig.svgDesc = svgDesc;
+      rig.isDirectRaster = Boolean(isDirectRaster);
+      populateNonEmptyCells(imgEl);
+      rig.ready = true;
+      if (typeof onReady === 'function') {
+        try { onReady(rig); } catch (_) {}
+      }
+    }
+
+    function mountImageFromHref(href, svgDesc, isDirectRaster) {
+      if (!href || typeof Image !== 'function' || rig.disposed) return;
+      const img = new Image();
+      if (!href.startsWith('data:')) {
+        img.crossOrigin = 'anonymous';
+      }
+      img.onload = () => finalizeImageLoad(img, svgDesc, isDirectRaster);
+      img.src = href;
+      if (img.complete && (img.naturalWidth || 0) > 8) {
+        finalizeImageLoad(img, svgDesc, isDirectRaster);
+      }
+    }
+
+    const rawSticker = themeCfg && themeCfg.sticker ? String(themeCfg.sticker).trim() : '';
+    const stickerUrl = safeResolveAsset(rawSticker);
+    if (stickerUrl && typeof Image === 'function') {
+      const lowerUrl = stickerUrl.toLowerCase();
+      if (lowerUrl.startsWith('data:image/svg+xml')) {
+        const svgText = decodeInlineSvgDataUri(stickerUrl);
+        const desc = parseSvgChibiDescriptor(svgText);
+        if (desc && desc.imgHref) {
+          mountImageFromHref(desc.imgHref, desc, false);
+        }
+      } else if (/\.svg(?:$|\?)/i.test(lowerUrl)) {
+        if (_svgTextCache.has(stickerUrl)) {
+          const desc = parseSvgChibiDescriptor(_svgTextCache.get(stickerUrl));
+          if (desc && desc.imgHref) mountImageFromHref(desc.imgHref, desc, false);
+        } else if (typeof fetch === 'function' && (/^https?:\/\/127\.0\.0\.1:/i.test(stickerUrl) || /^https?:\/\/localhost:/i.test(stickerUrl) || stickerUrl.startsWith('./') || stickerUrl.startsWith('/'))) {
+          fetch(stickerUrl, { mode: 'cors', credentials: 'omit' })
+            .then((r) => (r && r.ok ? r.text() : ''))
+            .then((txt) => {
+              if (!txt || rig.disposed) return;
+              if (_svgTextCache.size >= 24) {
+                const oldest = _svgTextCache.keys().next().value;
+                _svgTextCache.delete(oldest);
+              }
+              _svgTextCache.set(stickerUrl, txt);
+              const desc = parseSvgChibiDescriptor(txt);
+              if (desc && desc.imgHref) mountImageFromHref(desc.imgHref, desc, false);
+            })
+            .catch(() => {});
+        }
+      } else if (/^(?:data:image\/(?:png|webp|jpeg|gif)|https?:\/\/127\.0\.0\.1:)/i.test(lowerUrl) || /\.(?:png|webp|jpg|jpeg)(?:$|\?)/i.test(lowerUrl)) {
+        mountImageFromHref(stickerUrl, null, true);
+      }
+    }
+
+    function computePlacement(composer) {
+      const { sTop, sRight, sW, sH } = readComposerStickerMetrics(composer, themeCfg);
+      // Overlay canvas sits at top: LIVE2D_TOP (-106), right: LIVE2D_RIGHT (-10), width: LIVE2D_W (188)
+      // Left edge of overlay in composer coords = W_comp + LIVE2D_RIGHT - LIVE2D_W = W_comp - 178
+      // Left edge of ::before in composer coords = W_comp - sRight - sW
+      const relBeforeX = (LIVE2D_W - LIVE2D_RIGHT) - sRight - sW;
+      const relBeforeY = sTop - LIVE2D_TOP;
+
+      if (rig.svgDesc) {
+        const d = rig.svgDesc;
+        const svgScale = Math.min(sW / d.vbW, sH / d.vbH);
+        const svgDrawW = d.vbW * svgScale;
+        const svgDrawH = d.vbH * svgScale;
+        const svgX = (sW - svgDrawW) * 0.5;
+        const svgY = sH - svgDrawH;
+        const imgScale = Math.min(d.iw / rig.imgW, d.ih / rig.imgH);
+        const chibiSvgW = rig.imgW * imgScale;
+        const chibiSvgH = rig.imgH * imgScale;
+        const chibiSvgX = d.ix + (d.iw - chibiSvgW) * 0.5;
+        const chibiSvgY = d.iy + (d.ih - chibiSvgH);
+        const keepPedestalW = d.hasPedestal ? Math.max(0, svgX + (d.ix - 2.0) * svgScale) : 0;
+        rig.clipRightPx = Math.max(0, sW - keepPedestalW);
+        return {
+          drawX: relBeforeX + svgX + chibiSvgX * svgScale,
+          drawY: relBeforeY + svgY + chibiSvgY * svgScale,
+          drawW: chibiSvgW * svgScale,
+          drawH: chibiSvgH * svgScale
+        };
+      }
+
+      const rScale = Math.min(sW / rig.imgW, sH / rig.imgH);
+      const rW = rig.imgW * rScale;
+      const rH = rig.imgH * rScale;
+      rig.clipRightPx = sW + 8;
+      return {
+        drawX: relBeforeX + (sW - rW) * 0.5,
+        drawY: relBeforeY + (sH - rH),
+        drawW: rW,
+        drawH: rH
+      };
+    }
+
+    function deformPoint(u, v, drawX, drawY, drawW, drawH, p) {
+      // Pin resting hands cleanly onto the chat frame ledge (v -> 1.0 => bodyFree = 0)
+      const bodyFree = 1 - smooth01(0.84, 0.985, v);
+      const headWeight = smooth01(0.81, 0.60, v) * bodyFree;
+
+      const faces = anatomy.faces;
+      let face = faces[0];
+      if (faces.length > 1) {
+        face = u < 0.5 ? faces[0] : faces[1];
+      }
+
+      // 1. Organic chest breathing & reactive bounce (preserving pinned hands!)
+      let x = drawX + u * drawW;
+      let y = drawY + v * drawH;
+
+      const breathLift = -p.breath * 1.35 * bodyFree;
+      const breathExpand = (u - face.u) * p.breath * 1.1 * bodyFree * (1 - headWeight * 0.4);
+      x += breathExpand + (u - face.u) * (p.squashX - 1) * drawW * bodyFree;
+      y += breathLift + p.bounceY * bodyFree - (1 - v) * (p.stretchY - 1) * drawH * bodyFree;
+
+      // 2. Upper-body lean + Neck-pivoted Head Roll (tilt)
+      const bodyLeanX = p.headLookX * (drawW * (anatomy.dualFaces ? 0.036 : 0.058)) * bodyFree * (1 - v * 0.35);
+      x += bodyLeanX;
+
+      const rollAngle = (p.headLookX * 0.092 + p.moodRoll) * headWeight;
+      if (Math.abs(rollAngle) > 1e-4) {
+        const pivX = drawX + face.neckU * drawW + bodyLeanX * 0.65;
+        const pivY = drawY + face.neckV * drawH;
+        const rx = x - pivX;
+        const ry = y - pivY;
+        const cs = Math.cos(rollAngle);
+        const sn = Math.sin(rollAngle);
+        x = pivX + rx * cs - ry * sn;
+        y = pivY + rx * sn + ry * cs;
+      }
+
+      // 3. True 2.5D Spherical Face Foreshortening (Live2D ParamAngleX / ParamAngleY)
+      const fdu = (u - face.u) / (face.ru || 0.33);
+      const fdv = (v - face.v) / (face.rv || 0.29);
+      const rSq = fdu * fdu + fdv * fdv;
+      const zFront = rSq < 1 ? Math.pow(1 - rSq, 0.72) : 0;
+      const yawScale = anatomy.dualFaces ? 0.62 : 1.0;
+
+      // Center face shifts strongly toward cursor while back skull/hair shifts less -> 3D head rotation illusion!
+      x += p.headLookX * drawW * (0.042 + 0.122 * zFront) * yawScale * headWeight;
+      y += p.headLookY * drawH * (0.030 + 0.095 * zFront) * headWeight;
+      if (zFront <= 0.01 && v < face.v) {
+        // Subtle counter-parallax on back crown when nodding up/down
+        y -= p.headLookY * drawH * 0.024 * headWeight;
+      }
+
+      // 4. Secondary Spring-Damper Physics on Side Hair / Braids / Hanafuda Earrings
+      const sideDist = Math.abs(u - face.u);
+      if (sideDist > face.ru * 0.55 && v > 0.12 && v < 0.90) {
+        const wHair = smooth01(face.ru * 0.55, face.ru * 1.12, sideDist) * smooth01(0.10, 0.42, v) * bodyFree;
+        const boost = anatomy.hairSwayBoost || 1.0;
+        x += p.hairSwing * drawW * 0.082 * boost * wHair;
+        y += Math.abs(p.hairSwing) * drawH * 0.016 * wHair;
+      }
+
+      // 5. Local Eye-Socket Iris Gaze Shift + Biomimetic Eyelid Blink
+      const eyes = anatomy.eyes;
+      for (let ei = 0; ei < eyes.length; ei++) {
+        const eye = eyes[ei];
+        const edu = (u - eye.u) / (eye.ru * 1.24);
+        const edv = (v - eye.v) / (eye.rv * 1.28);
+        const eDistSq = edu * edu + edv * edv;
+        if (eDistSq < 1) {
+          const wIris = (1 - eDistSq) * (1 - eDistSq);
+          const irisGain = anatomy.blindEyes ? 0.22 : 0.62;
+          x += p.eyeLookX * (eye.ru * drawW * irisGain) * wIris;
+          y += p.eyeLookY * (eye.rv * drawH * (irisGain * 0.92)) * wIris;
+        }
+        if (p.blinkAmt > 0.01 && !anatomy.maskEyes) {
+          const bdu = (u - eye.u) / (eye.ru * 1.38);
+          const bdv = (v - eye.v) / (eye.rv * 1.48);
+          const bSq = bdu * bdu + bdv * bdv;
+          if (bSq < 1) {
+            const wLid = Math.pow(1 - bSq, 1.45);
+            const closedV = eye.v + eye.rv * 0.28;
+            y += (closedV - v) * drawH * p.blinkAmt * 0.92 * wLid;
+          }
+        }
+      }
+
+      return [x, y];
+    }
+
+    function drawTrianglePiece(ctx, dpr, x0, y0, x1, y1, x2, y2, u0, v0, u1, v1, u2, v2, sx, sy, sw, sh) {
+      // Expand clip triangle outward by 0.58px from centroid to eliminate 100% of anti-aliasing seams!
+      const cx = (x0 + x1 + x2) * 0.333333;
+      const cy = (y0 + y1 + y2) * 0.333333;
+      const expand = (px, py) => {
+        const dx = px - cx;
+        const dy = py - cy;
+        const len = Math.hypot(dx, dy) || 1;
+        return [px + (dx / len) * 0.58, py + (dy / len) * 0.58];
+      };
+      const [cx0, cy0] = expand(x0, y0);
+      const [cx1, cy1] = expand(x1, y1);
+      const [cx2, cy2] = expand(x2, y2);
+
+      const det = (u1 - u0) * (v2 - v0) - (u2 - u0) * (v1 - v0);
+      if (Math.abs(det) < 1e-5) return;
+      const invDet = 1 / det;
+      const a = ((x1 - x0) * (v2 - v0) - (x2 - x0) * (v1 - v0)) * invDet;
+      const b = ((y1 - y0) * (v2 - v0) - (y2 - y0) * (v1 - v0)) * invDet;
+      const c = ((x2 - x0) * (u1 - u0) - (x1 - x0) * (u2 - u0)) * invDet;
+      const d = ((y2 - y0) * (u1 - u0) - (y1 - y0) * (u2 - u0)) * invDet;
+      const e = x0 - a * u0 - c * v0;
+      const f = y0 - b * u0 - d * v0;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(cx0, cy0);
+      ctx.lineTo(cx1, cy1);
+      ctx.lineTo(cx2, cy2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.setTransform(dpr * a, dpr * b, dpr * c, dpr * d, dpr * e, dpr * f);
+      ctx.drawImage(rig.img, sx, sy, sw, sh, sx, sy, sw, sh);
+      ctx.restore();
+    }
+
+    function renderCharacterMesh(ctx, dpr, composer, p) {
+      if (!rig.ready || !rig.img || !composer) return false;
+      const { drawX, drawY, drawW, drawH } = computePlacement(composer);
+      if (!(drawW > 12 && drawH > 12)) return false;
+
+      for (let r = 0; r < L2D_ROWS; r++) {
+        const v = L2D_GRID_V[r];
+        const rowOff = r * L2D_COLS;
+        for (let c = 0; c < L2D_COLS; c++) {
+          const pt = deformPoint(L2D_GRID_U[c], v, drawX, drawY, drawW, drawH, p);
+          dstX[rowOff + c] = pt[0];
+          dstY[rowOff + c] = pt[1];
+        }
+      }
+
+      // Track live crown position for foreground thought/combo emote anchor
+      const topFace = anatomy.faces[anatomy.faces.length - 1];
+      const crownPt = deformPoint(topFace.u + 0.14, 0.08, drawX, drawY, drawW, drawH, p);
+      rig.lastHeadTopX = crownPt[0];
+      rig.lastHeadTopY = crownPt[1];
+
+      if (p.glowRadius > 0.5) {
+        ctx.save();
+        const gCx = drawX + drawW * 0.5 + p.headLookX * 4;
+        const gCy = drawY + drawH * 0.52 + p.headLookY * 2;
+        const gR = Math.max(drawW, drawH) * 0.56;
+        const grad = ctx.createRadialGradient(gCx, gCy, gR * 0.18, gCx, gCy, gR);
+        grad.addColorStop(0, p.glowColor);
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(gCx, gCy, gR, 0, TWO_PI);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      const iw = rig.imgW;
+      const ih = rig.imgH;
+      for (let r = 0; r < L2D_ROWS - 1; r++) {
+        const v0 = L2D_GRID_V[r] * ih;
+        const v1 = L2D_GRID_V[r + 1] * ih;
+        const sy = Math.max(0, Math.floor(v0) - 1);
+        const sh = Math.min(ih - sy, Math.ceil(v1 - sy) + 2);
+        const r0 = r * L2D_COLS;
+        const r1 = (r + 1) * L2D_COLS;
+        const cellRow = r * (L2D_COLS - 1);
+
+        for (let c = 0; c < L2D_COLS - 1; c++) {
+          if (!activeCells[cellRow + c]) continue;
+          const u0 = L2D_GRID_U[c] * iw;
+          const u1 = L2D_GRID_U[c + 1] * iw;
+          const sx = Math.max(0, Math.floor(u0) - 1);
+          const sw = Math.min(iw - sx, Math.ceil(u1 - sx) + 2);
+
+          const i00 = r0 + c;
+          const i10 = i00 + 1;
+          const i01 = r1 + c;
+          const i11 = i01 + 1;
+
+          drawTrianglePiece(
+            ctx, dpr,
+            dstX[i00], dstY[i00], dstX[i10], dstY[i10], dstX[i01], dstY[i01],
+            u0, v0, u1, v0, u0, v1,
+            sx, sy, sw, sh
+          );
+          drawTrianglePiece(
+            ctx, dpr,
+            dstX[i11], dstY[i11], dstX[i01], dstY[i01], dstX[i10], dstY[i10],
+            u1, v1, u0, v1, u1, v0,
+            sx, sy, sw, sh
+          );
+        }
+      }
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Specular crystalline catchlights & smooth blink lash accent on eyes
+      const eyes = anatomy.eyes;
+      for (let ei = 0; ei < eyes.length; ei++) {
+        const eye = eyes[ei];
+        const ePt = deformPoint(eye.u, eye.v, drawX, drawY, drawW, drawH, p);
+        const er = Math.max(2.4, eye.ru * drawW * 0.72);
+        rig.eyeScreenPts[ei].x = ePt[0];
+        rig.eyeScreenPts[ei].y = ePt[1];
+        rig.eyeScreenPts[ei].r = er;
+
+        if (p.blinkAmt > 0.62 && !anatomy.maskEyes) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(20, 14, 28, 0.76)';
+          ctx.lineWidth = 1.25;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(ePt[0] - er * 0.85, ePt[1] + 0.3);
+          ctx.quadraticCurveTo(ePt[0], ePt[1] + er * 0.36, ePt[0] + er * 0.85, ePt[1] + 0.3);
+          ctx.stroke();
+          ctx.restore();
+        } else if (!anatomy.blindEyes && p.blinkAmt < 0.45) {
+          const gx = ePt[0] + p.eyeLookX * er * 0.46 - er * 0.22;
+          const gy = ePt[1] + p.eyeLookY * er * 0.42 - er * 0.26;
+          const sparkAlpha = 0.56 + p.proximity * 0.28;
+          ctx.save();
+          ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(0.92, sparkAlpha).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(gx, gy, Math.max(0.95, er * 0.24), 0, TWO_PI);
+          ctx.fill();
+          // Secondary lower iris gleam tinted with character's Breathing color
+          ctx.fillStyle = `rgba(${meta.rgb2}, ${(0.28 + p.proximity * 0.22).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(
+            ePt[0] + p.eyeLookX * er * 0.36 + er * 0.20,
+            ePt[1] + p.eyeLookY * er * 0.34 + er * 0.26,
+            Math.max(0.65, er * 0.15),
+            0,
+            TWO_PI
+          );
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      return true;
+    }
+
+    function dispose() {
+      rig.disposed = true;
+      rig.ready = false;
+      rig.img = null;
+    }
+
+    return {
+      rig,
+      renderCharacterMesh,
+      computePlacement,
+      dispose
+    };
+  }
+
   function createLive2dForegroundRenderer(auraMode, meta) {
     const fgParticles = [];
     for (let i = 0; i < 9; i++) {
@@ -1518,23 +2172,22 @@
       });
     }
 
-    function drawLive2dEmote(ctx, t, mood, typingCombo, lookX, lookY) {
+    function drawLive2dEmote(ctx, t, mood, typingCombo, lookX, lookY, anchorX, anchorY) {
       if (!mood || mood === 'idle') return;
-      // Đặt ngay phía trên-phải chỏm đầu Chibi (x ~ 118, y ~ 17) để không bao giờ bị hộp thoại NPC che khuất
-      const ex = 118 + lookX * 3.2;
-      const ey = 17 + lookY * 1.6 + Math.sin(t * 0.0045) * 1.8;
+      const baseEx = Number.isFinite(anchorX) ? anchorX + 10 : (136 + lookX * 4.2);
+      const baseEy = Number.isFinite(anchorY) ? Math.max(14, anchorY - 8) : (22 + lookY * 2.0);
+      const ex = Math.max(24, Math.min(LIVE2D_W - 26, baseEx));
+      const ey = baseEy + Math.sin(t * 0.0045) * 1.8;
 
       if (mood === 'thinking') {
         ctx.save();
         ctx.translate(ex, ey);
-        // Hai chấm dẫn suy nghĩ từ chỏm tóc Chibi đi lên
         ctx.fillStyle = `rgba(${meta.rgb1}, 0.85)`;
         ctx.beginPath();
         ctx.arc(-6, 15, 2.1, 0, TWO_PI);
         ctx.arc(-3, 11, 2.9, 0, TWO_PI);
         ctx.fill();
 
-        // Bong bóng suy nghĩ kính mờ viền màu Hơi Thở
         ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
         ctx.strokeStyle = `rgba(${meta.rgb1}, 0.90)`;
         ctx.lineWidth = 1.35;
@@ -1621,8 +2274,20 @@
       }
     }
 
-    function render(ctx, now, mood, typingCombo, lookX, lookY, surgeProgress) {
+    function render(ctx, now, mood, typingCombo, lookX, lookY, surgeProgress, meshCtrl, dpr, composer, meshPose) {
+      ctx.setTransform(dpr || 1, 0, 0, dpr || 1, 0, 0);
       ctx.clearRect(0, 0, LIVE2D_W, LIVE2D_H);
+      let meshDrawn = false;
+      let anchorX = NaN;
+      let anchorY = NaN;
+      if (meshCtrl && composer && meshPose) {
+        meshDrawn = meshCtrl.renderCharacterMesh(ctx, dpr || 1, composer, meshPose);
+        if (meshDrawn) {
+          anchorX = meshCtrl.rig.lastHeadTopX;
+          anchorY = meshCtrl.rig.lastHeadTopY;
+        }
+      }
+
       const t = now;
       const energy = (mood === 'victory' || mood === 'happy') ? 1.45
         : (mood === 'combo' || mood === 'typing' || mood === 'thinking') ? 1.22
@@ -1632,9 +2297,9 @@
       for (let i = 0; i < count; i++) {
         const p = fgParticles[i];
         const cyc = ((t * 0.00034 * p.speed * energy + p.seedY) % 1);
-        const py = LIVE2D_H - 8 - cyc * (LIVE2D_H - 18);
+        const py = LIVE2D_H - 12 - cyc * (LIVE2D_H - 24);
         const sway = Math.sin(t * 0.0022 * p.speed + p.phase) * (7 + (i % 3) * 2.5);
-        const px = 44 + p.seedX * 106 + sway + lookX * 3.6;
+        const px = 58 + p.seedX * 114 + sway + lookX * 4.5;
         const fade = Math.sin(cyc * Math.PI);
         const alpha = Math.max(0, Math.min(0.95, fade * 0.76 * energy));
         if (alpha <= 0.02) continue;
@@ -1676,7 +2341,8 @@
         }
       }
 
-      drawLive2dEmote(ctx, t, mood, typingCombo, lookX, lookY);
+      drawLive2dEmote(ctx, t, mood, typingCombo, lookX, lookY, anchorX, anchorY);
+      return meshDrawn;
     }
 
     return { render };
@@ -1747,24 +2413,34 @@
         cursor: grabbing !important;
       }
 
-      /* Live2D-lite 2D Chibi Physics & Foreground Emote Layer */
+      /* Live2D 2.5D Articulated Chibi Mesh & Foreground Emote Layer */
       .agy-chibi-live2d-overlay {
         pointer-events: none !important;
         position: absolute !important;
-        top: -94px !important;
-        right: -4px !important;
-        width: 162px !important;
-        height: 108px !important;
+        top: -106px !important;
+        right: -10px !important;
+        width: 188px !important;
+        height: 124px !important;
         z-index: 31 !important;
         display: block !important;
         transition: opacity 0.16s ease;
       }
       .surface-composer[data-chibi-out-on-stage="1"] > .agy-chibi-live2d-overlay,
-      .surface-composer[data-chibi-3d-active="1"] > .agy-chibi-live2d-overlay {
+      .surface-composer[data-chibi-3d-active="1"] > .agy-chibi-live2d-overlay,
+      .surface-composer[data-chibi-landing="1"] > .agy-chibi-live2d-overlay,
+      .surface-composer[data-chibi-attack="1"] > .agy-chibi-live2d-overlay {
         opacity: 0 !important;
       }
-      .surface-composer[data-chibi-live2d="1"]:not([data-chibi-3d-active="1"]):not([data-chibi-out-on-stage="1"]):not([data-chibi-landing="1"]):not([data-chibi-attack="1"]):not([data-chibi-bounce="1"])::before {
-        transform-origin: 58% 95% !important;
+      /* When 2.5D Mesh Rig is active: keep left ornament pedestal rock-solid while hiding static Chibi sprite */
+      .surface-composer[data-chibi-live2d="1"][data-chibi-live2d-mesh="1"]:not([data-chibi-3d-active="1"]):not([data-chibi-out-on-stage="1"]):not([data-chibi-landing="1"]):not([data-chibi-attack="1"]):not([data-chibi-bounce="1"])::before {
+        transition: none !important;
+        transform: none !important;
+        filter: none !important;
+        clip-path: inset(-16px var(--agy-l2d-clip-right, 100%) -16px -16px) !important;
+      }
+      /* Instant CSS parallax fallback before mesh bitmap resolves or in headless VM */
+      .surface-composer[data-chibi-live2d="1"]:not([data-chibi-live2d-mesh="1"]):not([data-chibi-3d-active="1"]):not([data-chibi-out-on-stage="1"]):not([data-chibi-landing="1"]):not([data-chibi-attack="1"]):not([data-chibi-bounce="1"])::before {
+        transform-origin: 72% 94% !important;
         transition: none !important;
         will-change: transform, filter;
         transform: translate3d(var(--agy-l2d-tx, 0px), var(--agy-l2d-ty, 0px), 0) rotate(var(--agy-l2d-rot, 0deg)) scale(var(--agy-l2d-sx, 1), var(--agy-l2d-sy, 1)) !important;
@@ -2057,16 +2733,30 @@
     chibi3dRectCacheAt: 0,
     chibi3dRectCache: null,
 
-    // Live2D-lite 2D Chibi companion state
+    // Live2D 2.5D Articulated Chibi companion state
     live2dCanvas: null,
     live2dCtx: null,
     live2dRenderer: null,
+    live2dMeshCtrl: null,
+    live2dMeshActive: false,
     live2dActive: false,
     live2dDpr: 1,
+    l2dEyeLookX: 0,
+    l2dEyeLookY: 0,
     l2dLookX: 0,
     l2dLookY: 0,
     l2dTargetLookX: 0,
     l2dTargetLookY: 0,
+    l2dHairSwing: 0,
+    l2dHairVel: 0,
+    l2dPrevLookX: 0,
+    l2dBlinkAmt: 0,
+    l2dBlinkStartAt: 0,
+    l2dBlinkDuration: 155,
+    l2dNextBlinkAt: 0,
+    l2dDoubleBlinkPending: false,
+    l2dLastPointerAt: 0,
+    l2dPointerProximity: 0,
     l2dTypingImpulse: 0,
     l2dTypingCombo: 0,
     l2dLastKeyAt: 0,
@@ -2241,9 +2931,11 @@
   function clearComposerLive2dVars(comp) {
     if (!comp) return;
     delete comp.dataset.chibiLive2d;
+    delete comp.dataset.chibiLive2dMesh;
     delete comp.dataset.chibiLive2dMood;
     if (typeof comp.removeAttribute === 'function') {
       comp.removeAttribute('data-chibi-live2d');
+      comp.removeAttribute('data-chibi-live2d-mesh');
       comp.removeAttribute('data-chibi-live2d-mood');
     }
     if (comp.style && typeof comp.style.removeProperty === 'function') {
@@ -2254,18 +2946,35 @@
       comp.style.removeProperty('--agy-l2d-sy');
       comp.style.removeProperty('--agy-l2d-glow-r');
       comp.style.removeProperty('--agy-l2d-glow-c');
+      comp.style.removeProperty('--agy-l2d-clip-right');
     }
   }
 
   function updateAndRenderLive2d(now, dt, surgeProgress, isStatic) {
     if (!state.auraComposer) return;
-    if (!state.live2dActive || state.chibi3dActive || isStatic) {
+    if (!state.live2dActive || state.chibi3dActive) {
       if (state.auraComposer.dataset && state.auraComposer.dataset.chibiLive2d) {
         clearComposerLive2dVars(state.auraComposer);
       }
       if (state.live2dCtx) {
+        state.live2dCtx.setTransform(state.live2dDpr || 1, 0, 0, state.live2dDpr || 1, 0, 0);
         state.live2dCtx.clearRect(0, 0, LIVE2D_W, LIVE2D_H);
       }
+      state.live2dMeshActive = false;
+      state.l2dEffectiveMood = 'idle';
+      return;
+    }
+
+    if (isStatic) {
+      // When paused/reduced-motion: release mesh clip so native sharp static SVG renders at 0% GPU
+      if (state.auraComposer.dataset && state.auraComposer.dataset.chibiLive2d) {
+        clearComposerLive2dVars(state.auraComposer);
+      }
+      if (state.live2dCtx) {
+        state.live2dCtx.setTransform(state.live2dDpr || 1, 0, 0, state.live2dDpr || 1, 0, 0);
+        state.live2dCtx.clearRect(0, 0, LIVE2D_W, LIVE2D_H);
+      }
+      state.live2dMeshActive = false;
       state.l2dEffectiveMood = 'idle';
       return;
     }
@@ -2281,11 +2990,9 @@
     if (state.l2dTypingImpulse < 0.01) state.l2dTypingImpulse = 0;
 
     state.l2dLastUpdateAt = state.l2dLastUpdateAt || now;
-    const elapsedMs = Math.max(4, Math.min(250, now - state.l2dLastUpdateAt));
+    const elapsedMs = Math.max(4, Math.min(200, now - state.l2dLastUpdateAt));
     state.l2dLastUpdateAt = now;
-    const lerpRate = 1 - Math.exp(-elapsedMs / 85);
-    state.l2dLookX += (state.l2dTargetLookX - state.l2dLookX) * lerpRate;
-    state.l2dLookY += (state.l2dTargetLookY - state.l2dLookY) * lerpRate;
+    const dtSec = elapsedMs * 0.001;
 
     let mood = 'idle';
     if (now < state.l2dReactionUntil && state.l2dReaction !== 'idle') {
@@ -2299,46 +3006,130 @@
     }
     state.l2dEffectiveMood = mood;
 
+    // Mouse gaze ALWAYS has absolute priority whenever cursor moved recently (< 2600ms).
+    // Only when cursor has been completely idle during AI thinking does Chibi glance thoughtfully upward!
+    const pointerIdleMs = now - (state.l2dLastPointerAt || 0);
+    let targetX = state.l2dTargetLookX;
+    let targetY = state.l2dTargetLookY;
+    if (mood === 'thinking' && pointerIdleMs > 2600 && state.l2dLastPointerAt > 0) {
+      targetX = state.l2dTargetLookX * 0.45 + Math.sin(now * 0.0014) * 0.22;
+      targetY = -0.36 + Math.sin(now * 0.0022) * 0.08;
+    } else if (state.l2dPointerOutside && pointerIdleMs > 5200) {
+      const relax = Math.max(0.28, Math.exp(-(pointerIdleMs - 5200) / 3600));
+      targetX *= relax;
+      targetY *= relax;
+    }
+
+    // 3-Tier Biomimetic Kinematics:
+    //  1) Eyes saccade rapidly toward cursor (tau = 36ms)
+    //  2) Head follows smoothly with natural mass (tau = 102ms)
+    //  3) Hair & accessories swing via damped harmonic spring
+    const eyeLerp = 1 - Math.exp(-elapsedMs / 36);
+    const headLerp = 1 - Math.exp(-elapsedMs / 102);
+    state.l2dEyeLookX += (targetX - state.l2dEyeLookX) * eyeLerp;
+    state.l2dEyeLookY += (targetY - state.l2dEyeLookY) * eyeLerp;
+
+    const prevHeadX = state.l2dLookX;
+    state.l2dLookX += (targetX - state.l2dLookX) * headLerp;
+    state.l2dLookY += (targetY - state.l2dLookY) * headLerp;
+    const headVelX = (state.l2dLookX - prevHeadX) / Math.max(0.008, dtSec);
+
+    // Damped spring oscillator for hair/braids/earrings
+    const springStep = Math.min(0.032, dtSec);
+    const hairAcc = -140 * state.l2dHairSwing - 13.5 * state.l2dHairVel - headVelX * 0.48;
+    state.l2dHairVel += hairAcc * springStep;
+    state.l2dHairSwing = Math.max(-1.25, Math.min(1.25, state.l2dHairSwing + state.l2dHairVel * springStep));
+
+    // Biomimetic Natural Eyelid Blink + Occasional Double-Blink
+    if (!state.l2dNextBlinkAt) {
+      state.l2dNextBlinkAt = now + 2200 + ((now * 17) % 2400);
+    }
+    if (state.l2dBlinkStartAt === 0 && now >= state.l2dNextBlinkAt) {
+      state.l2dBlinkStartAt = now;
+      state.l2dBlinkDuration = state.l2dDoubleBlinkPending ? 135 : 158;
+    }
+    if (state.l2dBlinkStartAt > 0) {
+      const bp = (now - state.l2dBlinkStartAt) / state.l2dBlinkDuration;
+      if (bp >= 1) {
+        state.l2dBlinkStartAt = 0;
+        state.l2dBlinkAmt = 0;
+        if (state.l2dDoubleBlinkPending) {
+          state.l2dDoubleBlinkPending = false;
+          state.l2dNextBlinkAt = now + 3400 + ((state.l2dFrameCount * 193) % 2600);
+        } else if ((state.l2dFrameCount % 5) === 0) {
+          state.l2dDoubleBlinkPending = true;
+          state.l2dNextBlinkAt = now + 130;
+        } else {
+          state.l2dNextBlinkAt = now + 3200 + ((state.l2dFrameCount * 157) % 2700);
+        }
+      } else {
+        state.l2dBlinkAmt = Math.sin(bp * Math.PI);
+      }
+    } else {
+      state.l2dBlinkAmt = (mood === 'happy' || mood === 'victory') ? 0.22 : 0;
+    }
+
     const eco = Boolean(state.themeCfg && state.themeCfg.ecoBattery);
-    if (eco && mood === 'idle' && Math.abs(state.l2dTargetLookX - state.l2dLookX) < 0.02 && (state.l2dFrameCount % 2 === 1)) {
+    if (
+      eco &&
+      mood === 'idle' &&
+      state.l2dBlinkAmt === 0 &&
+      Math.abs(targetX - state.l2dLookX) < 0.012 &&
+      Math.abs(targetY - state.l2dLookY) < 0.012 &&
+      (state.l2dFrameCount % 2 === 1)
+    ) {
       return;
     }
 
-    // Organic breathing + mouse parallax + live state reaction choreography
-    const breath = Math.sin(now * 0.00175);
-    let tx = state.l2dLookX * 4.4;
-    let ty = -Math.max(0, breath) * 2.0 + state.l2dLookY * 2.4;
-    let rot = state.l2dLookX * 3.8;
+    // Compute pose parameters for both 2.5D Mesh Rig and CSS fallback diagnostics
+    const breath = Math.sin(now * 0.00205);
+    let tx = state.l2dLookX * 7.2;
+    let ty = -Math.max(0, breath) * 1.8 + state.l2dLookY * 4.2;
+    let rot = state.l2dLookX * 5.2;
     let sx = 1.0 - breath * 0.009;
-    let sy = 1.0 + breath * 0.022;
-    let glowR = 0;
+    let sy = 1.0 + breath * 0.020;
+    let bounceY = 0;
+    let moodRoll = 0;
+    let glowR = state.l2dPointerProximity > 0.2 ? state.l2dPointerProximity * 5.5 : 0;
     const meta = state.auraMeta || CHAR_META.shinobu;
     let glowC = `rgba(${meta.rgb1}, 0.42)`;
 
     if (mood === 'thinking') {
-      rot += Math.sin(now * 0.0032) * 3.1;
-      ty -= 1.2 + Math.sin(now * 0.0064) * 1.1;
-      glowR = 7;
-      glowC = `rgba(${meta.rgb1}, 0.52)`;
+      // Gentle meditative nod that NEVER overrides or fights horizontal cursor gaze!
+      const thinkBob = Math.sin(now * 0.0036);
+      bounceY -= 0.9 + thinkBob * 0.85;
+      ty -= 0.9 + thinkBob * 0.85;
+      if (pointerIdleMs > 1800) {
+        moodRoll = Math.sin(now * 0.0026) * 0.025;
+        rot += moodRoll * 35;
+      }
+      glowR = Math.max(glowR, 7);
+      glowC = `rgba(${meta.rgb1}, 0.50)`;
     } else if (mood === 'typing' || mood === 'combo') {
       const imp = state.l2dTypingImpulse;
-      ty -= imp * 5.2;
-      sy += imp * 0.046;
-      sx -= imp * 0.024;
-      rot += Math.sin(now * 0.015) * (1.4 + Math.min(2.4, state.l2dTypingCombo * 0.2));
-      glowR = 5 + Math.min(8, state.l2dTypingCombo * 0.7);
+      bounceY -= imp * 4.6;
+      ty -= imp * 4.6;
+      sy += imp * 0.042;
+      sx -= imp * 0.022;
+      moodRoll = Math.sin(now * 0.014) * 0.024;
+      rot += moodRoll * 40;
+      glowR = Math.max(glowR, 5 + Math.min(8, state.l2dTypingCombo * 0.7));
       glowC = `rgba(${meta.rgb1}, 0.55)`;
     } else if (mood === 'crisis') {
-      rot += Math.sin(now * 0.030) * 2.1;
-      ty -= 1.4;
+      moodRoll = Math.sin(now * 0.030) * 0.032;
+      bounceY -= 1.2;
+      ty -= 1.2;
+      rot += moodRoll * 45;
       glowR = 10;
       glowC = 'rgba(248, 113, 113, 0.68)';
     } else if (mood === 'victory' || mood === 'happy' || mood === 'focus') {
       const hop = Math.abs(Math.sin(now * 0.0086));
-      ty -= hop * 7.2;
-      sy = 1.0 + hop * 0.052 - (1 - hop) * 0.018;
-      sx = 1.0 - hop * 0.024 + (1 - hop) * 0.014;
-      rot += Math.sin(now * 0.0086) * 4.2;
+      bounceY -= hop * 6.4;
+      ty -= hop * 6.4;
+      sy = 1.0 + hop * 0.048 - (1 - hop) * 0.016;
+      sx = 1.0 - hop * 0.022 + (1 - hop) * 0.012;
+      moodRoll = Math.sin(now * 0.0086) * 0.052;
+      rot += moodRoll * 48;
       glowR = mood === 'victory' ? 13 : 9;
       glowC = mood === 'victory' ? 'rgba(250, 204, 21, 0.68)' : `rgba(${meta.rgb1}, 0.56)`;
     }
@@ -2357,6 +3148,60 @@
     if (comp.dataset.chibiLive2dMood !== mood) {
       comp.dataset.chibiLive2dMood = mood;
     }
+
+    let meshDrawn = false;
+    if (state.live2dCtx && state.live2dRenderer) {
+      const meshPose = {
+        breath,
+        eyeLookX: state.l2dEyeLookX,
+        eyeLookY: state.l2dEyeLookY,
+        headLookX: state.l2dLookX,
+        headLookY: state.l2dLookY,
+        hairSwing: state.l2dHairSwing,
+        blinkAmt: state.l2dBlinkAmt,
+        bounceY,
+        squashX: sx,
+        stretchY: sy,
+        moodRoll,
+        proximity: state.l2dPointerProximity,
+        glowRadius: glowR,
+        glowColor: glowC
+      };
+      meshDrawn = Boolean(
+        state.live2dRenderer.render(
+          state.live2dCtx,
+          now,
+          mood,
+          state.l2dTypingCombo,
+          state.l2dLookX,
+          state.l2dLookY,
+          surgeProgress,
+          state.live2dMeshCtrl,
+          state.live2dDpr || 1,
+          comp,
+          meshPose
+        )
+      );
+    }
+
+    state.live2dMeshActive = meshDrawn;
+    if (meshDrawn && state.live2dMeshCtrl) {
+      const clipPx = `${state.live2dMeshCtrl.rig.clipRightPx.toFixed(2)}px`;
+      if (comp.dataset.chibiLive2dMesh !== '1') {
+        comp.dataset.chibiLive2dMesh = '1';
+        if (typeof comp.setAttribute === 'function') comp.setAttribute('data-chibi-live2d-mesh', '1');
+      }
+      if (comp.style && typeof comp.style.setProperty === 'function') {
+        comp.style.setProperty('--agy-l2d-clip-right', clipPx);
+      }
+    } else if (comp.dataset.chibiLive2dMesh) {
+      delete comp.dataset.chibiLive2dMesh;
+      if (typeof comp.removeAttribute === 'function') comp.removeAttribute('data-chibi-live2d-mesh');
+      if (comp.style && typeof comp.style.removeProperty === 'function') {
+        comp.style.removeProperty('--agy-l2d-clip-right');
+      }
+    }
+
     if (comp.style && typeof comp.style.setProperty === 'function') {
       comp.style.setProperty('--agy-l2d-tx', `${tx.toFixed(2)}px`);
       comp.style.setProperty('--agy-l2d-ty', `${ty.toFixed(2)}px`);
@@ -2366,29 +3211,24 @@
       comp.style.setProperty('--agy-l2d-glow-r', `${glowR.toFixed(1)}px`);
       comp.style.setProperty('--agy-l2d-glow-c', glowC);
     }
-
-    if (state.live2dCtx && state.live2dRenderer) {
-      state.live2dRenderer.render(
-        state.live2dCtx,
-        now,
-        mood,
-        state.l2dTypingCombo,
-        state.l2dLookX,
-        state.l2dLookY,
-        surgeProgress
-      );
-    }
   }
 
   function getChibi2dLiveState() {
     return {
       active: Boolean(state.live2dActive && !state.chibi3dActive),
       enabled: isChibi2dLiveEnabled(state.themeCfg || state.uiThemeCfg),
+      meshActive: Boolean(state.live2dMeshActive),
       charId: state.auraCharId || '',
       mood: state.l2dEffectiveMood || 'idle',
       typingCombo: state.l2dTypingCombo || 0,
+      eyeLookX: state.l2dEyeLookX || 0,
+      eyeLookY: state.l2dEyeLookY || 0,
       lookX: state.l2dLookX || 0,
       lookY: state.l2dLookY || 0,
+      targetLookX: state.l2dTargetLookX || 0,
+      targetLookY: state.l2dTargetLookY || 0,
+      hairSwing: state.l2dHairSwing || 0,
+      blinkAmt: state.l2dBlinkAmt || 0,
       tx: state.l2dTx || 0,
       ty: state.l2dTy || 0,
       rot: state.l2dRot || 0,
@@ -2609,15 +3449,31 @@
     state.chibi3dLastMode = '';
     state.chibi3dRectCacheAt = 0;
     state.chibi3dRectCache = null;
+    if (state.live2dMeshCtrl && typeof state.live2dMeshCtrl.dispose === 'function') {
+      try { state.live2dMeshCtrl.dispose(); } catch (_) {}
+    }
     state.live2dCanvas = null;
     state.live2dCtx = null;
     state.live2dRenderer = null;
+    state.live2dMeshCtrl = null;
+    state.live2dMeshActive = false;
     state.live2dActive = false;
     state.live2dDpr = 1;
+    state.l2dEyeLookX = 0;
+    state.l2dEyeLookY = 0;
     state.l2dLookX = 0;
     state.l2dLookY = 0;
     state.l2dTargetLookX = 0;
     state.l2dTargetLookY = 0;
+    state.l2dHairSwing = 0;
+    state.l2dHairVel = 0;
+    state.l2dPrevLookX = 0;
+    state.l2dBlinkAmt = 0;
+    state.l2dBlinkStartAt = 0;
+    state.l2dNextBlinkAt = 0;
+    state.l2dDoubleBlinkPending = false;
+    state.l2dLastPointerAt = 0;
+    state.l2dPointerProximity = 0;
     state.l2dTypingImpulse = 0;
     state.l2dTypingCombo = 0;
     state.l2dTx = 0;
@@ -2759,7 +3615,7 @@
       live2dCanvas.width = Math.round(LIVE2D_W * dpr);
       live2dCanvas.height = Math.round(LIVE2D_H * dpr);
       live2dCanvas.style.cssText =
-        'pointer-events: none; position: absolute; top: -94px; right: -4px; width: 162px; height: 108px; z-index: 31; display: block;';
+        `pointer-events: none; position: absolute; top: ${LIVE2D_TOP}px; right: ${LIVE2D_RIGHT}px; width: ${LIVE2D_W}px; height: ${LIVE2D_H}px; z-index: 31; display: block;`;
       live2dCtx = live2dCanvas.getContext('2d');
       if (live2dCtx) {
         if (typeof live2dCtx.setTransform === 'function') live2dCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -2788,6 +3644,14 @@
     state.live2dActive = Boolean(!state.chibi3dActive && live2dCanvas && live2dCtx);
     state.live2dDpr = dpr;
     state.live2dRenderer = state.live2dActive ? createLive2dForegroundRenderer(meta.auraMode, meta) : null;
+    state.live2dMeshCtrl = state.live2dActive
+      ? createLive2dMeshRig(meta.charId, state.themeCfg || themeCfg, meta, () => {
+          if (state.live2dActive && !state.chibi3dActive && !isMotionPaused()) {
+            const nowR = typeof performance !== 'undefined' ? performance.now() : Date.now();
+            updateAndRenderLive2d(nowR, 1, 0, false);
+          }
+        })
+      : null;
     if (state.chibi3dActive) {
       composer.dataset.chibi3dActive = '1';
       if (typeof composer.setAttribute === 'function') composer.setAttribute('data-chibi-3d-active', '1');
@@ -2804,6 +3668,104 @@
     state.auraMeta = meta;
     state.auraScene = createChibiAuraScene(meta.auraMode, meta);
 
+    /**
+     * Compute normalized gaze vector [-1..+1] anchored directly at the Chibi's anatomical eye center
+     * on the top-right corner of `.surface-composer`, with smooth asymmetric viewport spans so
+     * looking left, right (even near right screen edge), up (code/chat), and down (composer input)
+     * all feel crisp, proportional, and dead-zone free.
+     */
+    const computeEyeAnchoredGaze = (cx, cy, now) => {
+      const refComp = state.auraComposer || composer;
+      if ((!state.l2dRectCache || now - state.l2dRectCacheAt > 180) && refComp && typeof refComp.getBoundingClientRect === 'function') {
+        state.l2dRectCache = refComp.getBoundingClientRect();
+        state.l2dRectCacheAt = now;
+      }
+      const rect = state.l2dRectCache;
+      if (!rect || !(rect.width > 0)) return null;
+
+      const { sTop, sRight, sW, sH } = readComposerStickerMetrics(refComp, state.themeCfg || themeCfg);
+      // Chibi sits in the right ~56% of the 180x88 ornament box -> eye midpoint is ~28% of sW inward from right edge
+      const eyeAnchorX = rect.right - sRight - sW * 0.28;
+      const eyeAnchorY = rect.top + sTop + sH * 0.48;
+      const vw = (typeof window !== 'undefined' && window.innerWidth) || Math.max(960, rect.right + 24);
+      const vh = (typeof window !== 'undefined' && window.innerHeight) || Math.max(680, rect.bottom + 24);
+
+      const dx = cx - eyeAnchorX;
+      const dy = cy - eyeAnchorY;
+
+      // 3D Optical Viewing-Cone (atan2 perspective with virtual focal depth Z from iris to glass plane)
+      // Gives crisp, natural angular sensitivity right around the Chibi's face while smoothly saturating toward screen edges.
+      const rightRoom = Math.max(46, vw - eyeAnchorX - 6);
+      const downRoom = Math.max(64, vh - eyeAnchorY - 6);
+      const focalLeft = 175;
+      const focalRight = Math.min(165, Math.max(48, rightRoom * 0.72));
+      const focalUp = 165;
+      const focalDown = Math.min(145, Math.max(55, downRoom * 0.65));
+      const invConeHalfAngle = 1 / (Math.PI * 0.38);
+
+      const rawNx = (dx < 0 ? Math.atan2(dx, focalLeft) : Math.atan2(dx, focalRight)) * invConeHalfAngle;
+      const rawNy = (dy < 0 ? Math.atan2(dy, focalUp) : Math.atan2(dy, focalDown)) * invConeHalfAngle;
+      const gazeX = Math.tanh(rawNx * 1.08);
+      const gazeY = Math.tanh(rawNy * 1.08);
+      const dist = Math.hypot(dx, dy);
+      const proximity = Math.max(0, Math.min(1, 1 - dist / 185));
+      return { gazeX, gazeY, proximity };
+    };
+
+    const wakeUnfocusedPointerIfNeeded = () => {
+      if (typeof document !== 'undefined' && !document.hidden && typeof window !== 'undefined' && window.__AGY_SHINOBU_RT__ && window.__AGY_SHINOBU_RT__.fxFocusPaused) {
+        window.__AGY_SHINOBU_RT__.fxFocusPaused = false;
+        resumeOrPauseAura();
+      }
+    };
+
+    const bindSameOriginIframePointerForwarder = (onClientPoint) => {
+      if (typeof document === 'undefined') return () => {};
+      const hookedFrames = new Set();
+      const cleanups = [];
+      let lastScanAt = 0;
+      const scanFrames = () => {
+        const frames = document.querySelectorAll('iframe');
+        frames.forEach((fr) => {
+          if (hookedFrames.has(fr)) return;
+          try {
+            const cw = fr.contentWindow;
+            const cd = fr.contentDocument;
+            if (!cw || !cd) return;
+            hookedFrames.add(fr);
+            const onFrameMove = (fev) => {
+              if (!fr.isConnected) return;
+              const fRect = fr.getBoundingClientRect();
+              onClientPoint((Number(fev.clientX) || 0) + fRect.left, (Number(fev.clientY) || 0) + fRect.top);
+            };
+            cw.addEventListener('pointermove', onFrameMove, { capture: true, passive: true });
+            cleanups.push(() => {
+              try { cw.removeEventListener('pointermove', onFrameMove, true); } catch (_) {}
+            });
+          } catch (_) {
+            // Cross-origin or sandboxed iframe — safely ignore without throwing
+            hookedFrames.add(fr);
+          }
+        });
+      };
+      const maybeRescan = () => {
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        if (now - lastScanAt < 2500) return;
+        lastScanAt = now;
+        scanFrames();
+      };
+      maybeRescan();
+      document.addEventListener('focusin', maybeRescan, { passive: true });
+      return () => {
+        document.removeEventListener('focusin', maybeRescan);
+        while (cleanups.length > 0) {
+          const fn = cleanups.pop();
+          fn();
+        }
+        hookedFrames.clear();
+      };
+    };
+
     if (state.chibi3dActive) {
       let dragStartX = 0;
       let dragStartY = 0;
@@ -2811,24 +3773,9 @@
       let dragBasePitch = 0;
       const nowFn = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
-      const onComposerPointerDown = (ev) => {
-        const tgt = ev.target;
-        if (!tgt || typeof tgt.closest !== 'function' || !tgt.closest('.agy-chibi-hitbox')) return;
-        if (ev.pointerType === 'mouse' && ev.button !== 0) return;
-        if (state.chibi3dDragReleaseTimer) {
-          clearTimeout(state.chibi3dDragReleaseTimer);
-          state.chibi3dDragReleaseTimer = 0;
-        }
-        dragStartX = Number(ev.clientX) || 0;
-        dragStartY = Number(ev.clientY) || 0;
-        dragBaseYaw = state.chibi3dOrbitYaw;
-        dragBasePitch = state.chibi3dOrbitPitch;
-        state.chibi3dDragging = true;
-        state.chibi3dMoved = false;
-      };
-      const onDocPointerMove3d = (ev) => {
-        const cx = Number(ev.clientX) || 0;
-        const cy = Number(ev.clientY) || 0;
+      const handlePoint3d = (cx, cy) => {
+        if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+        wakeUnfocusedPointerIfNeeded();
         if (state.chibi3dDragging) {
           const dx = cx - dragStartX;
           const dy = cy - dragStartY;
@@ -2847,18 +3794,33 @@
           }
           return;
         }
-        const now = nowFn();
-        if ((!state.chibi3dRectCache || now - state.chibi3dRectCacheAt > 250) && state.auraHost && typeof state.auraHost.getBoundingClientRect === 'function') {
-          state.chibi3dRectCache = state.auraHost.getBoundingClientRect();
-          state.chibi3dRectCacheAt = now;
+        const g = computeEyeAnchoredGaze(cx, cy, nowFn());
+        if (g) {
+          state.chibi3dTargetLookYaw = g.gazeX * 0.56;
+          state.chibi3dTargetLookPitch = -g.gazeY * 0.42;
         }
-        const rect = state.chibi3dRectCache;
-        if (rect && rect.width > 0) {
-          const anchorX = rect.left + rect.width * 0.56;
-          const anchorY = rect.top + rect.height * 0.45;
-          state.chibi3dTargetLookYaw = Math.max(-0.42, Math.min(0.42, (cx - anchorX) / 480));
-          state.chibi3dTargetLookPitch = Math.max(-0.32, Math.min(0.32, -(cy - anchorY) / 420));
+      };
+
+      const onComposerPointerDown = (ev) => {
+        const tgt = ev.target;
+        if (!tgt || typeof tgt.closest !== 'function' || !tgt.closest('.agy-chibi-hitbox')) return;
+        if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+        if (state.chibi3dDragReleaseTimer) {
+          clearTimeout(state.chibi3dDragReleaseTimer);
+          state.chibi3dDragReleaseTimer = 0;
         }
+        dragStartX = Number(ev.clientX) || 0;
+        dragStartY = Number(ev.clientY) || 0;
+        dragBaseYaw = state.chibi3dOrbitYaw;
+        dragBasePitch = state.chibi3dOrbitPitch;
+        state.chibi3dDragging = true;
+        state.chibi3dMoved = false;
+      };
+      let lastEv3d = null;
+      const onWinPointer3d = (ev) => {
+        if (!ev || ev === lastEv3d) return;
+        lastEv3d = ev;
+        handlePoint3d(Number(ev.clientX), Number(ev.clientY));
       };
       const finishDrag = () => {
         if (!state.chibi3dDragging) return;
@@ -2903,50 +3865,66 @@
       composer.addEventListener('pointerdown', onComposerPointerDown, true);
       composer.addEventListener('dblclick', onComposerDblClick, true);
       composer.addEventListener('keydown', onComposerKeyDown, { passive: true });
-      document.addEventListener('pointermove', onDocPointerMove3d, { passive: true });
+      document.addEventListener('pointermove', onWinPointer3d, { capture: true, passive: true });
+      document.addEventListener('mousemove', onWinPointer3d, { capture: true, passive: true });
+      document.addEventListener('dragover', onWinPointer3d, { capture: true, passive: true });
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('pointermove', onWinPointer3d, { capture: true, passive: true });
+        window.addEventListener('mousemove', onWinPointer3d, { capture: true, passive: true });
+        window.addEventListener('dragover', onWinPointer3d, { capture: true, passive: true });
+        state.auraCleanups.push(() => window.removeEventListener('pointermove', onWinPointer3d, true));
+        state.auraCleanups.push(() => window.removeEventListener('mousemove', onWinPointer3d, true));
+        state.auraCleanups.push(() => window.removeEventListener('dragover', onWinPointer3d, true));
+      }
       document.addEventListener('pointerup', finishDrag, { passive: true });
       document.addEventListener('pointercancel', finishDrag, { passive: true });
+      state.auraCleanups.push(bindSameOriginIframePointerForwarder(handlePoint3d));
       state.auraCleanups.push(() => composer.removeEventListener('pointerdown', onComposerPointerDown, true));
       state.auraCleanups.push(() => composer.removeEventListener('dblclick', onComposerDblClick, true));
       state.auraCleanups.push(() => composer.removeEventListener('keydown', onComposerKeyDown));
-      state.auraCleanups.push(() => document.removeEventListener('pointermove', onDocPointerMove3d));
+      state.auraCleanups.push(() => document.removeEventListener('pointermove', onWinPointer3d, true));
+      state.auraCleanups.push(() => document.removeEventListener('mousemove', onWinPointer3d, true));
+      state.auraCleanups.push(() => document.removeEventListener('dragover', onWinPointer3d, true));
       state.auraCleanups.push(() => document.removeEventListener('pointerup', finishDrag));
       state.auraCleanups.push(() => document.removeEventListener('pointercancel', finishDrag));
     } else if (state.live2dActive) {
       const nowFn2d = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
       const MODIFIER_ONLY_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab', 'Escape']);
 
-      const onDocPointerMove2d = (ev) => {
-        const cx = Number(ev.clientX);
-        const cy = Number(ev.clientY);
+      const handlePoint2d = (cx, cy) => {
         if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
-        if (typeof document !== 'undefined' && !document.hidden && typeof window !== 'undefined' && window.__AGY_SHINOBU_RT__ && window.__AGY_SHINOBU_RT__.fxFocusPaused) {
-          window.__AGY_SHINOBU_RT__.fxFocusPaused = false;
-          resumeOrPauseAura();
-        }
+        wakeUnfocusedPointerIfNeeded();
         const now = nowFn2d();
-        const refNode = state.auraComposer || state.auraHost;
-        if ((!state.l2dRectCache || now - state.l2dRectCacheAt > 250) && refNode && typeof refNode.getBoundingClientRect === 'function') {
-          state.l2dRectCache = refNode.getBoundingClientRect();
-          state.l2dRectCacheAt = now;
-        }
-        const rect = state.l2dRectCache;
-        if (rect && rect.width > 0) {
-          // Cân bằng theo tâm ngang của khung hội thoại để khi gõ ở giữa Chibi đứng ngay ngắn, rê trái/phải nghiêng đều 2 phía
-          const centerX = rect.left + rect.width * 0.5;
-          const centerY = rect.top;
-          const spanX = Math.max(240, rect.width * 0.48);
-          state.l2dTargetLookX = Math.max(-1, Math.min(1, (cx - centerX) / spanX));
-          state.l2dTargetLookY = Math.max(-1, Math.min(1, (cy - centerY) / 340));
-          if (state.live2dActive && !state.chibi3dActive && !isMotionPaused() && now - (state.l2dLastUpdateAt || 0) > 24) {
+        state.l2dLastPointerAt = now;
+        state.l2dPointerOutside = false;
+        const g = computeEyeAnchoredGaze(cx, cy, now);
+        if (g) {
+          state.l2dTargetLookX = g.gazeX;
+          state.l2dTargetLookY = g.gazeY;
+          state.l2dPointerProximity = g.proximity;
+          if (state.live2dActive && !state.chibi3dActive && !isMotionPaused() && now - (state.l2dLastUpdateAt || 0) > 20) {
             updateAndRenderLive2d(now, 1, 0, false);
           }
         }
       };
 
-      const onDocMouseLeave2d = () => {
-        state.l2dTargetLookX = 0;
-        state.l2dTargetLookY = 0;
+      let lastEv2d = null;
+      const onWinPointer2d = (ev) => {
+        if (!ev || ev === lastEv2d) return;
+        lastEv2d = ev;
+        handlePoint2d(Number(ev.clientX), Number(ev.clientY));
+      };
+
+      const onDocMouseLeave2d = (ev) => {
+        if (ev && Number.isFinite(ev.clientX) && Number.isFinite(ev.clientY)) {
+          const g = computeEyeAnchoredGaze(ev.clientX, ev.clientY, nowFn2d());
+          if (g) {
+            state.l2dTargetLookX = g.gazeX;
+            state.l2dTargetLookY = g.gazeY;
+          }
+        }
+        state.l2dPointerOutside = true;
+        state.l2dPointerProximity = 0;
       };
 
       const onComposerPointerOver2d = (ev) => {
@@ -2983,16 +3961,59 @@
         }
         state.l2dLastKeyAt = now;
         state.l2dTypingImpulse = 1.0;
+
+        // Caret-following gaze when hands are on keyboard (> 1200ms since last mouse move)
+        if (now - (state.l2dLastPointerAt || 0) > 1200 && typeof window !== 'undefined' && typeof window.getSelection === 'function') {
+          try {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+              const cr = sel.getRangeAt(0).getBoundingClientRect();
+              if (cr && (cr.left > 0 || cr.top > 0)) {
+                const cg = computeEyeAnchoredGaze(cr.left + cr.width * 0.5, cr.top + cr.height * 0.5, now);
+                if (cg) {
+                  state.l2dTargetLookX = cg.gazeX;
+                  state.l2dTargetLookY = cg.gazeY;
+                }
+              }
+            } else if (typeof tgt.getBoundingClientRect === 'function') {
+              const tr = tgt.getBoundingClientRect();
+              if (tr && tr.width > 0) {
+                const cg = computeEyeAnchoredGaze(tr.left + Math.min(tr.width * 0.45, 220), tr.top + 18, now);
+                if (cg) {
+                  state.l2dTargetLookX = cg.gazeX;
+                  state.l2dTargetLookY = cg.gazeY;
+                }
+              }
+            }
+          } catch (_) {}
+        }
       };
 
-      document.addEventListener('pointermove', onDocPointerMove2d, { passive: true });
+      document.addEventListener('pointermove', onWinPointer2d, { capture: true, passive: true });
+      document.addEventListener('mousemove', onWinPointer2d, { capture: true, passive: true });
+      document.addEventListener('pointerdown', onWinPointer2d, { capture: true, passive: true });
+      document.addEventListener('dragover', onWinPointer2d, { capture: true, passive: true });
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('pointermove', onWinPointer2d, { capture: true, passive: true });
+        window.addEventListener('mousemove', onWinPointer2d, { capture: true, passive: true });
+        window.addEventListener('pointerdown', onWinPointer2d, { capture: true, passive: true });
+        window.addEventListener('dragover', onWinPointer2d, { capture: true, passive: true });
+        state.auraCleanups.push(() => window.removeEventListener('pointermove', onWinPointer2d, true));
+        state.auraCleanups.push(() => window.removeEventListener('mousemove', onWinPointer2d, true));
+        state.auraCleanups.push(() => window.removeEventListener('pointerdown', onWinPointer2d, true));
+        state.auraCleanups.push(() => window.removeEventListener('dragover', onWinPointer2d, true));
+      }
       document.addEventListener('keydown', onDocKeyDown2d, { passive: true });
       composer.addEventListener('pointerover', onComposerPointerOver2d, { passive: true });
+      state.auraCleanups.push(bindSameOriginIframePointerForwarder(handlePoint2d));
       if (document.documentElement) {
         document.documentElement.addEventListener('mouseleave', onDocMouseLeave2d, { passive: true });
         state.auraCleanups.push(() => document.documentElement.removeEventListener('mouseleave', onDocMouseLeave2d));
       }
-      state.auraCleanups.push(() => document.removeEventListener('pointermove', onDocPointerMove2d));
+      state.auraCleanups.push(() => document.removeEventListener('pointermove', onWinPointer2d, true));
+      state.auraCleanups.push(() => document.removeEventListener('mousemove', onWinPointer2d, true));
+      state.auraCleanups.push(() => document.removeEventListener('pointerdown', onWinPointer2d, true));
+      state.auraCleanups.push(() => document.removeEventListener('dragover', onWinPointer2d, true));
       state.auraCleanups.push(() => document.removeEventListener('keydown', onDocKeyDown2d));
       state.auraCleanups.push(() => composer.removeEventListener('pointerover', onComposerPointerOver2d));
     }

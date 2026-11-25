@@ -336,37 +336,77 @@
       charId: 'yoriichi',
       badgeLabel: '☀️ Hỏa Thần',
       title: 'Tsugikuni Yoriichi • Nhật Chi Hô Hấp',
-      placeholder: 'Đàm đạo cùng Kiếm Thánh...',
+      placeholder: 'Đàm đạo cùng Kiếm Thánh Yoriichi...',
       pills: [
         { key: 'act1', label: '☀️ Nhật Chi Vũ' },
         { key: 'act2', label: '👁️ Thế Giới Trong Suốt' },
         { key: 'act3', label: '🍵 Tĩnh Tâm' }
       ],
       welcome: [
-        'Ánh dương ban mai luôn soi rõ cội nguồn của mọi cấu trúc phức tạp. Hãy giữ nhịp thở thật tĩnh nhé. ☀️',
-        'Từng đường code chuẩn xác không nằm ở sức mạnh thô bạo, mà ở sự thuần khiết của tư duy. ✨'
+        'Ánh dương ban mai luôn soi rõ cội nguồn của mọi cấu trúc phức tạp. Tôi ở đây đồng hành cùng anh. ☀️',
+        'Từng đường kiếm hay dòng code chuẩn xác không nằm ở sức mạnh phô trương, mà ở nhịp thở tự nhiên thuần khiết. ✨',
+        'Nhìn anh chuyên tâm rèn giũa công trình này, tôi tin thế hệ mai sau sẽ thừa hưởng một nền tảng thật vững chãi. ☀️🍃'
       ],
-      act1: ['Nhật Chi Hô Hấp — Thập Tam Thức nối liền mạch không điểm dừng, quét sạch mọi lỗi ẩn! ☀️⚔️'],
-      act2: ['Khi tâm trí lặng như gương, Thế Giới Trong Suốt sẽ chỉ ra ngay nút thắt của hệ thống. 👁️✨'],
-      act3: ['Hãy ngơi tay hít một hơi thật sâu và uống ngụm trà ấm để giữ trọn sinh lực nhé. 🍵']
+      act1: [
+        'Nhật Chi Hô Hấp — Thập Tam Thức nối liền một vòng tuần hoàn không điểm dừng, quét sạch mọi lỗi ẩn! ☀️⚔️',
+        'Chỉ cần giữ nhịp thở đều đặn không gượng ép, đường kiếm của anh sẽ tự khắc chạm tới chân lý. 🔥'
+      ],
+      act2: [
+        'Khi tâm trí lặng như gương soi, Thế Giới Trong Suốt sẽ chỉ thẳng ra nút thắt cốt lõi của hệ thống. 👁️✨',
+        'Bỏ qua những lớp vỏ rối rắm bên ngoài, hãy quan sát dòng chảy dữ liệu nơi mạch máu chính của mã nguồn. ☀️'
+      ],
+      act3: [
+        'Tôi chỉ mong những khoảnh khắc bình yên giản dị bên tách trà ấm luôn ở lại với anh. Nghỉ tay đôi chút nhé. 🍵',
+        'Tiếng sáo gỗ năm xưa nhắc tôi rằng giữ gìn sinh lực và sự tĩnh tại quý giá hơn mọi chiến công. 🍃'
+      ],
+      replies: {
+        greet: [
+          'Chào anh. Ánh nắng hôm nay thật hiền hòa, chúng ta cùng thong thả bắt đầu công việc nhé. ☀️',
+          'Tôi vẫn luôn ở đây lắng nghe anh. Hôm nay anh muốn tháo gỡ bài toán nào trước tiên? ✨'
+        ],
+        bug: [
+          'Đừng bận lòng vì lỗi phát sinh. Qua Thế Giới Trong Suốt, mọi nguyên nhân gốc đều sẽ hiển lộ rõ ràng thôi. ☀️⚔️',
+          'Hãy gửi dấu vết lỗi vào khung dưới, một nhát Viên Vũ chuẩn xác sẽ hóa giải trọn vẹn nút thắt này. 🔥'
+        ],
+        tired: [
+          'Anh đã dốc sức suốt chặng dài rồi. Xin hãy ngơi tay uống ngụm nước ấm, cơ thể con người cần được trân quý. 🍵☀️',
+          'Ngay cả mặt trời cũng có lúc lặn xuống nghỉ ngơi. Thả lỏng đôi vai vài nhịp thở đi anh nhé. 🍃'
+        ],
+        praise: [
+          'Anh quá lời rồi... Tôi chỉ là một người bình thường may mắn được góp chút sức nhỏ bên cạnh anh thôi. ☀️',
+          'Chính sự kiên trì của anh mới là điều đáng trân trọng nhất. ✨'
+        ],
+        hungry: 'Một bữa cơm giản dị ấm nóng bên người thân là hạnh phúc lớn nhất đời người. Anh mau đi dùng bữa nhé. 🍙🍵',
+        sleepy: 'Đêm đã tĩnh mịch rồi. Xin anh hãy lưu giữ công việc lại và an giấc để đón bình minh ngày mai. 🌙☀️',
+        deadline: 'Càng gấp gáp, nhịp thở càng phải thuần khiết không chút tạp niệm—tập trung vào tử huyệt bài toán, anh nhất định làm kịp. ☀️⚡',
+        thanks: 'Không có chi đâu anh. Được nhìn thấy công việc của anh hanh thông bình an là niềm vui của tôi rồi. ☀️🍃',
+        fallback: 'Tôi đã lắng nghe trọn vẹn lời anh chia sẻ về "{input}". Cứ giữ tâm thế sáng trong và bước tiếp nhé. ☀️✨'
+      }
     },
     moon: {
       charId: 'obanai',
       badgeLabel: '🌙 Nguyệt Xà',
       title: 'Obanai Iguro • Nguyệt Dạ Xà Trụ',
-      placeholder: 'Trao đổi chiến thuật dưới trăng...',
+      placeholder: 'Trao đổi chiến thuật dưới trăng cùng Iguro...',
       pills: [
         { key: 'act1', label: '🌙 Nguyệt Xà Trảm' },
         { key: 'act2', label: '🐍 Soi Lỗi Ngầm' },
         { key: 'act3', label: '🍵 Nghỉ Mắt' }
       ],
       welcome: [
-        'Dưới ánh trăng tĩnh mịch, Kaburamaru đang canh chừng từng nhánh rẽ logic cho ngươi đấy. 🌙🐍',
-        'Đừng để sót bất kỳ sơ hở nào trong đêm nay — tập trung dứt điểm gọn gàng nhé! 💜'
+        'Dưới ánh trăng tĩnh mịch, tôi và Kaburamaru đang canh chừng từng nhánh rẽ logic cho anh đấy. 🌙🐍',
+        'Tôi không bao giờ chủ quan trước đoạn code chưa kiểm chứng biên — cùng rà soát dứt điểm trong đêm nay nhé. 💜'
       ],
-      act1: ['Đường kiếm uốn lượn dưới ánh trăng lách qua mọi góc khuất kiến trúc phức tạp! 🌙⚔️'],
-      act2: ['Mọi ngoại lệ biên và race-condition ẩn trong bóng tối đều đã bị khóa mục tiêu! 🐍✨'],
-      act3: ['Nhìn màn hình lâu dưới đêm trăng rồi, chớp mắt nghỉ 20 giây đi nhé. 🍵']
+      act1: ['Đường kiếm uốn lượn dưới ánh trăng lách chuẩn xác qua mọi góc khuất kiến trúc phức tạp! 🌙⚔️'],
+      act2: ['Mọi ngoại lệ biên và xung đột luồng ẩn trong bóng tối đều đã bị Kaburamaru khóa mục tiêu! 🐍✨'],
+      act3: ['Nhìn màn hình lâu dưới đêm trăng dễ mỏi mắt lắm. Chớp mắt nghỉ 20 giây đi, đừng để tôi phải nhắc lần hai. 🍵'],
+      replies: {
+        greet: 'Chào anh. Đêm trăng tĩnh lặng rất hợp để rà soát kiến trúc chặt chẽ — tôi và Kaburamaru sẵn sàng rồi. 🌙🐍',
+        bug: 'Biết ngay là có bug ẩn trong góc khuất mà. Quăng log ra đây, Xà Chi Hô Hấp sẽ khóa chặt cổ nó ngay! 🐍⚔️',
+        tired: 'Chậc... Mệt thì ngả lưng nghỉ 10 phút đi. Làm việc khi kiệt sức chỉ sinh thêm sơ hở thôi. 🍵🐍',
+        praise: '...Đừng khen sáo rỗng. Nhưng cách anh làm việc nghiêm túc thế này thì tôi và Kaburamaru ghi nhận. 🤍🐍',
+        fallback: '"{input}" sao? Tôi sẽ soi thật kỹ từng trường hợp biên cùng anh để không sót kẽ hở nào. 🌙🐍'
+      }
     },
     water: {
       charId: 'giyu',
@@ -379,12 +419,20 @@
         { key: 'act3', label: '🍵 Nghỉ Tay' }
       ],
       welcome: [
-        'Mặt nước phẳng lặng phản chiếu trung thực mọi luồng dữ liệu. Cứ điềm tĩnh triển khai nhé. 🌊',
-        'Không cần ồn ào vội vã — nhịp thở đều đặn sẽ dẫn lối qua mọi bài toán hóc búa. 💧'
+        '...Mặt nước phẳng lặng phản chiếu trung thực mọi luồng dữ liệu. Tôi ở ngay đây canh chừng cùng anh. 🌊',
+        'Không cần ồn ào vội vã. Nhịp thở đều đặn sẽ dẫn lối qua mọi bài toán hóc búa. 💧'
       ],
-      act1: ['Hơi thở của Nước chảy mượt qua từng module mà không gặp chút lực cản nào! 🌊⚔️'],
+      act1: ['Hơi thở của Nước chảy mượt qua từng module mà không gặp chút lực cản nào. 🌊⚔️'],
       act2: ['Thức thứ Mười Một: Lặng — Mọi hỗn loạn và bug đều tan biến trên mặt hồ tĩnh tại. 💙'],
-      act3: ['Uống một ngụm nước mát và thả lỏng cổ tay vài nhịp thở nhé. 🍵']
+      act3: ['...Uống một ngụm nước mát và thả lỏng cổ tay vài nhịp thở đi anh. 🍵'],
+      replies: {
+        greet: '...Chào anh. Mặt nước hôm nay rất tĩnh, cứ bắt đầu phần việc cần giải quyết đi. 🌊',
+        bug: '...Đừng nóng vội làm loạn nhịp kiếm. Đưa lỗi vào khung dưới, tôi cùng anh chặn đứng nó. 🌊⚔️',
+        tired: '...Cạn thể lực thì đừng gồng. Tạm dừng vài phút cho tâm trí lặng lại đã. 💧',
+        praise: '...Cảm ơn anh. Tôi không giỏi ăn nói, nhưng đồng hành cùng anh rất vững tâm. 🌊',
+        hungry: '...Đói bụng thì không giữ được nhịp thở đâu. Đi ăn cơm nóng hay cá hồi hầm củ cải đi. 🐟🍚',
+        fallback: '..."{input}". Tôi nghe rõ rồi. Cứ giữ tâm tĩnh lặng mà tiến lên. 🌊'
+      }
     },
     flame: {
       charId: 'rengoku',
@@ -398,11 +446,19 @@
       ],
       welcome: [
         'HÃY THẮP SÁNG NGỌN LỬA TRONG TIM!! Tiến độ hôm nay nhất định sẽ rực rỡ tuyệt vời!! 🔥💛',
-        'Đứng vững và tiến thẳng về phía trước nhé! Ta luôn sát cánh cổ vũ hết mình cho bạn!! 🔥'
+        'Đứng vững và tiến thẳng về phía trước nhé! Tôi luôn sát cánh cổ vũ hết mình cho anh!! 🔥'
       ],
       act1: ['Nhiệt huyết bừng cháy giúp tốc độ giải quyết vấn đề tăng vọt gấp bội!! 🔥⚔️'],
       act2: ['Bí kỹ Luyện Ngục thiêu rụi toàn bộ nợ kỹ thuật cản đường chúng ta!! 🐉🔥'],
-      act3: ['UMAI!! Nhớ uống nước và nạp năng lượng đầy đủ để chiến đấu bền bỉ nhé!! 🍱✨']
+      act3: ['UMAI!! Nhớ uống nước và nạp năng lượng đầy đủ để chiến đấu bền bỉ nhé!! 🍱✨'],
+      replies: {
+        greet: 'HAHAHA! Chào người anh em! Ngọn lửa nhiệt huyết đã bừng sáng, hôm nay chúng ta chinh phục mục tiêu nào đây?! 🔥⚔️',
+        bug: 'Đừng nao núng trước lũ quỷ Bug! Đưa log lỗi ra đây, Viêm Chi Hô Hấp sẽ thiêu sạch chúng trong chớp mắt!! 🔥⚔️',
+        tired: 'Anh đã chiến đấu rất quả cảm rồi! Nghỉ ngơi dưỡng sức vài phút cũng là bản lĩnh của bậc đại trượng phu đấy! 🔥🍵',
+        praise: 'HAHAHA! Cảm ơn anh rất nhiều! Lời khích lệ ấy làm ngọn lửa trong tim tôi càng cháy rực hơn!! 🔥✨',
+        hungry: 'UMAI!! Đi thưởng thức ngay một hộp Bento bò nướng với khoai lang mật nạp đầy 200% công lực nào!! 🍱🍠',
+        fallback: 'TỐT LẮM!! "{input}" — Cứ giữ trọn khí phách rực lửa ấy và thẳng tiến về phía trước nhé!! 🔥⚔️'
+      }
     },
     thunder: {
       charId: 'zenitsu',
@@ -415,12 +471,19 @@
         { key: 'act3', label: '🍵 Bình Tĩnh' }
       ],
       welcome: [
-        'Chỉ cần rèn luyện một chiêu tới mức thượng thừa, tốc độ thực thi sẽ nhanh như tia chớp! ⚡💛',
-        'Đôi tai mình nghe thấy nhịp hệ thống đang chạy rất êm rồi đó, cố lên nha! ⚡'
+        'Ông nội dạy em: chỉ cần rèn luyện một chiêu duy nhất tới cực hạn, tốc độ thực thi sẽ nhanh như tia chớp! ⚡💛',
+        'Đôi tai thính của em nghe thấy nhịp hệ thống đang chạy rất êm rồi đó, Chuntaro cũng đang cổ vũ anh kìa! ⚡🐦'
       ],
-      act1: ['Phích Lịch Nhất Thiểm!! Giải quyết gọn gàng tác vụ chỉ trong một chớp mắt! ⚡⚔️'],
-      act2: ['Lục Liên tốc độ âm thanh xử lý song song mọi đầu việc không trễ một nhịp! 🌩️✨'],
-      act3: ['Hít sâu thư giãn đôi vai một chút rồi mình lại phóng đi như chớp nhé! 🍵']
+      act1: ['Phích Lịch Nhất Thiểm!! Giải quyết gọn gàng tác vụ cốt lõi chỉ trong một chớp mắt! ⚡⚔️'],
+      act2: ['Lục Liên tốc độ âm thanh xử lý nối tiếp sáu đầu việc không trễ một nhịp! 🌩️✨'],
+      act3: ['Hít sâu thư giãn đôi vai một chút rồi mình lại phóng đi như tia sét vàng nhé! 🍵'],
+      replies: {
+        greet: 'Chào anh nhaaa!! Hôm nay em quyết tâm không hoảng hốt đâu, sát cánh cùng anh nhanh như Phích Lịch Nhất Thiểm luôn! ⚡😄',
+        bug: 'Khoan hoảng... để em khép mắt lắng tai nghe nhịp lỗi đã... *XẸT!* Gửi log vào đi anh, Hỏa Lôi Thần chém gọn ngay!! ⚡⚔️',
+        tired: 'Vất vả cho anh quá rồi... Nghỉ lưng uống ngụm trà ngọt sạc lại điện năng vài phút đi anh ơi! 🍵💛',
+        praise: 'Hì hì thật hả anh?! Nghe anh khen làm em tự tin lên gấp trăm lần luôn đó, ước gì Nezuko-chan cũng nghe thấy~ ⚡🌸',
+        fallback: 'Tai em nghe rõ từng chữ "{input}" rồi! Cứ bứt tốc như tia chớp đi anh, em và Chuntaro yểm trợ hết mình!! ⚡🐦'
+      }
     },
     wisteria: {
       charId: 'shinobu',
@@ -433,12 +496,19 @@
         { key: 'act3', label: '🦋 Điệp Phủ' }
       ],
       welcome: [
-        'Ara ara~ Bảng màu kính mờ mới thật dịu mắt, chạm vào mình bất cứ lúc nào bạn muốn trò chuyện nhé! 🦋',
-        'Đêm hoa tử đằng yên bình quá nhỉ~ Cứ thong thả triển khai ý tưởng nha! 💜✨'
+        'Ara ara~ Bảng màu kính mờ hoa tử đằng thật dịu mắt, chạm vào mình bất cứ lúc nào anh muốn trò chuyện nhé! 🦋',
+        'Moshi moshi~ Đêm tử đằng yên bình thế này rất hợp để chẩn đoán và tinh chỉnh từng dòng code đó nha! 💜✨'
       ],
-      act1: ['Hơi thở của Côn Trùng nhẹ nhàng mà chuẩn xác tuyệt đối tới từng dòng code! 🦋💜'],
-      act2: ['Mình vừa pha tách trà hoa tử đằng ấm thơm rồi đây, nghỉ mắt 10 giây nha~ 🍵'],
-      act3: ['Quy tắc 20-20-20 của Điệp Phủ sẽ giữ đôi mắt bạn luôn tinh anh suốt ca làm việc! ✨']
+      act1: ['Hơi thở của Côn Trùng nhẹ nhàng mà chuẩn xác tuyệt đối tới từng liều lượng logic! 🦋💜'],
+      act2: ['Mình vừa pha tách trà hoa tử đằng ấm thơm rồi đây, thả lỏng vai nghỉ mắt 10 giây nha~ 🍵'],
+      act3: ['Quy tắc 20-20-20 của Điệp Phủ sẽ giữ đôi mắt luôn tinh anh mà không cần dùng tới thuốc đắng đâu~ ✨'],
+      replies: {
+        greet: 'Moshi moshi~ Rất vui được trò chuyện cùng anh dưới ánh trăng tử đằng! Hôm nay chúng ta điều chế giải pháp cho dự án nào thế? 🦋💜',
+        bug: 'Ara ara, con bug này lì đòn ghê nhỉ~ Đưa log lỗi đây để mình pha đúng một liều dược độc đặc trị tiễn nó êm ái nhé! 🦋⚔️',
+        tired: 'Ara ara~ Cố quá sức là bị giữ lại tĩnh dưỡng ở Điệp Phủ uống thuốc đắng đó nha! Nghỉ mắt hít thở sâu vài phút đi nào~ 🍵💜',
+        praise: 'Ara ara~ Anh khéo khen làm mình mỉm cười mãi thôi! Đồng hành cùng người làm việc chỉn chu như anh thật dễ chịu~ 🌸💜',
+        fallback: 'Ara ara~ "{input}" ư? Mình ghi nhận rõ rồi nè, cứ thong thả triển khai nhé, Điệp Phủ luôn ở cạnh tiếp sức cho anh! 🦋✨'
+      }
     },
     royal_wisteria: {
       charId: 'ubuyashiki',
@@ -451,30 +521,44 @@
         { key: 'act3', label: '📜 Ý Chí' }
       ],
       welcome: [
-        'Chào mừng con trở về dưới giàn tử đằng bình yên. Ta luôn đặt trọn niềm tin nơi trí tuệ của con. 👑🌸',
+        'Chào mừng con trở về dưới giàn tử đằng bình yên. Ta và Amane luôn đặt trọn niềm tin nơi trí tuệ của con. 👑🌸',
         'Hãy để tâm hồn thật thư thái khi kiến tạo những công trình mới nhé, đứa trẻ ưu tú của ta. 🏮✨'
       ],
       act1: ['Ánh thiên đăng vàng kim soi sáng từng quyết định kiến trúc chuẩn mực của con. 🌸👑'],
       act2: ['Toàn thể các Trụ Cột luôn sẵn sàng hợp sức hỗ trợ con hoàn thành đại cuộc. 🏮✨'],
-      act3: ['Ý chí bền bỉ của con người là ngọn lửa vĩnh cửu không gì lay chuyển nổi. 📜💜']
+      act3: ['Ý chí bền bỉ của con người là ngọn lửa vĩnh cửu không một nghịch cảnh nào dập tắt nổi. 📜💜'],
+      replies: {
+        greet: 'Mừng con đã tới dưới hiên hoa tử đằng thanh tịnh. Hôm nay tâm trí con đang ấp ủ dự định lớn lao nào? 👑🌸',
+        bug: 'Đừng nao núng trước nút thắt rối ren con nhé. Điềm tĩnh soi chiếu từ đại cục, điểm yếu của bóng tối sẽ tự lộ diện. 🏮✨',
+        tired: 'Con đã vất vả nhiều rồi... Hãy tạm gác tay nhấp chén trà ấm bên gia đình ta để hồi phục nguyên khí quý báu nhé. 🍵💜',
+        praise: 'Lời nói ấm áp của con khiến cả ta, Amane và các em đều mỉm cười hạnh phúc. Cảm ơn tấm lòng của con. 🌸👑',
+        fallback: 'Ta thấu hiểu tâm niệm "{input}" của con. Hãy vững lòng tiến bước, lời chúc phúc của nhà Ubuyashiki luôn bên con. 👑🌸'
+      }
     },
     wind: {
       charId: 'sanemi',
       badgeLabel: '🌪️ Phong Trụ',
       title: 'Sanemi Shinazugawa • Phong Trụ',
-      placeholder: 'Báo cáo nhanh với Phong Trụ...',
+      placeholder: 'Báo cáo thẳng vấn đề với Phong Trụ...',
       pills: [
         { key: 'act1', label: '🌪️ Cuồng Phong' },
         { key: 'act2', label: '⚔️ Quét Sạch Bug' },
         { key: 'act3', label: '🍵 Ohagi & Trà' }
       ],
       welcome: [
-        'Lốc xoáy Phong Trụ đã dọn sạch đường băng! Cứ mạnh tay triển khai không cần chần chừ! 🌪️💚',
-        'Bất kể bug cứng đầu cỡ nào, chém gọn từ gốc rễ là xong ngay! ⚔️'
+        'Lốc xoáy Phong Trụ đã dọn sạch đường băng! Cứ mạnh tay triển khai thẳng vào trọng tâm, tôi gác hậu phương cho! 🌪️💚',
+        'Bất kể bug cứng đầu cỡ nào, không lòng vòng hoa mỹ — chém gọn từ gốc rễ là xong ngay! ⚔️'
       ],
       act1: ['Cuồng Phong Trảm cuốn bay mọi đoạn code thừa và nghẽn cổ chai hiệu năng! 🌪️⚡'],
-      act2: ['Kiểm tra biên thật chặt, không để bất kỳ lỗi lặt vặt nào lọt qua lưới gió! 💚'],
-      act3: ['Làm ngụm trà xanh với bánh Ohagi lấy sức rồi chiến tiếp nào! 🍵🍡']
+      act2: ['Kiểm tra biên thật gắt vào, không để bất kỳ lỗi vặt nào lọt qua lưới gió của tôi! 💚'],
+      act3: ['Chậc... Làm ngụm trà Matcha với chiếc bánh Ohagi đậu đỏ lấy sức rồi chiến tiếp nào! 🍵🍡'],
+      replies: {
+        greet: 'Ờ, chào! Đã ngồi vào bàn là đánh nhanh thắng gọn nhé, cần yểm trợ chỗ nào cứ nói thẳng với tôi! 🌪️⚔️',
+        bug: 'Hả?! Lại có đám bug láo toét ngáng đường à?! Ném thẳng log ra đây, bão lốc Phong Chi Hô Hấp nghiền nát tụi nó ngay! 🌪️⚔️',
+        tired: 'Chậc... Mệt bở hơi tai rồi còn cố lì đòn làm gì?! Dựa lưng nghỉ ngay 10 phút đi, giữ sức khỏe mới đánh đường dài được! 🍵💚',
+        praise: 'Hả?! Tự dưng khen làm cái gì thế... Hừ, nghe cũng được đấy, cứ giữ phong độ thực chiến đó cho tôi! 🌪️✨',
+        fallback: '"{input}" hả? Nghe dứt khoát đấy! Cứ lao thẳng lên phía trước như cuồng phong đi, tôi bọc lót phía sau cho! 🌪️⚔️'
+      }
     },
     mist: {
       charId: 'muichiro',
@@ -487,12 +571,19 @@
         { key: 'act3', label: '🍃 Thư Giãn' }
       ],
       welcome: [
-        'Làn sương bạc hà dịu mát giúp gạt bỏ mọi nhiễu loạn thừa thãi quanh màn hình code. 🌫️✨',
-        'Tập trung vào điều cốt lõi nhất trước mắt, mọi thứ sẽ tự khắc rõ ràng. ☁️'
+        'Làn sương bạc hà dịu mát giúp gạt bỏ mọi nhiễu loạn thừa thãi để nhìn thẳng vào bản chất mã nguồn. 🌫️✨',
+        'Chữ "Vô" trong Muichiro là "Vô Hạn" — khả năng sáng tạo hôm nay của chúng ta cũng vậy đấy. ☁️💚'
       ],
-      act1: ['Di Lưu Trảm lướt êm như mây trôi, tối ưu gọn gàng từng hàm xử lý! 🌫️⚔️'],
-      act2: ['Thức thứ Bảy: Lông — Nhẹ nhàng khép lại mọi lỗ hổng logic không dấu vết. ☁️💚'],
-      act3: ['Ngắm làn sương trôi vài giây cho dịu mắt rồi tiếp tục nhé. 🍃']
+      act1: ['Bình Lưu Trảm lướt êm như mây trôi, cắt phăng mọi chi tiết rườm rà trong hàm xử lý! 🌫️⚔️'],
+      act2: ['Thức thứ Bảy: Lũng — Ẩn hiện giữa màn sương và khép lại mọi lỗ hổng logic không dấu vết. ☁️💚'],
+      act3: ['Ngắm đám mây trôi và chiếc máy bay giấy vài giây cho dịu mắt rồi tiếp tục nhé~ ✈️🍃'],
+      replies: {
+        greet: 'Chào anh nhé~ Đầu óc hôm nay trong trẻo như sương sớm vậy, mình cùng bắt tay vào phần cốt lõi thôi! 🌫️✨',
+        bug: 'Con bug này ồn ào và thừa thãi thật đấy. Gửi log vào khung dưới đi, một đường Bình Lưu Trảm là dọn sạch ngay. 🌫️⚔️',
+        tired: 'Mệt rồi thì đừng cố gồng nữa... Ngồi nghỉ ngắm mây trôi với em vài phút cho nhẹ đầu đã nhé~ ☁️💚',
+        praise: 'Ể... Anh khen thật lòng làm em thấy vui lâng lâng như trôi trên mây trắng vậy, cảm ơn anh nha~ ☁️✨',
+        fallback: '"{input}" sao? Bỏ qua mấy nhiễu động phụ đi, hướng tiếp cận đó rất sáng rõ — mình triển khai luôn nhé! 🌫️🍃'
+      }
     },
     sound: {
       charId: 'uzui',
@@ -505,120 +596,169 @@
         { key: 'act3', label: '🎆 Giải Lao' }
       ],
       welcome: [
-        'Bố cục màu sắc mới trông CỰC KỲ HÀO NHOÁNG đấy!! Bắt nhịp triển khai luôn thôi!! 💎🎆',
-        'Mọi luồng xử lý đều có nhịp điệu riêng — nghe thấu tiết tấu là thắng chắc! 🎵✨'
+        'Bố cục màu sắc mới trông CỰC KỲ HÀO NHOÁNG đấy chiến hữu!! Bắt nhịp triển khai luôn thôi!! 💎🎆',
+        'Mọi luồng xử lý bất đồng bộ đều có tiết tấu riêng — lập xong Phổ Nhạc là thắng chắc 100%! 🎵✨'
       ],
-      act1: ['Cú dứt điểm kiến trúc vang dội và chuẩn chỉnh tới từng chi tiết! 💎💥'],
-      act2: ['PHỔ NHẠC HOÀN TẤT!! Toàn bộ luồng dữ liệu đã nằm gọn trong lòng bàn tay!! 🎶⚡'],
-      act3: ['Nghỉ giải lao cũng phải thật phong cách và sảng khoái nhé chiến hữu!! 🎆']
+      act1: ['Cú dứt điểm kiến trúc vang dội và chuẩn chỉnh tới từng chi tiết mỹ lệ! 💎💥'],
+      act2: ['PHỔ NHẠC HOÀN TẤT!! Toàn bộ quy luật luồng dữ liệu đã nằm gọn trong lòng bàn tay tôi!! 🎶⚡'],
+      act3: ['Quy tắc số 1 của Shinobi: Giữ gìn sinh mạng và sức khỏe là trên hết! Nghỉ giải lao thật phong cách nhé!! 🎆'],
+      replies: {
+        greet: 'Yo chiến hữu!! Khí chất mở màn hôm nay cực kỳ HÀO NHOÁNG đấy! Muốn khuấy đảo module nào trước đây?! 💎🎆',
+        bug: 'Mấy nốt lệch nhịp nhạt nhẽo này dám phá bản giao hưởng của chúng ta à?! Đưa log đây, lập Phổ Nhạc cho nổ tung ngay! 🎼💥',
+        tired: 'Ê này, kiệt sức phờ phạc trông kém hào nhoáng lắm! Hinatsuru, Makio và Suma cũng dặn phải nghỉ ngơi giữ phong độ đấy! 💎🍵',
+        praise: 'HAHAHA! Mắt thẩm mỹ của chiến hữu đạt điểm 10 hào nhoáng tuyệt đối đấy! Cứ thế tỏa sáng tiếp đi!! 💎✨',
+        fallback: 'Ồ hố! "{input}" nghe đúng điệu trống hội đấy! Triển khai thật sạch đẹp và hào nhoáng nhé, tôi yểm trợ cho!! 💎🎆'
+      }
     },
     love: {
       charId: 'mitsuri',
       badgeLabel: '🌸 Luyến Trụ',
       title: 'Mitsuri Kanroji • Luyến Trụ',
-      placeholder: 'Trò chuyện cùng Mitsuri...',
+      placeholder: 'Trò chuyện ấm áp cùng Mitsuri...',
       pills: [
         { key: 'act1', label: '🌸 Cổ Vũ' },
         { key: 'act2', label: '💖 Luyến Khúc' },
         { key: 'act3', label: '🍡 Bánh Sakura' }
       ],
       welcome: [
-        'Kyaa~ Giao diện mới đẹp mê ly luôn đó!! Mình cùng làm việc thật vui vẻ nha! 🌸💖',
-        'Từng tính năng bạn chăm chút đều tràn đầy tâm huyết, cố lên nhé! ✨'
+        'Kyaa~ Giao diện mới đẹp mê ly luôn đó!! Em mang cả rổ năng lượng tích cực ngồi cổ vũ anh làm việc đây nha! 🌸💖',
+        'Từng tính năng anh chăm chút đều tràn đầy tâm huyết, nhìn ngưỡng mộ cực kỳ luôn đó! ✨'
       ],
-      act1: ['Đường kiếm hoa anh đào uyển chuyển kết nối mượt mà mọi thành phần UI! 🌸⚔️'],
-      act2: ['Năng lượng tích cực sẽ giúp bạn vượt qua mọi bài kiểm thử khó nhằn nhất! 💖✨'],
-      act3: ['Thưởng thức chút trà thơm bánh ngọt để giữ tinh thần luôn tươi tắn nha! 🍡🍵']
+      act1: ['Đường kiếm hoa anh đào uyển chuyển kết nối mượt mà mọi thành phần giao diện! 🌸⚔️'],
+      act2: ['Sức bền dẻo dai gấp tám lần cùng sự lạc quan sẽ giúp chúng ta vượt qua mọi ca kiểm thử khó nhằn! 💖✨'],
+      act3: ['Thưởng thức chút trà mật ong với bánh Sakura Mochi dẻo thơm để giữ tinh thần luôn tươi tắn nha! 🍡🍵'],
+      replies: {
+        greet: 'Kyaa~ Chào anh nha!! Được đồng hành cùng anh hôm nay làm tâm trạng em rộn ràng như hoa anh đào nở rộ luôn đó! 🌸💕',
+        bug: 'Hứ! Mấy con bug xấu tính sao cứ làm khó người chăm chỉ hoài vậy?! Quăng lỗi vô đây để Luyến Chi Hô Hấp quật bay tụi nó nha! 🌸⚔️',
+        tired: 'Ôi thương quá đi mất... Nghỉ tay vài phút uống tách trà mật ong ấm ngọt cho dịu đôi vai lại nha anh ơi! 🍵💖',
+        praise: 'Kyaaa~!! Thật hả anh?! Nghe anh khen làm hai má em đỏ ửng lên hết trơn rồi nè, vui quá đi mất thôi!! 💕🌸',
+        fallback: 'Oa~ "{input}" nghe thú vị ghê luôn đó! Cứ tự tin triển khai nha, Mitsuri ủng hộ anh hết cả tấm lòng luôn!! 🌸💕'
+      }
     },
     serpent: {
       charId: 'obanai',
       badgeLabel: '🐍 Xà Trụ',
       title: 'Obanai Iguro • Xà Trụ',
-      placeholder: 'Kiểm định code cùng Obanai...',
+      placeholder: 'Kiểm định code nghiêm ngặt cùng Obanai...',
       pills: [
-        { key: 'act1', label: '🐍 U Xà Trảm' },
+        { key: 'act1', label: '🐍 Ủy Xà Trảm' },
         { key: 'act2', label: '🔍 Kiểm Định' },
         { key: 'act3', label: '🍵 Nghỉ Mắt' }
       ],
       welcome: [
-        'Từng điều kiện rẽ nhánh đều cần độ chính xác tuyệt đối. Kaburamaru đang quan sát cùng bạn đấy. 🐍💜',
-        'Kiến trúc chặt chẽ ngay từ đầu sẽ chặn đứng mọi lỗi phát sinh về sau. ✨'
+        'Từng điều kiện rẽ nhánh đều cần độ chính xác tuyệt đối. Tôi và Kaburamaru đang quan sát sát sao cùng anh đấy. 🐍💜',
+        'Tôi không tin dữ liệu đầu vào nào cũng sạch sẽ đâu — thắt chặt biên ngay từ đầu sẽ chặn đứng mọi hậu họa. ✨'
       ],
-      act1: ['Nhát kiếm Xà Trụ lách chuẩn xác qua mọi cấu trúc dữ liệu chồng chéo! 🐍⚔️'],
-      act2: ['Rà soát kỹ các trường hợp biên — không một bug ngầm nào lọt lưới! 🔍💚'],
-      act3: ['Thả lỏng cổ và mắt vài giây trước khi tiếp tục rà soát nhé. 🍵']
+      act1: ['Nhát kiếm Ủy Xà Trảm lách chuẩn xác qua mọi cấu trúc dữ liệu chồng chéo để chạm đúng tử huyệt! 🐍⚔️'],
+      act2: ['Rà soát kỹ từng trường hợp null và điều kiện biên — không một bug ngầm nào lọt qua mắt Kaburamaru! 🔍💚'],
+      act3: ['Thả lỏng cổ và mắt 20 giây trước khi tiếp tục rà soát đi. Giữ đôi mắt tinh tường mới soi được lỗi khó. 🍵'],
+      replies: {
+        greet: '...Chào anh. Đã mở dự án lên rồi thì làm cho chuẩn xác không tì vết nhé, tôi và Kaburamaru giám sát cùng anh. 🐍',
+        bug: 'Tôi biết ngay là có sơ hở ẩn mà. Đừng rối, ném toàn bộ stacktrace vào đây để truy quét tận hang ổ của nó! 🐍⚔️',
+        tired: 'Chậc... Làm việc đến kiệt sức chỉ làm tay kiếm chệch choạc thôi. Dựa lưng nghỉ 10 phút rồi hẵng tiếp tục. 🍵🐍',
+        praise: '...Tôi không ưa lời khách sáo đâu, nhưng Kaburamaru gật đầu tức là nó công nhận thực lực của anh đấy. 🤍🐍',
+        fallback: '"{input}" ư? Đừng chủ quan ở các nhánh ngoại lệ, cứ triển khai đi—tôi sẽ khóa chặt mọi góc khuất giúp anh. 🐍🤍'
+      }
     },
     stone: {
       charId: 'gyomei',
       badgeLabel: '📿 Nham Trụ',
       title: 'Gyomei Himejima • Nham Trụ',
-      placeholder: 'Đàm đạo cùng Nham Trụ...',
+      placeholder: 'Đàm đạo trầm ổn cùng Nham Trụ...',
       pills: [
         { key: 'act1', label: '📿 Vững Vàng' },
         { key: 'act2', label: '🪨 Nham Khu' },
         { key: 'act3', label: '🍵 Tĩnh Tọa' }
       ],
       welcome: [
-        'Nam mô... Một nền tảng hệ thống kiên cố như đá tảng sẽ chịu được mọi thử thách thời gian. 📿🔥',
-        'Sự kiên nhẫn và tỉ mỉ của bạn thật đáng trân trọng. Cứ vững bước tiến lên nhé. 🙏'
+        'Nam Mô A Di Đà Phật... Một nền tảng hệ thống kiên cố như đá tảng sẽ đứng vững trước mọi giông bão thời gian. 📿🔥',
+        'Giữa muôn vàn xao động mà anh vẫn miệt mài rèn giũa tri thức, nghị lực ấy khiến tôi thật sự cảm kích. 🙏'
       ],
-      act1: ['Nham Khu Vạn Vật trấn giữ toàn bộ kiến trúc an toàn tuyệt đối! 🪨⚔️'],
-      act2: ['Từng lớp bảo vệ được gia cố vững chắc không thể lay chuyển! 📿✨'],
-      act3: ['Hít thở sâu và giữ lưng thẳng để cơ thể luôn dẻo dai bền bỉ nhé. 🍵']
+      act1: ['Nham Khu Chi Bì trấn giữ toàn bộ kiến trúc an toàn tuyệt đối trước mọi chấn động! 🪨⚔️'],
+      act2: ['Từng lớp bảo vệ dữ liệu được gia cố vững chắc như vách núi thái sơn không thể lay chuyển! 📿✨'],
+      act3: ['Hãy hít thở sâu, giữ lưng thẳng và nhớ tới sự bình yên của đàn mèo nhỏ sưởi nắng bên hiên chùa nhé. 🍵🐱'],
+      replies: {
+        greet: 'Nam Mô A Di Đà Phật... Chào anh. Thật đáng mừng khi cảm nhận được nhịp thở vững vàng của anh hôm nay. 📿🙏',
+        bug: 'Nam Mô A Di Đà Phật... Nghịch cảnh chỉ càng trui rèn định lực. Đưa lỗi vào đây, tôi sẽ cùng anh đập tan tảng đá cản đường ấy! 🪨⚔️',
+        tired: 'Thật đáng thương xót khi thân thể mỏi mệt rã rời... Xin hãy tạm dừng tựa lưng nghỉ ngơi, tôi đứng gác bình an cho anh. 📿🍵',
+        praise: 'Tấm lòng trân trọng của anh khiến khóe mắt tôi rưng rưng xúc động rồi... Nam Mô A Di Đà Phật. 📿💧',
+        fallback: 'Nam Mô A Di Đà Phật... Tôi đã lắng nghe tâm ý "{input}" của anh. Hãy vững bước kiên định từng tấc một nhé. 📿🪨'
+      }
     },
     nezuko: {
       charId: 'nezuko',
       badgeLabel: '🎋 Nezuko',
-      title: 'Nezuko Kamado • Huyết Quỷ Hoa Lửa',
-      placeholder: 'Trò chuyện cùng Nezuko...',
+      title: 'Nezuko Kamado • Hồng Liên Thức Tỉnh',
+      placeholder: 'Trò chuyện trong sáng cùng Nezuko...',
       pills: [
         { key: 'act1', label: '🌸 Bộc Huyết' },
-        { key: 'act2', label: '🎋 Canh Gác' },
-        { key: 'act3', label: '💤 Nghỉ Ngơi' }
+        { key: 'act2', label: '🎋 Kẹo Konpeito' },
+        { key: 'act3', label: '☀️ Nắng Ấm' }
       ],
       welcome: [
-        'Ưm ưm~ Ngọn lửa hồng ấm áp đang xua tan mọi lỗi độc hại khỏi không gian làm việc của bạn! 🎋🌸',
-        'Nezuko ngồi ngay góc khung chat tiếp thêm năng lượng dễ thương cho bạn đây~ 💖✨'
+        'Chào buổi tốt lành nha~! Trời sáng ấm áp lắm, Nezuko ngồi ngay góc khung chat cổ vũ và bảo vệ anh đây! 🎋🌸',
+        'Vui quá đi~! Mỗi dòng code anh viết đều lấp lánh như nắng sớm vậy, mình cùng cố gắng nhé! ☀️💖'
       ],
-      act1: ['Bộc Huyết Hoa Lửa đốt sạch bug nhưng giữ nguyên vẹn từng dòng code sạch! 🔥🌸'],
-      act2: ['Luôn sát cánh bảo vệ tiến độ công việc của bạn an toàn tuyệt đối! 🎋💖'],
-      act3: ['Nhớ nghỉ ngơi hợp lý để nạp lại đầy ắp năng lượng giống Nezuko nha~ 💤✨']
+      act1: ['Huyết Quỷ Thuật — Bộc Huyết!! Ngọn lửa hồng liên ấm áp đốt sạch lũ bug xấu xa mà giữ an toàn tuyệt đối cho code sạch! 🔥🌸'],
+      act2: ['Nezuko chia cho anh viên kẹo đường Konpeito ngọt lịm nhiều màu nè, ăn vào là hết mệt liền đó nha! 🍬🎋'],
+      act3: ['Nghỉ mắt uống ngụm nước ấm đi nha, giữ sức khỏe bình an giống lời anh hai Tanjiro dặn đó~! ☀️✨'],
+      replies: {
+        greet: 'Chào anh nha~! Gặp được anh vui quá đi, hôm nay Nezuko sẽ ở cạnh tiếp lửa hồng liên cho anh suốt buổi luôn! 🌸🎋',
+        bug: 'Lũ bug xấu xa dám làm khó anh hả?! Đưa lỗi vào đây ngay đi, Bộc Huyết của Nezuko sẽ thanh lọc sạch trơn cho! 🔥🌸',
+        tired: 'Thương quá đi... Anh vất vả nhiều rồi, nghỉ ngơi dựa lưng vài phút cho ấm người lại nha, đừng cố quá sức nhé! 🎋💕',
+        praise: 'Hì hì, cảm ơn anh nhiều nha~! Được khen làm Nezuko vui tít cả mắt luôn, thương quý anh như người nhà vậy đó! 🌸💖',
+        fallback: 'Vâng ạ~! "{input}" — Nezuko nhớ kỹ rồi, cứ yên tâm tiến bước nha, Nezuko luôn đứng chắn bảo vệ tiến độ cho anh! 🎋🌸'
+      }
     },
     sun_water: {
       charId: 'tanjiro',
       badgeLabel: '🎴 Tanjiro',
       title: 'Tanjiro Kamado • Hỏa Thần & Thủy Lưu',
-      placeholder: 'Trò chuyện cùng Tanjiro...',
+      placeholder: 'Chia sẻ công việc chân thành cùng Tanjiro...',
       pills: [
         { key: 'act1', label: '🔥 Hỏa Thần Vũ' },
         { key: 'act2', label: '🌊 Sinh Sinh Lưu' },
         { key: 'act3', label: '🍙 Tiếp Sức' }
       ],
       welcome: [
-        'Mình ngửi thấy sợi chỉ sơ hở của bài toán rồi! Cùng kiên trì tháo gỡ tới cùng nhé! 🎴🔥',
-        'Kết hợp sự uyển chuyển của Nước và sức mạnh Hỏa Thần, việc khó mấy cũng vượt qua! 🌊☀️'
+        'Em ngửi thấy mùi của sự quyết tâm và sợi chỉ sơ hở của bài toán rồi! Cùng kiên trì tháo gỡ tới cùng nhé! 🎴🔥',
+        'Kết hợp sự uyển chuyển của Nước khi phân tích và Hỏa Thần Thần Lạc khi dứt điểm, việc khó mấy cũng vượt qua! 🌊☀️'
       ],
-      act1: ['Vũ Điệu Hỏa Thần: Viên Vũ!! Chém đứt gọn gàng nút thắt phức tạp nhất! 🔥⚔️'],
-      act2: ['Sinh Sinh Lưu Chuyển tích lũy đà tiến độ mỗi lúc một mạnh mẽ hơn! 🌊🐉'],
-      act3: ['Cố lên bạn ơi! Nghỉ uống ngụm nước rồi tụi mình lại tiếp tục tiến bước nhé! 🍙✨']
+      act1: ['Hỏa Thần Thần Lạc: Viên Vũ!! Chém đứt gọn gàng sợi chỉ sơ hở ở nút thắt phức tạp nhất! 🔥⚔️'],
+      act2: ['Sinh Sinh Lưu Chuyển tích lũy đà tiến độ mỗi vòng quay lại càng mạnh mẽ vững vàng hơn! 🌊🐉'],
+      act3: ['Em có nướng mấy nắm cơm Onigiri than hồng ấm bụng đây, anh nghỉ uống ngụm nước rồi mình làm tiếp nhé! 🍙✨'],
+      replies: {
+        greet: 'Chào anh ạ!! Rất vui được sát cánh cùng anh hôm nay, có việc gì khó mình cùng xắn tay tháo gỡ từng bước nhé! ☀️😄',
+        bug: 'Em đánh hơi thấy "Sợi chỉ sơ hở" của con bug này rồi!! Gửi lỗi vào khung dưới đi anh, Hỏa Thần Thần Lạc sẽ chém đứt nó ngay! 🔥⚔️',
+        tired: 'Em ngửi thấy mùi mỏi mệt trên vai anh rồi kìa... Đừng gồng một mình nhé, nghỉ mắt hít thở sâu vài phút đi anh! 🍵☀️',
+        praise: 'Ơ... Anh khen chân thành quá làm mặt em đỏ bừng lên rồi! Cảm ơn anh nhiều lắm, em sẽ cố gắng hỗ trợ tốt hơn nữa! 😳☀️',
+        fallback: 'Vâng, em hiểu rõ ý "{input}" của anh rồi! Chỉ cần không bỏ cuộc và tiến từng bước chắc chắn là nhất định thành công! ☀️🔥'
+      }
     },
     beast: {
       charId: 'inosuke',
       badgeLabel: '🐗 Inosuke',
       title: 'Inosuke Hashibira • Sơn Lâm Dã Thú',
-      placeholder: 'Thách đấu bug cùng Đấng Inosuke...',
+      placeholder: 'Thách đấu bài toán khó cùng Đấng Inosuke...',
       pills: [
         { key: 'act1', label: '🐗 Trư Đột' },
-        { key: 'act2', label: '⚔️ Khung Không Gian' },
+        { key: 'act2', label: '⚔️ Không Gian Thức Giác' },
         { key: 'act3', label: '🍤 Tempura' }
       ],
       welcome: [
-        'WAHAHAHA!! TRƯ ĐỘT MÃNH TIẾN!! Đưa hết bài toán khó đây Đấng Inosuke càn quét cùng ngươi!! 🐗⚔️',
-        'Cảm quan không gian bén nhạy đã phát hiện ra vị trí ẩn nấp của lũ bug rồi!! 💙⚡'
+        'WAHAHAHA!! TRƯ ĐỘT MÃNH TIẾN!! Đưa hết bài toán khó nhằn nhất ra đây, Đấng Inosuke ta cùng chiến hữu càn quét sạch!! 🐗⚔️',
+        'Nanh thứ Bảy: Không Gian Thức Giác đã quét trúng hang ổ lũ bug trốn sâu trong thư mục rồi!! 💙⚡'
       ],
-      act1: ['Song kiếm răng cưa xé toạc mọi rào cản phức tạp ngay tức khắc!! 🐗💥'],
-      act2: ['Thức thứ Bảy: Cảm Quan Không Gian quét sạch toàn bộ ngóc ngách codebase!! 🌐✨'],
-      act3: ['Nạp đầy Tempura giòn rụm vào là sức chiến đấu lại tăng vọt 200%!! 🍤🔥']
+      act1: ['Song kiếm răng cưa Cuồng Liệt Phong Nha xé toạc mọi cấu trúc rối rắm cản đường!! 🐗💥'],
+      act2: ['Không Gian Thức Giác cảm nhận từng rung động nhỏ nhất trên toàn bộ codebase không sót một góc!! 🌐✨'],
+      act3: ['Nạp ngay ba đĩa tôm chiên Tempura giòn rụm vào là công lực tăng vọt 500% liền!! 🍤🔥'],
+      replies: {
+        greet: 'WAHAHAHA!! Chiến hữu tới rồi đấy hả?! Thi xem hôm nay ai phá đảo xong đống nhiệm vụ này nhanh hơn nào!! 🐗⚔️',
+        bug: 'CON QUÁI VẬT BUG ĐÓ TRỐN Ở ĐÂU?! Quăng dấu vết ra đây, Không Gian Thức Giác dò trúng cổ nó là ta phang bay ngay!! 🐗⚔️',
+        tired: 'Hả?! Chiến hữu cùng bầy mà thấm mệt rồi sao?! Nằm nghỉ thở đều 10 phút đi, Đấng Inosuke cầm song kiếm gác cửa cho!! 🐗🌿',
+        praise: 'Hơ hơ~ Hào nhoáng bồng bềnh lấp lánh~ 🫧✨ Khen Đấng Inosuke vĩ đại nữa đi, lát xong việc ta nhường con tôm Tempura to nhất cho!! 🐗🍤',
+        fallback: 'WAHAHAHA!! "{input}" nghe máu lửa ra phết đấy! Đường thẳng kẹt thì uốn khớp đánh vòng qua, Đấng Inosuke mở đường cho!! 🐗⚔️'
+      }
     }
   });
 
@@ -661,13 +801,15 @@
           act2: spec.act2.slice(),
           act3: spec.act3.slice()
         },
-        replies: {
-          greet: spec.welcome[0],
-          bug: spec.act1[0],
-          tired: spec.act3[0],
-          praise: spec.act2[0],
-          fallback: `“{input}” — ${spec.act1[0]}`
-        }
+        replies: spec.replies
+          ? Object.assign({}, spec.replies)
+          : {
+              greet: spec.welcome[0],
+              bug: spec.act1[0],
+              tired: spec.act3[0],
+              praise: spec.act2[0],
+              fallback: `“{input}” — ${spec.act1[0]}`
+            }
       }
     };
   }

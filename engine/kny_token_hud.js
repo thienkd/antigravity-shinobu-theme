@@ -63,6 +63,7 @@
     ctxTextEl: null,
     ctxNumEl: null,
     ctxFillEl: null,
+    ctxCacheFillEl: null,
     turnBtnEl: null,
     turnIconEl: null,
     turnTextEl: null,
@@ -105,9 +106,11 @@
     popSessionIcon: null,
     detCtxVal: null,
     detCtxMeter: null,
+    detCtxCacheMeter: null,
     detCacheVal: null,
     detTurnIcon: null,
     detTurnVal: null,
+    detVelocityVal: null,
     detBladeVal: null,
     detDraftVal: null,
     detSessionVal: null,
@@ -162,6 +165,10 @@
     dispTurnTokens: 0,
     targetCtxTokens: 0,
     targetTurnTokens: 0,
+    burnRateTokPerSec: 0,
+    peakBurnRateTokPerSec: 0,
+    lastBurnSampleTokens: 0,
+    lastBurnSampleAt: 0,
 
     // Streaming SSE & Fallback Polling State
     streamAbort: null,
@@ -615,10 +622,12 @@
         position: relative;
         display: inline-flex;
         align-items: center;
-        gap: 4.5px;
-        padding: 3.5px 8.5px;
+        gap: 5px;
+        padding: 3.5px 9px;
         border-radius: 9999px;
-        background: var(--tok-surface, rgba(16, 12, 34, 0.94));
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0.01) 48%, rgba(0, 0, 0, 0.22) 100%),
+          var(--tok-surface, rgba(14, 11, 29, 0.95));
         border: 1px solid var(--tok-border, rgba(192, 132, 252, 0.58));
         color: #f8fafc;
         font-size: 11px;
@@ -627,14 +636,52 @@
         white-space: nowrap;
         cursor: pointer;
         overflow: hidden;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.48), 0 0 10px var(--tok-glow, rgba(192, 132, 252, 0.22));
-        transition: transform 0.14s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+        contain: layout style paint;
+        box-shadow:
+          0 4px 14px rgba(0, 0, 0, 0.52),
+          0 0 10px var(--tok-glow, rgba(192, 132, 252, 0.20)),
+          inset 0 1px 0 rgba(255, 255, 255, 0.20),
+          inset 0 -1px 0 rgba(0, 0, 0, 0.45);
+        transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.18s ease, box-shadow 0.18s ease;
+      }
+      .agy-tok-pill::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 46%;
+        height: 100%;
+        background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.18) 50%, rgba(255,255,255,0) 100%);
+        transform: translateX(-160%) skewX(-22deg);
+        pointer-events: none;
+        will-change: transform;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .agy-tok-pill:hover::after {
+          animation: agyPillSpecularSweep 0.68s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+        .agy-tok-turn-pill[data-working="1"]::after {
+          animation: agyPillWorkingSweep 2.1s ease-in-out infinite;
+        }
+      }
+      @keyframes agyPillSpecularSweep {
+        0%   { transform: translateX(-160%) skewX(-22deg); }
+        100% { transform: translateX(340%) skewX(-22deg); }
+      }
+      @keyframes agyPillWorkingSweep {
+        0%   { transform: translateX(-160%) skewX(-22deg); opacity: 0.9; }
+        55%  { transform: translateX(340%) skewX(-22deg); opacity: 0.9; }
+        100% { transform: translateX(340%) skewX(-22deg); opacity: 0; }
       }
       .agy-tok-pill:hover,
       #${HUD_BAR_ID}[data-open="1"] .agy-tok-pill {
-        transform: translateY(-1px);
+        transform: translateY(-1.5px);
         border-color: var(--tok-primary, #c084fc);
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.58), 0 0 14px var(--tok-glow, rgba(192, 132, 252, 0.42));
+        box-shadow:
+          0 6px 18px rgba(0, 0, 0, 0.62),
+          0 0 15px var(--tok-glow, rgba(192, 132, 252, 0.44)),
+          inset 0 1px 0 rgba(255, 255, 255, 0.32),
+          inset 0 -1px 0 rgba(0, 0, 0, 0.45);
       }
 
       .agy-tok-icon-slot {
@@ -642,32 +689,50 @@
         align-items: center;
         justify-content: center;
         line-height: 1;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
       }
 
-      /* Subtle bottom context gauge inside Context Pill */
+      /* Dual-Layer Segmented Context + KV Cache Gauge inside Context Pill */
       .agy-tok-ctx-track {
         position: absolute;
         left: 8px;
         right: 8px;
         bottom: 1.5px;
-        height: 2px;
+        height: 2.5px;
         border-radius: 9999px;
         background: rgba(255, 255, 255, 0.12);
         overflow: hidden;
         pointer-events: none;
       }
       .agy-tok-ctx-fill {
+        position: absolute;
+        left: 0;
+        top: 0;
         height: 100%;
         width: 0%;
         border-radius: 9999px;
         background: linear-gradient(90deg, var(--tok-primary, #38bdf8), var(--tok-secondary, #e879f9));
-        transition: width 0.25s ease;
+        box-shadow: 0 0 6px var(--tok-primary, #38bdf8);
+        transition: width 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .agy-tok-ctx-cache {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 0%;
+        border-radius: 9999px;
+        background: linear-gradient(90deg, rgba(45, 212, 191, 0.95), rgba(56, 189, 248, 0.85));
+        opacity: 0.72;
+        transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
       }
       .agy-tok-ctx-fill[data-warn="amber"] {
         background: linear-gradient(90deg, #f59e0b, #fde047);
+        box-shadow: 0 0 7px rgba(245, 158, 11, 0.75);
       }
       .agy-tok-ctx-fill[data-warn="red"] {
         background: linear-gradient(90deg, #ef4444, #fb923c);
+        box-shadow: 0 0 8px rgba(239, 68, 68, 0.85);
       }
 
       /* Active working / elemental pulse state on Turn Token Pill */
@@ -775,6 +840,7 @@
        * QUICK UTILITY ICON BUTTONS (KAGURA BELL & UROKODAKI FOX MASK)
        * ====================================================================== */
       .agy-hud-util-btn {
+        position: relative;
         width: 24px;
         height: 24px;
         padding: 0;
@@ -782,19 +848,34 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: var(--tok-surface, rgba(16, 12, 34, 0.94));
-        border: 1px solid var(--tok-border, rgba(148, 163, 184, 0.45));
+        background:
+          radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.15), transparent 62%),
+          var(--tok-surface, rgba(16, 12, 34, 0.95));
+        border: 1px solid var(--tok-border, rgba(148, 163, 184, 0.48));
         color: #e2e8f0;
         cursor: pointer;
         flex-shrink: 0;
-        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.46);
-        transition: transform 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+        box-shadow:
+          0 3px 10px rgba(0, 0, 0, 0.52),
+          inset 0 1px 0 rgba(255, 255, 255, 0.22);
+        transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
       }
       .agy-hud-util-btn:hover {
-        transform: translateY(-1.5px) scale(1.07);
+        transform: translateY(-1.5px) scale(1.09);
         border-color: #fde047;
         color: #ffffff;
-        box-shadow: 0 5px 14px rgba(0, 0, 0, 0.6), 0 0 12px rgba(250, 204, 21, 0.45);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.64), 0 0 13px rgba(250, 204, 21, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .agy-kagura-bell-btn:hover svg {
+          animation: agyKaguraBellSwing 0.55s ease-in-out;
+          transform-origin: 50% 15%;
+        }
+      }
+      @keyframes agyKaguraBellSwing {
+        0%, 100% { transform: rotate(0deg); }
+        25%      { transform: rotate(11deg); }
+        65%      { transform: rotate(-9deg); }
       }
       .agy-hud-util-btn[data-active="1"] {
         border-color: #fde047;
@@ -809,17 +890,23 @@
       /* Detailed Context & Token Breakdown Popover */
       .agy-tok-popover {
         position: absolute;
-        bottom: calc(100% + 7px);
+        bottom: calc(100% + 8px);
         left: 0;
-        width: 316px;
+        width: 326px;
         display: none;
         flex-direction: column;
-        gap: 7px;
-        padding: 10px 12px 11px;
-        border-radius: 12px;
-        background: var(--tok-surface, rgba(15, 11, 30, 0.97));
-        border: 1px solid var(--tok-border, rgba(192, 132, 252, 0.68));
-        box-shadow: 0 14px 34px rgba(3, 4, 14, 0.84), 0 0 22px var(--tok-glow, rgba(192, 132, 252, 0.28)), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+        gap: 7.5px;
+        padding: 11px 13px 12px;
+        border-radius: 13px;
+        background:
+          linear-gradient(165deg, rgba(255, 255, 255, 0.065) 0%, rgba(255, 255, 255, 0.0) 36%),
+          var(--tok-surface, rgba(13, 10, 27, 0.98));
+        border: 1px solid var(--tok-border, rgba(192, 132, 252, 0.72));
+        box-shadow:
+          0 18px 40px rgba(2, 4, 14, 0.88),
+          0 0 24px var(--tok-glow, rgba(192, 132, 252, 0.28)),
+          inset 0 1px 0 rgba(255, 255, 255, 0.18),
+          inset 0 -1px 0 rgba(0, 0, 0, 0.5);
         color: #f8fafc;
         z-index: 84;
         cursor: default;
@@ -873,18 +960,45 @@
       }
 
       .agy-tok-meter-bar {
+        position: relative;
         width: 100%;
-        height: 5px;
+        height: 6px;
         border-radius: 9999px;
-        background: rgba(255, 255, 255, 0.10);
+        background: rgba(255, 255, 255, 0.09);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.55);
         overflow: hidden;
       }
+      .agy-tok-meter-bar::after {
+        content: "";
+        position: absolute;
+        left: 36.24%;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: rgba(253, 224, 71, 0.45);
+        pointer-events: none;
+      }
       .agy-tok-meter-fill {
+        position: absolute;
+        left: 0;
+        top: 0;
         height: 100%;
         width: 0%;
         border-radius: 9999px;
         background: linear-gradient(90deg, var(--tok-primary, #38bdf8), var(--tok-secondary, #e879f9));
-        transition: width 0.25s ease;
+        box-shadow: 0 0 8px var(--tok-primary, #38bdf8);
+        transition: width 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .agy-tok-meter-cache {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 0%;
+        border-radius: 9999px;
+        background: linear-gradient(90deg, rgba(45, 212, 191, 0.95), rgba(56, 189, 248, 0.85));
+        opacity: 0.76;
+        transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
       }
 
       .agy-tok-rows {
@@ -1013,31 +1127,37 @@
     svg.setAttribute('aria-hidden', 'true');
 
     const uid = 'agy_nichirin_' + Math.random().toString(36).slice(2, 8);
+    const bladeD = 'M12.5 4.4 C21.8 4.3 33.2 3.8 42.1 3.2 Q44.7 4.3 45.5 6.4 Q42.8 8.6 38.2 8.7 C29.5 8.9 20.2 8.7 12.5 8.4 Z';
     svg.innerHTML =
       `<defs>` +
-      `<clipPath id="${uid}_blade_clip">` +
-      `<path d="M12.5 4.3 L39.5 4.0 Q43.8 4.0 45.2 6.5 Q42.8 8.8 38.2 8.8 L12.5 8.6 Z"/>` +
-      `</clipPath>` +
-      `<linearGradient id="${uid}_ember_grad" x1="12" y1="6" x2="45" y2="6" gradientUnits="userSpaceOnUse">` +
-      `<stop offset="0%" stop-color="#dc2626"/>` +
-      `<stop offset="60%" stop-color="#f97316"/>` +
-      `<stop offset="100%" stop-color="#fde047"/>` +
+      `<clipPath id="${uid}_blade_clip"><path d="${bladeD}"/></clipPath>` +
+      `<linearGradient id="${uid}_steel_grad" x1="12.5" y1="3" x2="12.5" y2="9.5" gradientUnits="userSpaceOnUse">` +
+      `<stop offset="0%" stop-color="#475569"/><stop offset="48%" stop-color="#0f172a"/><stop offset="100%" stop-color="#334155"/>` +
+      `</linearGradient>` +
+      `<linearGradient id="${uid}_ember_grad" x1="12.5" y1="6" x2="45.5" y2="6" gradientUnits="userSpaceOnUse">` +
+      `<stop offset="0%" stop-color="#b91c1c"/>` +
+      `<stop offset="45%" stop-color="#ef4444"/>` +
+      `<stop offset="80%" stop-color="#f97316"/>` +
+      `<stop offset="100%" stop-color="#fef08a"/>` +
       `</linearGradient>` +
       `</defs>` +
-      // Tsuka hilt wrap
-      `<rect x="1.2" y="4.8" width="9.4" height="3.4" rx="1.2" fill="#1e1b4b" stroke="#facc15" stroke-width="0.8"/>` +
-      `<path d="M3.5 4.9l1.4 3.2M6.2 4.9l1.4 3.2M8.9 4.9l1.1 3.2" stroke="#ef4444" stroke-width="0.85"/>` +
-      // Yoriichi Golden Tsuba guard
-      `<rect x="10.6" y="2.2" width="2.2" height="8.6" rx="1" fill="#facc15" stroke="#ca8a04" stroke-width="0.6"/>` +
-      // Base Black-Steel Nichirin Blade
-      `<path d="M12.5 4.3 L39.5 4.0 Q43.8 4.0 45.2 6.5 Q42.8 8.8 38.2 8.8 L12.5 8.6 Z" fill="#1e293b" stroke="#94a3b8" stroke-width="0.85"/>` +
-      // Progressive Forge Heat Overlay inside Blade Clip
+      // Golden Kashira pommel cap + Tsuka hilt with crimson diamond Tsuka-maki wrap
+      `<rect x="0.8" y="4.7" width="8.6" height="3.4" rx="1.2" fill="#17153b" stroke="#facc15" stroke-width="0.75"/>` +
+      `<rect x="0.7" y="4.7" width="1.5" height="3.4" rx="0.7" fill="#eab308"/>` +
+      `<path d="M2.9 4.8l1.2 3.2M4.1 4.8L2.9 8.0M5.4 4.8l1.2 3.2M6.6 4.8L5.4 8.0M7.9 4.8l1.0 3.2" stroke="#ef4444" stroke-width="0.8" stroke-linecap="round"/>` +
+      // Yoriichi Flame-Rimmed Golden Tsuba Guard + Brass Habaki Collar
+      `<ellipse cx="10.2" cy="6.4" rx="1.3" ry="4.6" fill="#facc15" stroke="#b45309" stroke-width="0.65"/>` +
+      `<rect x="11.1" y="4.5" width="1.6" height="3.8" rx="0.35" fill="#fde047" stroke="#ca8a04" stroke-width="0.5"/>` +
+      // Base Forged Black-Steel Sori Curved Nichirin Blade + Bo-hi Fuller Groove
+      `<path d="${bladeD}" fill="url(#${uid}_steel_grad)" stroke="#94a3b8" stroke-width="0.75"/>` +
+      `<line x1="13.5" y1="5.3" x2="38.8" y2="4.8" stroke="rgba(226,232,240,0.45)" stroke-width="0.55" stroke-linecap="round"/>` +
+      // Progressive Bright-Red Forge Heat Overlay + Tempered Wavy Hamon Line (exact 33.0 span: 12.5 -> 45.5)
       `<g clip-path="url(#${uid}_blade_clip)">` +
-      `<rect class="agy-nichirin-heat-rect" x="12.5" y="3.2" width="0" height="6.4" fill="url(#${uid}_ember_grad)"/>` +
-      `<path d="M13 6.7 Q18 5.4 23 6.8 T33 6.6 T43 6.2" stroke="rgba(255,255,255,0.65)" stroke-width="0.7" fill="none"/>` +
+      `<rect class="agy-nichirin-heat-rect" x="12.5" y="2.6" width="0" height="6.8" fill="url(#${uid}_ember_grad)"/>` +
+      `<path d="M13.0 7.1 Q16.6 5.8 20.2 7.1 T27.4 6.9 T34.6 6.7 T41.8 6.2 T45.0 6.1" stroke="rgba(255,255,255,0.78)" stroke-width="0.65" fill="none"/>` +
       `</g>` +
-      // Outer Blade Edge Highlight
-      `<path class="agy-nichirin-edge-stroke" d="M12.5 4.3 L39.5 4.0 Q43.8 4.0 45.2 6.5 Q42.8 8.8 38.2 8.8 L12.5 8.6 Z" fill="none" stroke="rgba(226,232,240,0.65)" stroke-width="0.75"/>`;
+      // Razor Kissaki Tip & Spine Specular Highlight
+      `<path class="agy-nichirin-edge-stroke" d="${bladeD}" fill="none" stroke="rgba(226,232,240,0.68)" stroke-width="0.72"/>`;
 
     const fillRect = svg.querySelector('.agy-nichirin-heat-rect');
     const edgePath = svg.querySelector('.agy-nichirin-edge-stroke');
@@ -2097,6 +2217,33 @@
       state.pollWasWorking = snap.isWorking;
     }
 
+    const nowVelMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (firstSync) {
+      state.lastBurnSampleTokens = outTok || turnTok;
+      state.lastBurnSampleAt = nowVelMs;
+    } else {
+      const curSample = outTok > 0 ? outTok : turnTok;
+      const dtVelSec = (nowVelMs - (state.lastBurnSampleAt || nowVelMs)) / 1000;
+      const dTok = curSample - (state.lastBurnSampleTokens || 0);
+      if (dTok > 0 && dtVelSec >= 0.08 && dtVelSec <= 15) {
+        const instRate = Math.min(2500, dTok / dtVelSec);
+        state.burnRateTokPerSec = state.burnRateTokPerSec > 0
+          ? (state.burnRateTokPerSec * 0.55 + instRate * 0.45)
+          : instRate;
+        if (state.burnRateTokPerSec > state.peakBurnRateTokPerSec) {
+          state.peakBurnRateTokPerSec = state.burnRateTokPerSec;
+        }
+        state.lastBurnSampleTokens = curSample;
+        state.lastBurnSampleAt = nowVelMs;
+      } else if (dTok < 0 || dtVelSec > 15) {
+        state.lastBurnSampleTokens = curSample;
+        state.lastBurnSampleAt = nowVelMs;
+      }
+      if (snap.isWorking === false) {
+        state.burnRateTokPerSec = 0;
+      }
+    }
+
     if (firstSync) {
       state.dispCtxTokens = state.serverCtxTokens;
       state.dispTurnTokens = state.serverTurnTokens;
@@ -2652,6 +2799,10 @@
     state.dispTurnTokens = 0;
     state.targetCtxTokens = 0;
     state.targetTurnTokens = 0;
+    state.burnRateTokPerSec = 0;
+    state.peakBurnRateTokPerSec = 0;
+    state.lastBurnSampleTokens = 0;
+    state.lastBurnSampleAt = 0;
     state.liveDomTurnEst = 0;
     state.workStateItems = [];
     state.lastServerStepIdx = -1;
@@ -2698,7 +2849,11 @@
       state.forceSignalSample = false;
       state.lastSignalSampleAt = nowMs;
       state.cachedSignals = extractLivePageSignals(state.composer);
-      state.cachedDomChars = measureConversationDomChars();
+      // Zero-GC optimization: skip walking full conversation DOM textContent every 220ms when server SSE telemetry is already active & idle
+      const nextWorking = Boolean(state.cachedSignals.isWorking || state.serverIsWorking);
+      if (!state.hasTelemetry || nextWorking || state.cachedDomChars === 0) {
+        state.cachedDomChars = measureConversationDomChars();
+      }
       refreshSessionAndElementIcons();
     }
 
@@ -2805,6 +2960,9 @@
     const ctxRounded = Math.max(0, Math.round(state.dispCtxTokens));
     const turnRounded = Math.max(0, Math.round(state.dispTurnTokens));
     const ctxRatio = Math.max(0, Math.min(1, ctxRounded / DEFAULT_CONTEXT_WINDOW));
+    const cacheRatio = state.serverCacheTokens > 0
+      ? Math.max(0, Math.min(ctxRatio, state.serverCacheTokens / DEFAULT_CONTEXT_WINDOW))
+      : 0;
     const ctxPctStr = (ctxRatio * 100).toFixed(1) + '%';
 
     if (state.ctxNumEl) {
@@ -2820,6 +2978,12 @@
         if (state.ctxFillEl.dataset.warn !== nextWarn) state.ctxFillEl.dataset.warn = nextWarn;
       } else if (state.ctxFillEl.dataset.warn) {
         delete state.ctxFillEl.dataset.warn;
+      }
+    }
+    if (state.ctxCacheFillEl) {
+      const nextCacheW = cacheRatio > 0 ? `${Math.max(2, Math.round(cacheRatio * 100))}%` : '0%';
+      if (state.ctxCacheFillEl.style.width !== nextCacheW) {
+        state.ctxCacheFillEl.style.width = nextCacheW;
       }
     }
 
@@ -2865,6 +3029,12 @@
           state.detCtxMeter.style.width = nextMeterW;
         }
       }
+      if (state.detCtxCacheMeter) {
+        const nextCacheMeterW = cacheRatio > 0 ? `${Math.max(1, Math.round(cacheRatio * 100))}%` : '0%';
+        if (state.detCtxCacheMeter.style.width !== nextCacheMeterW) {
+          state.detCtxCacheMeter.style.width = nextCacheMeterW;
+        }
+      }
       if (state.detCacheVal) {
         const cachePct = ctxRounded > 0 ? Math.min(100, Math.round((state.serverCacheTokens / ctxRounded) * 100)) : 0;
         setTextIfChanged(
@@ -2875,6 +3045,20 @@
       if (state.detTurnVal) {
         const stepsTxt = state.serverTurnSteps > 0 ? ` • ${state.serverTurnSteps} bước` : '';
         setTextIfChanged(state.detTurnVal, `+${formatExactInt(turnRounded)} token${stepsTxt}`);
+      }
+      if (state.detVelocityVal) {
+        let velTxt = 'Sẵn sàng';
+        if (state.isWorking) {
+          const liveRate = state.burnRateTokPerSec > 0
+            ? Math.round(state.burnRateTokPerSec)
+            : (state.workStartedAt > 0 && turnRounded > 0
+                ? Math.max(1, Math.round(turnRounded / Math.max(0.5, ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - state.workStartedAt) / 1000)))
+                : 0);
+          velTxt = liveRate > 0 ? `${formatExactInt(liveRate)} token/giây` : 'Đang khởi phát…';
+        } else if (state.peakBurnRateTokPerSec > 0) {
+          velTxt = `Đỉnh ${formatExactInt(Math.round(state.peakBurnRateTokPerSec))} token/giây`;
+        }
+        setTextIfChanged(state.detVelocityVal, velTxt);
       }
       computeAndApplyBladeHeat();
       refreshBladeCompactUi();
@@ -3198,7 +3382,10 @@
     ctxTrack.className = 'agy-tok-ctx-track';
     const ctxFill = document.createElement('span');
     ctxFill.className = 'agy-tok-ctx-fill';
+    const ctxCacheFill = document.createElement('span');
+    ctxCacheFill.className = 'agy-tok-ctx-cache';
     ctxTrack.appendChild(ctxFill);
+    ctxTrack.appendChild(ctxCacheFill);
 
     ctxBtn.appendChild(ctxIconWrap);
     ctxBtn.appendChild(ctxText);
@@ -3288,22 +3475,26 @@
     meterWrap.className = 'agy-tok-meter-bar';
     const meterFill = document.createElement('div');
     meterFill.className = 'agy-tok-meter-fill';
+    const meterCacheFill = document.createElement('div');
+    meterCacheFill.className = 'agy-tok-meter-cache';
     meterWrap.appendChild(meterFill);
+    meterWrap.appendChild(meterCacheFill);
 
     const rows = document.createElement('div');
     rows.className = 'agy-tok-rows';
-    const rCtx = createIconRow(ic ? ic.getFuncSvg('breathing_forms', 13) : '', 'Ngữ cảnh phiên:');
+    const rCtx = createIconRow(ic ? ic.getFuncSvg('context_scroll', 13) : '', 'Ngữ cảnh phiên:');
     const rCache = createIconRow(ic ? ic.getFuncSvg('kv_cache', 13) : '', 'Bộ nhớ đệm (KV):');
     const rTurn = createIconRow('', 'Token lượt hiện tại:');
+    const rVelocity = createIconRow(ic ? ic.getFuncSvg('burn_velocity', 13) : '', 'Nhịp rèn trực tiếp:');
     const rBlade = createIconRow(ic ? ic.getFuncSvg('katana_cast', 13) : '', 'Nhiệt độ Nhật Luân Đao:');
-    const rCompact = createIconRow(ic ? ic.getFuncSvg('katana_cast', 13) : '', 'Nén phiên (/compact):');
+    const rCompact = createIconRow(ic ? ic.getFuncSvg('compact_seal', 13) : '', 'Nén phiên (/compact):');
     const rDraft = createIconRow(ic ? ic.getFuncSvg('draft_brush', 13) : '', 'Đang gõ trong ô chat:');
     const rSession = createIconRow(ic ? ic.getFuncSvg('session_sum', 13) : '', 'Tổng sinh ra cả phiên:');
     const rModel = createIconRow(ic ? ic.getFuncSvg('model_quota', 13) : '', 'Mô hình & Hạn mức:');
-    const rTasks = createIconRow(ic ? ic.getFuncSvg('breathing_forms', 13) : '', 'Tiến độ nhiệm vụ:');
+    const rTasks = createIconRow(ic ? ic.getFuncSvg('task_scroll', 13) : '', 'Tiến độ nhiệm vụ:');
     rTasks.row.style.display = 'none';
 
-    [rCtx, rCache, rTurn, rBlade, rCompact, rDraft, rSession, rModel, rTasks].forEach((r) => rows.appendChild(r.row));
+    [rCtx, rCache, rTurn, rVelocity, rBlade, rCompact, rDraft, rSession, rModel, rTasks].forEach((r) => rows.appendChild(r.row));
 
     pop.appendChild(hdr);
     pop.appendChild(meterWrap);
@@ -3356,6 +3547,7 @@
     state.ctxTextEl = ctxText;
     state.ctxNumEl = ctxNumEl;
     state.ctxFillEl = ctxFill;
+    state.ctxCacheFillEl = ctxCacheFill;
     state.turnBtnEl = turnBtn;
     state.turnIconEl = turnIcon;
     state.turnTextEl = turnText;
@@ -3384,9 +3576,11 @@
     state.detStatusBadge = badge;
     state.detCtxVal = rCtx.valEl;
     state.detCtxMeter = meterFill;
+    state.detCtxCacheMeter = meterCacheFill;
     state.detCacheVal = rCache.valEl;
     state.detTurnIcon = rTurn.icoEl;
     state.detTurnVal = rTurn.valEl;
+    state.detVelocityVal = rVelocity.valEl;
     state.detBladeVal = rBlade.valEl;
     state.detCompactVal = rCompact.valEl;
     state.detDraftVal = rDraft.valEl;
@@ -3821,6 +4015,10 @@
     state.dispTurnTokens = 0;
     state.targetCtxTokens = 0;
     state.targetTurnTokens = 0;
+    state.burnRateTokPerSec = 0;
+    state.peakBurnRateTokPerSec = 0;
+    state.lastBurnSampleTokens = 0;
+    state.lastBurnSampleAt = 0;
     state.liveDomTurnEst = 0;
     state.workStateItems = [];
     state.lastServerStepIdx = -1;

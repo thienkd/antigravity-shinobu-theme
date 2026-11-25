@@ -933,6 +933,8 @@ async fn build_studio_state_payload(code_root: &Path) -> Value {
             "dimming": cfg.get("dimming").and_then(|v| v.as_i64()).unwrap_or(35),
             "fxDensity": cfg.get("fxDensity").and_then(|v| v.as_i64()).unwrap_or(100),
             "chibiEnabled": cfg.get("chibiEnabled").and_then(|v| v.as_bool()) != Some(false),
+            "chibi3dEnabled": cfg.get("chibi3dEnabled").and_then(|v| v.as_bool()) != Some(false),
+            "chibi2dLive": cfg.get("chibi2dLive").and_then(|v| v.as_bool()) != Some(false),
             "autoFinisher": cfg.get("autoFinisher").and_then(|v| v.as_bool()) != Some(false),
             "focusMode": cfg.get("focusMode").and_then(|v| v.as_bool()).unwrap_or(false),
             "privacyShieldActive": cfg.get("privacyShieldActive").and_then(|v| v.as_bool()).unwrap_or(false),
@@ -1019,6 +1021,8 @@ fn tools_catalog(clean_edition: bool) -> Value {
             "dimming": { "type": "number", "description": "Optional code backdrop dimming percentage (15..92)." },
             "fxDensity": { "type": "number", "description": "Optional ambient particle density percentage (0..100, 0 disables particles)." },
             "chibiEnabled": { "type": "boolean", "description": "Optional toggle for Chibi companion sprites." },
+            "chibi2dLive": { "type": "boolean", "description": "Optional toggle for Live2D Chibi gaze tracking & organic breathing." },
+            "chibi3dEnabled": { "type": "boolean", "description": "Optional toggle for 3D (.glb/.vrm) Chibi companion mode." },
             "uiLang": { "type": "string", "enum": ["vi", "en", "ja"], "description": "Optional Studio UI language (vi, en, ja)." },
             "aiPersonaMode": {
               "type": "string",
@@ -1189,6 +1193,12 @@ async fn handle_tool_call(
                 if chibi {
                     patch.insert("focusMode".to_string(), Value::Bool(false));
                 }
+            }
+            if let Some(chibi_l2d) = args.get("chibi2dLive").and_then(|v| v.as_bool()) {
+                patch.insert("chibi2dLive".to_string(), Value::Bool(chibi_l2d));
+            }
+            if let Some(chibi_3d) = args.get("chibi3dEnabled").and_then(|v| v.as_bool()) {
+                patch.insert("chibi3dEnabled".to_string(), Value::Bool(chibi_3d));
             }
             if let Some(lang_raw) = args.get("uiLang").and_then(|v| v.as_str()) {
                 let l = lang_raw.trim().to_ascii_lowercase();
@@ -1499,6 +1509,16 @@ async fn handle_tool_call(
                         obj.insert("aiPersonaMode".to_string(), Value::String(norm_m));
                     }
                 }
+                if let Some(c3d) = prof.get("chibi3dEnabled").and_then(|v| v.as_bool()) {
+                    if let Some(obj) = next_patch.as_object_mut() {
+                        obj.insert("chibi3dEnabled".to_string(), Value::Bool(c3d));
+                    }
+                }
+                if let Some(c2d) = prof.get("chibi2dLive").and_then(|v| v.as_bool()) {
+                    if let Some(obj) = next_patch.as_object_mut() {
+                        obj.insert("chibi2dLive".to_string(), Value::Bool(c2d));
+                    }
+                }
                 write_config(
                     code_root,
                     next_patch.as_object().expect("static object"),
@@ -1571,6 +1591,8 @@ async fn handle_tool_call(
                 "dimming": cur.get("dimming").and_then(|v| v.as_i64()).unwrap_or(def_dim),
                 "fxDensity": cur.get("fxDensity").and_then(|v| v.as_i64()).unwrap_or(100),
                 "chibiEnabled": cur.get("chibiEnabled").and_then(|v| v.as_bool()) != Some(false),
+                "chibi3dEnabled": cur.get("chibi3dEnabled").and_then(|v| v.as_bool()) != Some(false),
+                "chibi2dLive": cur.get("chibi2dLive").and_then(|v| v.as_bool()) != Some(false),
                 "autoFinisher": cur.get("autoFinisher").and_then(|v| v.as_bool()) != Some(false),
                 "focusMode": cur.get("focusMode").and_then(|v| v.as_bool()).unwrap_or(false)
             });

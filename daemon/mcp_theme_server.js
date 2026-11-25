@@ -677,6 +677,8 @@ async function buildStudioStatePayload() {
       dimming: typeof cfg.dimming === 'number' ? cfg.dimming : 35,
       fxDensity: typeof cfg.fxDensity === 'number' ? cfg.fxDensity : 100,
       chibiEnabled: cfg.chibiEnabled !== false,
+      chibi3dEnabled: cfg.chibi3dEnabled !== false,
+      chibi2dLive: cfg.chibi2dLive !== false,
       autoFinisher: cfg.autoFinisher !== false,
       focusMode: Boolean(cfg.focusMode),
       privacyShieldActive: Boolean(cfg.privacyShieldActive),
@@ -794,6 +796,7 @@ const STUDIO_APP_TEMPLATE = String.raw`<!DOCTYPE html>
       </select>
       <button id="focus-btn" type="button" aria-pressed="false">⚡ Tập trung sâu</button>
       <button id="chibi-btn" type="button" aria-pressed="true">🎋 Chibi: Bật</button>
+      <button id="live2d-btn" type="button" aria-pressed="true">✨ LiveChibi: Bật</button>
     </div>
 
     <div class="sliders">
@@ -919,6 +922,8 @@ const STUDIO_APP_TEMPLATE = String.raw`<!DOCTYPE html>
       focOn: '⚡ Đang bật Tập trung sâu',
       chibiOn: '🎋 Chibi: Bật',
       chibiOff: '🎋 Chibi: Tắt',
+      l2dOn: '✨ LiveChibi: Bật',
+      l2dOff: '✨ LiveChibi: Tĩnh',
       dim: 'Độ tối nền code',
       fx: 'Mật độ hạt hiệu ứng',
       wsTitle: 'Hồ Sơ Giao Diện Theo Dự Án (Workspace Profile)',
@@ -939,6 +944,8 @@ const STUDIO_APP_TEMPLATE = String.raw`<!DOCTYPE html>
       focOn: '⚡ Deep Focus Active',
       chibiOn: '🎋 Chibi: ON',
       chibiOff: '🎋 Chibi: OFF',
+      l2dOn: '✨ LiveChibi: ON',
+      l2dOff: '✨ LiveChibi: Static',
       dim: 'Code Backdrop Dimming',
       fx: 'Ambient Particle Density',
       wsTitle: 'Workspace Theme Profiles',
@@ -959,6 +966,8 @@ const STUDIO_APP_TEMPLATE = String.raw`<!DOCTYPE html>
       focOn: '⚡ 集中モードON',
       chibiOn: '🎋 ちびキャラ: ON',
       chibiOff: '🎋 ちびキャラ: OFF',
+      l2dOn: '✨ LiveChibi: ON',
+      l2dOff: '✨ LiveChibi: 静止',
       dim: '背景の暗さ',
       fx: 'パーティクル密度',
       wsTitle: 'ワークスペース別テーマ設定',
@@ -1135,6 +1144,13 @@ const STUDIO_APP_TEMPLATE = String.raw`<!DOCTYPE html>
       chibiBtn.textContent = chibiOn ? d.chibiOn : d.chibiOff;
     }
 
+    const live2dBtn = document.getElementById('live2d-btn');
+    if (live2dBtn) {
+      const live2dOn = cfg.chibi2dLive !== false;
+      live2dBtn.setAttribute('aria-pressed', live2dOn ? 'true' : 'false');
+      live2dBtn.textContent = live2dOn ? d.l2dOn : d.l2dOff;
+    }
+
     const dimRange = document.getElementById('dimming-range');
     const dimVal = document.getElementById('dimming-val');
     const curDim = typeof cfg.dimming === 'number' ? cfg.dimming : 35;
@@ -1253,6 +1269,18 @@ const STUDIO_APP_TEMPLATE = String.raw`<!DOCTYPE html>
       showToast(nextOn ? '🎋 Đã bật Chibi đồng hành' : '🎋 Đã ẩn Chibi đồng hành');
     } catch (err) {
       showToast('Lỗi bật/tắt Chibi: ' + (err && err.message ? err.message : err), true);
+    }
+  });
+
+  document.getElementById('live2d-btn').addEventListener('click', async () => {
+    const curLive = !(state && state.activeConfig && state.activeConfig.chibi2dLive === false);
+    const nextLive = !curLive;
+    try {
+      const res = await callTool('switch_theme', { chibi2dLive: nextLive });
+      if (res && res.structuredContent) render(res.structuredContent);
+      showToast(nextLive ? '✨ Đã bật LiveChibi dõi theo chuột' : '✨ Đã chuyển Chibi sang chế độ tĩnh');
+    } catch (err) {
+      showToast('Lỗi bật/tắt LiveChibi: ' + (err && err.message ? err.message : err), true);
     }
   });
 
@@ -1463,6 +1491,8 @@ const TOOLS = Object.freeze([
         dimming: { type: 'number', description: 'Optional code backdrop dimming percentage (15..92).' },
         fxDensity: { type: 'number', description: 'Optional ambient particle density percentage (0..100, 0 disables particles).' },
         chibiEnabled: { type: 'boolean', description: 'Optional toggle for Chibi companion sprites.' },
+        chibi2dLive: { type: 'boolean', description: 'Optional toggle for Live2D Chibi gaze tracking & organic breathing.' },
+        chibi3dEnabled: { type: 'boolean', description: 'Optional toggle for 3D (.glb/.vrm) Chibi companion mode.' },
         uiLang: { type: 'string', enum: ['vi', 'en', 'ja'], description: 'Optional Studio UI language (vi, en, ja).' },
         aiPersonaMode: {
           type: 'string',
@@ -1599,6 +1629,12 @@ async function handleToolCall(name, rawArgs) {
     if (typeof args.chibiEnabled === 'boolean') {
       patch.chibiEnabled = args.chibiEnabled;
       if (args.chibiEnabled === true) patch.focusMode = false;
+    }
+    if (typeof args.chibi2dLive === 'boolean') {
+      patch.chibi2dLive = args.chibi2dLive;
+    }
+    if (typeof args.chibi3dEnabled === 'boolean') {
+      patch.chibi3dEnabled = args.chibi3dEnabled;
     }
     if (typeof args.uiLang === 'string' && ['vi', 'en', 'ja'].includes(args.uiLang.trim().toLowerCase())) {
       patch.uiLang = args.uiLang.trim().toLowerCase();
@@ -1746,6 +1782,8 @@ async function handleToolCall(name, rawArgs) {
         dimming: prof.dimming ?? 35,
         fxDensity: prof.fxDensity ?? 100,
         chibiEnabled: prof.chibiEnabled !== false,
+        ...(typeof prof.chibi3dEnabled === 'boolean' ? { chibi3dEnabled: prof.chibi3dEnabled } : {}),
+        ...(typeof prof.chibi2dLive === 'boolean' ? { chibi2dLive: prof.chibi2dLive } : {}),
         autoFinisher: prof.autoFinisher !== false,
         focusMode: Boolean(prof.focusMode)
       };
@@ -1774,6 +1812,8 @@ async function handleToolCall(name, rawArgs) {
       dimming: typeof cur.dimming === 'number' ? cur.dimming : (themesObj[resolvedTheme]?.defaultDimming ?? 35),
       fxDensity: typeof cur.fxDensity === 'number' ? cur.fxDensity : 100,
       chibiEnabled: cur.chibiEnabled !== false,
+      chibi3dEnabled: cur.chibi3dEnabled !== false,
+      chibi2dLive: cur.chibi2dLive !== false,
       autoFinisher: cur.autoFinisher !== false,
       focusMode: Boolean(cur.focusMode)
     };

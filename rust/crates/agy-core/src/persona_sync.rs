@@ -448,6 +448,12 @@ pub fn sanitize_compact_profile_entry(entry: &Value) -> Option<Map<String, Value
     if let Some(b) = obj.get("chibiEnabled").and_then(|v| v.as_bool()) {
         out.insert("chibiEnabled".to_string(), Value::Bool(b));
     }
+    if let Some(b) = obj.get("chibi3dEnabled").and_then(|v| v.as_bool()) {
+        out.insert("chibi3dEnabled".to_string(), Value::Bool(b));
+    }
+    if let Some(b) = obj.get("chibi2dLive").and_then(|v| v.as_bool()) {
+        out.insert("chibi2dLive".to_string(), Value::Bool(b));
+    }
     if let Some(b) = obj.get("autoFinisher").and_then(|v| v.as_bool()) {
         out.insert("autoFinisher".to_string(), Value::Bool(b));
     }

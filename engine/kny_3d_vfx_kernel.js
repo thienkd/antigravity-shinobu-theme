@@ -1422,7 +1422,7 @@ void main(){
   const _faceTexCache = new Map();
   let _glFaceTextures = new Map();
 
-  function paintChibiFaceCanvas(charId, expression, blinkAmt, outCanvas) {
+  function paintChibiFaceCanvas(charId, expression, blinkAmt, outCanvas, eyeGazeX, eyeGazeY) {
     const prof = resolveChibiProfile(charId);
     const cv = outCanvas || (typeof document !== 'undefined' && isFn(document.createElement) ? document.createElement('canvas') : null);
     if (!cv) return null;
@@ -1434,6 +1434,8 @@ void main(){
     ctx.clearRect(0, 0, 256, 256);
     const expr = String(expression || 'idle');
     const blink = expr === 'blink' ? 1 : clamp(Number(blinkAmt) || 0, 0, 1);
+    const gx = clamp(Number(eyeGazeX) || 0, -1, 1);
+    const gy = clamp(Number(eyeGazeY) || 0, -1, 1);
 
     // Subtle soft blush cheeks
     const blushA = expr === 'happy' ? 0.48 : 0.30;
@@ -1496,9 +1498,11 @@ void main(){
         ctx.clip();
         if (prof.blindEyes) {
           ctx.fillStyle = '#e2e8f0';
-          ctx.beginPath(); ctx.arc(ex, ey, 14, 0, TAU); ctx.fill();
+          ctx.beginPath(); ctx.arc(ex + gx * 1.8, ey + gy * 1.5, 14, 0, TAU); ctx.fill();
         } else {
-          const ig = isFn(ctx.createLinearGradient) ? ctx.createLinearGradient(ex, ey - 16, ex, ey + 18) : null;
+          const ix = ex + gx * 5.2;
+          const iy = ey + 1 + gy * 4.4 * openH;
+          const ig = isFn(ctx.createLinearGradient) ? ctx.createLinearGradient(ix, iy - 17, ix, iy + 17) : null;
           if (ig) {
             ig.addColorStop(0, '#090910');
             ig.addColorStop(0.45, `rgb(${eRgb})`);
@@ -1507,14 +1511,14 @@ void main(){
           } else {
             ctx.fillStyle = `rgb(${eRgb})`;
           }
-          ctx.beginPath(); ctx.ellipse(ex, ey + 1, 14.5, 17 * openH, 0, 0, TAU); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(ix, iy, 14.5, 17 * openH, 0, 0, TAU); ctx.fill();
           // Pupil
           ctx.fillStyle = '#070612';
-          ctx.beginPath(); ctx.ellipse(ex, ey + 1, 6.5, 7.8 * openH, 0, 0, TAU); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(ix + gx * 0.8, iy + gy * 0.6, 6.5, 7.8 * openH, 0, 0, TAU); ctx.fill();
           // Double anime catchlights
           ctx.fillStyle = '#ffffff';
-          ctx.beginPath(); ctx.arc(ex - 5.5, ey - 6 * openH, 4.4, 0, TAU); ctx.fill();
-          ctx.beginPath(); ctx.arc(ex + 5.2, ey + 5.5 * openH, 2.3, 0, TAU); ctx.fill();
+          ctx.beginPath(); ctx.arc(ix - 5.5 + gx * 0.9, iy - 7 * openH + gy * 0.6, 4.4, 0, TAU); ctx.fill();
+          ctx.beginPath(); ctx.arc(ix + 5.2 + gx * 0.5, iy + 4.5 * openH + gy * 0.4, 2.3, 0, TAU); ctx.fill();
         }
         ctx.restore();
 
@@ -1586,16 +1590,18 @@ void main(){
     return cv;
   }
 
-  function getCachedFaceCanvas(charId, expression, blinkAmt) {
+  function getCachedFaceCanvas(charId, expression, blinkAmt, eyeGazeX, eyeGazeY) {
     const bBucket = expression === 'blink' ? 3 : min(3, max(0, floor((Number(blinkAmt) || 0) * 3.5)));
-    const key = `${charId}|${expression || 'idle'}|${bBucket}`;
+    const gxB = Math.round(clamp(Number(eyeGazeX) || 0, -1, 1) * 4);
+    const gyB = Math.round(clamp(Number(eyeGazeY) || 0, -1, 1) * 3);
+    const key = `${charId}|${expression || 'idle'}|${bBucket}|${gxB}|${gyB}`;
     if (_faceTexCache.has(key)) {
       const hit = _faceTexCache.get(key);
       _faceTexCache.delete(key);
       _faceTexCache.set(key, hit);
       return hit;
     }
-    const cv = paintChibiFaceCanvas(charId, expression, blinkAmt, null);
+    const cv = paintChibiFaceCanvas(charId, expression, blinkAmt, null, gxB / 4, gyB / 3);
     if (!cv) return null;
     while (_faceTexCache.size >= CHIBI_FACE_CACHE_MAX) {
       const oldest = _faceTexCache.keys().next().value;
@@ -1609,14 +1615,16 @@ void main(){
     return cv;
   }
 
-  function getOrUploadFaceTexture(charId, expression, blinkAmt) {
+  function getOrUploadFaceTexture(charId, expression, blinkAmt, eyeGazeX, eyeGazeY) {
     const bBucket = expression === 'blink' ? 3 : min(3, max(0, floor((Number(blinkAmt) || 0) * 3.5)));
-    const key = `${charId}|${expression || 'idle'}|${bBucket}`;
+    const gxB = Math.round(clamp(Number(eyeGazeX) || 0, -1, 1) * 4);
+    const gyB = Math.round(clamp(Number(eyeGazeY) || 0, -1, 1) * 3);
+    const key = `${charId}|${expression || 'idle'}|${bBucket}|${gxB}|${gyB}`;
     if (!gl || !isFn(gl.createTexture) || !isFn(gl.texImage2D)) return null;
     if (_glFaceTextures.has(key)) return _glFaceTextures.get(key);
 
     if (!_faceTexCache.has(key)) {
-      const painted = paintChibiFaceCanvas(charId, expression, blinkAmt, null);
+      const painted = paintChibiFaceCanvas(charId, expression, blinkAmt, null, gxB / 4, gyB / 3);
       if (!painted) return null;
       while (_faceTexCache.size >= CHIBI_FACE_CACHE_MAX) {
         const oldest = _faceTexCache.keys().next().value;
@@ -1841,8 +1849,10 @@ void main(){${outVar}=vec4(u_outlineCol,1.0);}`;
     const isStatic = Boolean(s.isStatic);
     const breath = isStatic ? 0 : sin(timeSec * 2.4);
     const sway = isStatic ? 0 : sin(timeSec * 1.45);
-    const lookYaw = clamp(Number(s.lookYaw) || 0, -0.45, 0.45);
-    const lookPitch = clamp(Number(s.lookPitch) || 0, -0.35, 0.35);
+    const lookYaw = clamp(Number(s.lookYaw) || 0, -0.60, 0.60);
+    const lookPitch = clamp(Number(s.lookPitch) || 0, -0.45, 0.45);
+    const eyeGazeX = clamp(lookYaw / 0.48, -1, 1);
+    const eyeGazeY = clamp(-lookPitch / 0.36, -1, 1);
     const orbitYaw = Number(s.orbitYaw) || 0;
     const orbitPitch = clamp(Number(s.orbitPitch) || 0, -0.65, 0.65);
     const reaction = String(s.reaction || 'idle');
@@ -1878,7 +1888,7 @@ void main(){${outVar}=vec4(u_outlineCol,1.0);}`;
       }
       return {
         mode: 'stage', timeSec, isStatic, expression: slash > 0.2 ? 'attack' : (ph === 'followthrough' ? 'focus' : 'idle'),
-        blinkAmt, rootY: yBob, rootRotX, rootRotY, rootRotZ,
+        blinkAmt, eyeGazeX, eyeGazeY, rootY: yBob, rootRotX, rootRotY, rootRotZ,
         torsoPitch, headYaw: lookYaw * 0.35, headPitch: lookPitch * 0.3,
         armR_X, armR_Z, armL_X, armL_Z: -0.32, legSwing, swordDraw,
         surge: clamp(slash * 0.8 + chg * 0.5 + (s.hitStopActive ? 1.0 : 0), 0, 1.5),
@@ -1893,13 +1903,14 @@ void main(){${outVar}=vec4(u_outlineCol,1.0);}`;
     const surgeAmt = clamp(Number(s.surge) || (reaction === 'attack' ? 1 : 0), 0, 1.5);
     return {
       mode: 'composer', timeSec, isStatic, expression: expr, blinkAmt,
+      eyeGazeX, eyeGazeY,
       rootY: breath * 0.022 + happyBump,
-      rootRotX: orbitPitch + 0.04,
-      rootRotY: orbitYaw - 0.16 + sway * 0.05 + lookYaw * 0.24,
-      rootRotZ: reaction === 'happy' ? sway * 0.08 : 0,
-      torsoPitch: breath * 0.03 + focusLean,
-      headYaw: lookYaw * 0.68,
-      headPitch: lookPitch * 0.62 - breath * 0.03 + (reaction === 'focus' ? 0.08 : 0),
+      rootRotX: orbitPitch + 0.04 - lookPitch * 0.28,
+      rootRotY: orbitYaw - 0.14 + sway * 0.04 + lookYaw * 0.44,
+      rootRotZ: (reaction === 'happy' ? sway * 0.08 : 0) - lookYaw * 0.08,
+      torsoPitch: breath * 0.03 + focusLean - lookPitch * 0.12,
+      headYaw: lookYaw * 0.72,
+      headPitch: -lookPitch * 0.68 - breath * 0.03 + (reaction === 'focus' ? 0.08 : 0),
       armR_X: reaction === 'happy' ? -1.1 + sin(timeSec * 10) * 0.35 : (surgeAmt > 0.1 ? -1.15 : -0.18 + breath * 0.05),
       armR_Z: reaction === 'happy' ? 0.55 : (surgeAmt > 0.1 ? 0.45 : 0.26),
       armL_X: -0.16 - breath * 0.04,
@@ -2434,7 +2445,7 @@ void main(){${outVar}=vec4(u_outlineCol,1.0);}`;
       g.uniform1f(chGlLoc.rimPower, c.rimPower);
       g.uniform1f(chGlLoc.emissive, c.emissive);
       if (c.useFaceTex) {
-        if (!boundFaceTex) boundFaceTex = getOrUploadFaceTexture(charId, pose.expression, pose.blinkAmt);
+        if (!boundFaceTex) boundFaceTex = getOrUploadFaceTexture(charId, pose.expression, pose.blinkAmt, pose.eyeGazeX, pose.eyeGazeY);
         if (boundFaceTex) {
           if (isFn(g.activeTexture)) g.activeTexture(g.TEXTURE0);
           g.bindTexture(g.TEXTURE_2D, boundFaceTex);
@@ -2583,7 +2594,7 @@ void main(){${outVar}=vec4(u_outlineCol,1.0);}`;
   }
 
   function drawSoftwareFaceSticker(ctx, w, h, charId, pose, faceAnchor) {
-    const cv = getCachedFaceCanvas(charId, pose.expression, pose.blinkAmt) || paintChibiFaceCanvas(charId, pose.expression, pose.blinkAmt, null);
+    const cv = getCachedFaceCanvas(charId, pose.expression, pose.blinkAmt, pose.eyeGazeX, pose.eyeGazeY) || paintChibiFaceCanvas(charId, pose.expression, pose.blinkAmt, null, pose.eyeGazeX, pose.eyeGazeY);
     if (!cv || !isFn(ctx.drawImage)) return;
     const faceScale = clamp(min(w, h) * 0.25 * (3.3 / max(1.2, faceAnchor.z)), 14, min(w, h) * 0.45);
     ctx.save();

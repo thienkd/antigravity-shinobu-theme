@@ -954,23 +954,26 @@ describe('F09 — Hệ thống icon SVG ngữ nghĩa (kny_semantic_icons.js)', (
     env.loadModule(ICONS_SRC, 'kny_semantic_icons.js');
     const icons = env.window.__AGY_KNY_ICONS__;
 
-    const funcs12 = [
+    const funcs16 = [
       'breathing_forms', 'katana_cast', 'nichirin_item', 'sfx_on', 'sfx_off',
       'kv_cache', 'draft_brush', 'session_sum', 'model_quota',
-      'yoriichi_sun', 'kagura_bell', 'cinema_mask'
+      'yoriichi_sun', 'kagura_bell', 'cinema_mask',
+      'context_scroll', 'compact_seal', 'burn_velocity', 'task_scroll'
     ];
-    assert.strictEqual(funcs12.length, 12);
+    assert.strictEqual(funcs16.length, 16);
 
     const rendered = new Set();
-    for (const kind of funcs12) {
+    for (const kind of funcs16) {
       const svg = icons.getFuncSvg(kind, 16);
+      const svgCached = icons.getFuncSvg(kind, 16);
+      assert.strictEqual(svg, svgCached, `Icon ${kind} phải được lưu bộ nhớ đệm O(1) nhất quán`);
       assert.ok(svg.includes('class="agy-sem-svg"'), `Icon ${kind} thiếu class agy-sem-svg`);
       assert.ok(svg.includes('width="16"') && svg.includes('height="16"'), `Icon ${kind} sai kích thước`);
       assert.ok(svg.includes('aria-hidden="true"'), `Icon ${kind} thiếu aria-hidden="true"`);
       assert.ok(!rendered.has(svg), `Icon ${kind} bị trùng nội dung với icon chức năng khác`);
       rendered.add(svg);
     }
-    assert.strictEqual(rendered.size, 12, 'Phải tạo đủ 12 icon chức năng khác nhau');
+    assert.strictEqual(rendered.size, 16, 'Phải tạo đủ 16 icon chức năng khác nhau');
   });
 
   it('F09-T1-04 [Tier 1]: normalizeElementKey chuẩn hóa alias tiếng Anh và tiếng Việt chính xác', () => {

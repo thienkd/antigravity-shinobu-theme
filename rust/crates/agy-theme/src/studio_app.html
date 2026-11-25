@@ -97,6 +97,7 @@
       </select>
       <button id="focus-btn" type="button" aria-pressed="false">⚡ Tập trung sâu</button>
       <button id="chibi-btn" type="button" aria-pressed="true">🎋 Chibi: Bật</button>
+      <button id="live2d-btn" type="button" aria-pressed="true">✨ LiveChibi: Bật</button>
     </div>
 
     <div class="sliders">
@@ -222,6 +223,8 @@
       focOn: '⚡ Đang bật Tập trung sâu',
       chibiOn: '🎋 Chibi: Bật',
       chibiOff: '🎋 Chibi: Tắt',
+      l2dOn: '✨ LiveChibi: Bật',
+      l2dOff: '✨ LiveChibi: Tĩnh',
       dim: 'Độ tối nền code',
       fx: 'Mật độ hạt hiệu ứng',
       wsTitle: 'Hồ Sơ Giao Diện Theo Dự Án (Workspace Profile)',
@@ -242,6 +245,8 @@
       focOn: '⚡ Deep Focus Active',
       chibiOn: '🎋 Chibi: ON',
       chibiOff: '🎋 Chibi: OFF',
+      l2dOn: '✨ LiveChibi: ON',
+      l2dOff: '✨ LiveChibi: Static',
       dim: 'Code Backdrop Dimming',
       fx: 'Ambient Particle Density',
       wsTitle: 'Workspace Theme Profiles',
@@ -262,6 +267,8 @@
       focOn: '⚡ 集中モードON',
       chibiOn: '🎋 ちびキャラ: ON',
       chibiOff: '🎋 ちびキャラ: OFF',
+      l2dOn: '✨ LiveChibi: ON',
+      l2dOff: '✨ LiveChibi: 静止',
       dim: '背景の暗さ',
       fx: 'パーティクル密度',
       wsTitle: 'ワークスペース別テーマ設定',
@@ -438,6 +445,13 @@
       chibiBtn.textContent = chibiOn ? d.chibiOn : d.chibiOff;
     }
 
+    const live2dBtn = document.getElementById('live2d-btn');
+    if (live2dBtn) {
+      const live2dOn = cfg.chibi2dLive !== false;
+      live2dBtn.setAttribute('aria-pressed', live2dOn ? 'true' : 'false');
+      live2dBtn.textContent = live2dOn ? d.l2dOn : d.l2dOff;
+    }
+
     const dimRange = document.getElementById('dimming-range');
     const dimVal = document.getElementById('dimming-val');
     const curDim = typeof cfg.dimming === 'number' ? cfg.dimming : 35;
@@ -556,6 +570,18 @@
       showToast(nextOn ? '🎋 Đã bật Chibi đồng hành' : '🎋 Đã ẩn Chibi đồng hành');
     } catch (err) {
       showToast('Lỗi bật/tắt Chibi: ' + (err && err.message ? err.message : err), true);
+    }
+  });
+
+  document.getElementById('live2d-btn').addEventListener('click', async () => {
+    const curLive = !(state && state.activeConfig && state.activeConfig.chibi2dLive === false);
+    const nextLive = !curLive;
+    try {
+      const res = await callTool('switch_theme', { chibi2dLive: nextLive });
+      if (res && res.structuredContent) render(res.structuredContent);
+      showToast(nextLive ? '✨ Đã bật LiveChibi dõi theo chuột' : '✨ Đã chuyển Chibi sang chế độ tĩnh');
+    } catch (err) {
+      showToast('Lỗi bật/tắt LiveChibi: ' + (err && err.message ? err.message : err), true);
     }
   });
 
