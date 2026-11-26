@@ -4604,6 +4604,491 @@
     return { ok: true, charId: skill.charId, skill: skill, durationMs: duration };
   }
 
+  /* ==========================================================================
+   * 8b. v3.5 DUAL HASHIRA COMBO FINISHER (SONG KIẾM HỢP BÍCH X-SLASH)
+   * ========================================================================== */
+
+  const DUAL_COMBO_DB = {
+    'giyu+tanjiro': {
+      nameVi: 'Thủy Hỏa Giao Long • Thập Nhất Lặng Hợp Hỏa Thần Viên Vũ',
+      kanji: '水炎双龍・合撃',
+      breathingName: 'Song Kiếm Hợp Bích • Thủy Trụ × Hỏa Thần',
+      voiceLine: 'Giyu: “Mặt nước tĩnh lặng...” — Tanjiro: “...Hỏa Thần Viên Vũ, trảm đứt tà nguyền!”'
+    },
+    'obanai+mitsuri': {
+      nameVi: 'Xà Luyến Tương Giao • Anh Đào Quấn Mãng Xà Phược Trảm',
+      kanji: '蛇恋双舞・桜蛇斬',
+      breathingName: 'Song Kiếm Hợp Bích • Xà Trụ × Luyến Trụ',
+      voiceLine: 'Obanai: “Đừng hòng chạm vào Kanroji!” — Mitsuri: “Vâng ạ Iguro-san, cùng múa kiếm thôi!”'
+    },
+    'shinobu+giyu': {
+      nameVi: 'Điệp Thủy Tĩnh Nguyệt • Tử Đằng Lộ Trạm Mặt Hồ Thu',
+      kanji: '蝶水静月・藤凪',
+      breathingName: 'Song Kiếm Hợp Bích • Trùng Trụ × Thủy Trụ',
+      voiceLine: 'Shinobu: “Ara ara, đừng đứng im thế chứ anh Tomioka~” — Giyu: “...Một nhát dứt điểm.”'
+    },
+    'sanemi+gyomei': {
+      nameVi: 'Cuồng Phong Nham Toái • Thiên Địa Đại Chấn Diệt Sát',
+      kanji: '風岩合撃・天地砕',
+      breathingName: 'Song Kiếm Hợp Bích • Phong Trụ × Nham Trụ',
+      voiceLine: 'Gyomei: “Nam Mô A Di Đà Phật!” — Sanemi: “Nghiền nát chúng thành cát bụi đi Himejima-san!”'
+    },
+    'sanemi+obanai': {
+      nameVi: 'Phong Xà Giảo Sát • Lốc Cuốn Mãng Xà Tuyệt Mệnh',
+      kanji: '風蛇絞殺・双牙',
+      breathingName: 'Song Kiếm Hợp Bích • Phong Trụ × Xà Trụ',
+      voiceLine: 'Obanai: “Khóa chặt đường lui của nó!” — Sanemi: “Để ta xé toạc chính diện!”'
+    },
+    'sanemi+giyu': {
+      nameVi: 'Phong Thủy Xung Kích • Hách Đao Song Trụ Cộng Minh',
+      kanji: '風水赫刀・双柱斬',
+      breathingName: 'Song Kiếm Hợp Bích • Phong Trụ × Thủy Trụ',
+      voiceLine: 'Sanemi: “Đừng có tụt lại phía sau đấy Tomioka!” — Giyu: “...Khai mở Hách Đao!”'
+    },
+    'rengoku+tanjiro': {
+      nameVi: 'Viêm Nhật Thừa Chí • Luyện Ngục Hỏa Thần Liệt Diệm',
+      kanji: '炎日継承・煉獄円舞',
+      breathingName: 'Song Kiếm Hợp Bích • Viêm Trụ × Hỏa Thần',
+      voiceLine: 'Rengoku: “Hãy thắp lửa trong tim, thiếu niên Kamado!” — Tanjiro: “Vâng, anh Rengoku!!”'
+    },
+    'rengoku+uzui': {
+      nameVi: 'Viêm Âm Đại Pháo Hoa • Hào Nhoáng Bùng Cháy Đêm Lễ Hội',
+      kanji: '炎音絢爛・大花火',
+      breathingName: 'Song Kiếm Hợp Bích • Viêm Trụ × Âm Trụ',
+      voiceLine: 'Uzui: “Nổ tung thật hào nhoáng nào Kyojuro!” — Rengoku: “Umu! Rực rỡ bậc nhất!”'
+    },
+    'rengoku+mitsuri': {
+      nameVi: 'Sư Đồ Liệt Ái • Hỏa Anh Đào Toàn Khai Loạn Vũ',
+      kanji: '師弟炎恋・桜炎舞',
+      breathingName: 'Song Kiếm Hợp Bích • Viêm Trụ × Luyến Trụ',
+      voiceLine: 'Rengoku: “Xuất kiếm tuyệt lắm Kanroji!” — Mitsuri: “Em sẽ không làm sư phụ thất vọng đâu ạ!”'
+    },
+    'zenitsu+inosuke': {
+      nameVi: 'Lôi Thú Song Tuyệt • Tia Chớp Nanh Ngà Càn Quét',
+      kanji: '雷獣双絶・電光獣牙',
+      breathingName: 'Song Kiếm Hợp Bích • Thiện Dật × Y Chi Trợ',
+      voiceLine: 'Inosuke: “Tránh ra Monitsu, để Đấng Inosuke mở đường!” — Zenitsu: “Hích Lôi Nhất Thiểm — Lục Liên!!”'
+    },
+    'tanjiro+nezuko': {
+      nameVi: 'Huyết Thân Liên Kết • Bạo Huyết Hỏa Thần Phá Ám Trảm',
+      kanji: '兄妹絆・爆血ヒノカミ',
+      breathingName: 'Song Kiếm Hợp Bích • Huynh Muội Nhà Kamado',
+      voiceLine: 'Tanjiro: “Cùng tiến lên nào Nezuko — sợi dây liên kết của chúng ta không ai cắt đứt được!”'
+    },
+    'zenitsu+nezuko': {
+      nameVi: 'Lôi Hoa Hộ Mệnh • Tia Chớp Hoàng Kim Che Chở Hồng Liên',
+      kanji: '雷花守護・黄金爆血',
+      breathingName: 'Song Kiếm Hợp Bích • Thiện Dật × Nễ Đậu Tử',
+      voiceLine: 'Zenitsu: “Dù có thịt nát xương tan, anh nhất định sẽ bảo vệ Nezuko-chan!!”'
+    },
+    'muichiro+tanjiro': {
+      nameVi: 'Hà Nhật Tán Vụ • Mây Mù Tan Biến Đón Bình Minh',
+      kanji: '霞日晴嵐・朧円舞',
+      breathingName: 'Song Kiếm Hợp Bích • Hà Trụ × Hỏa Thần',
+      voiceLine: 'Muichiro: “Nhờ có Tanjiro mà sương mù trong tớ đã tan...” — Tanjiro: “Cùng dứt điểm thôi Muichiro!”'
+    },
+    'yoriichi+tanjiro': {
+      nameVi: 'Thiên Niên Truyền Hỏa • Nhật Luân Thập Tam Thức Hợp Bích',
+      kanji: '千年継承・日の呼吸拾参ノ型',
+      breathingName: 'Song Kiếm Hợp Bích • Khai Tổ × Người Kế Thừa',
+      voiceLine: 'Yoriichi: “Ngọn lửa ấy đã vượt qua trăm năm...” — Tanjiro: “Nhật Chi Hô Hấp — Viên Vũ Nhất Thiểm!”'
+    },
+    'yoriichi+muichiro': {
+      nameVi: 'Huyết Thống Khởi Nguyên • Nhật Nguyệt Mông L朧 Tuyệt Trảm',
+      kanji: '始祖血脈・日霞双閃',
+      breathingName: 'Song Kiếm Hợp Bích • Khai Tổ × Hậu Duệ Hà Trụ',
+      voiceLine: 'Yoriichi: “Đường kiếm của cháu rất thanh thoát, Muichiro.” — Muichiro: “Thức Thứ Bảy — Mông Lông!”'
+    }
+  };
+
+  const CHAR_SHORT_TITLE_VI = {
+    shinobu: 'Trùng Trụ',
+    giyu: 'Thủy Trụ',
+    rengoku: 'Viêm Trụ',
+    zenitsu: 'Thiện Dật',
+    tanjiro: 'Hỏa Thần',
+    nezuko: 'Hồng Liên',
+    inosuke: 'Thú Vương',
+    uzui: 'Âm Trụ',
+    mitsuri: 'Luyến Trụ',
+    muichiro: 'Hà Trụ',
+    obanai: 'Xà Trụ',
+    sanemi: 'Phong Trụ',
+    gyomei: 'Nham Trụ',
+    yoriichi: 'Khai Tổ',
+    ubuyashiki: 'Chúa Công'
+  };
+
+  const MULTIVERSE_SKILL_FALLBACK = {
+    shadow_monarch: { charId: 'obanai', titleVi: 'Quân Vương Bóng Tối', primary: '#8b5cf6', accent: '#38bdf8' },
+    six_eyes: { charId: 'muichiro', titleVi: 'Lục Nhãn Vô Hạ Hạn', primary: '#38bdf8', accent: '#e0f2fe' },
+    great_sage: { charId: 'shinobu', titleVi: 'Đại Hiền Giả', primary: '#22d3ee', accent: '#fde047' },
+    ubuyashiki: { charId: 'shinobu', titleVi: 'Chúa Công Kagaya', primary: '#d8b4fe', accent: '#fde047' }
+  };
+
+  function normalizeComboPartner(rawId) {
+    const clean = String(rawId || '').trim().toLowerCase();
+    if (MULTIVERSE_SKILL_FALLBACK[clean]) {
+      return {
+        rawId: clean,
+        skillCharId: MULTIVERSE_SKILL_FALLBACK[clean].charId,
+        titleVi: MULTIVERSE_SKILL_FALLBACK[clean].titleVi,
+        colorOverride: MULTIVERSE_SKILL_FALLBACK[clean].primary,
+        accentOverride: MULTIVERSE_SKILL_FALLBACK[clean].accent,
+        noSprite: clean !== 'ubuyashiki' ? true : false
+      };
+    }
+    const resolved = resolveCharacterId(clean) || 'yoriichi';
+    return {
+      rawId: resolved,
+      skillCharId: resolved,
+      titleVi: CHAR_SHORT_TITLE_VI[resolved] || 'Kiếm Sĩ',
+      colorOverride: '',
+      accentOverride: '',
+      noSprite: false
+    };
+  }
+
+  function resolveDualComboSpec(charA, charB) {
+    const pA = normalizeComboPartner(charA);
+    const pB = normalizeComboPartner(charB === pA.rawId ? (pA.rawId === 'yoriichi' ? 'shinobu' : 'yoriichi') : charB);
+    const skillA = findSkill(pA.skillCharId, 3) || findSkill('shinobu', 3);
+    const skillB = findSkill(pB.skillCharId, 3) || findSkill('yoriichi', 3);
+    if (pA.colorOverride) skillA.primaryColor = pA.colorOverride;
+    if (pA.accentOverride) skillA.accentColor = pA.accentOverride;
+    if (pB.colorOverride) skillB.primaryColor = pB.colorOverride;
+    if (pB.accentOverride) skillB.accentColor = pB.accentOverride;
+
+    const sortedKey = [pA.rawId, pB.rawId].sort().join('+');
+    const directKey = `${pA.rawId}+${pB.rawId}`;
+    const reverseKey = `${pB.rawId}+${pA.rawId}`;
+    const canon = DUAL_COMBO_DB[directKey] || DUAL_COMBO_DB[reverseKey] || DUAL_COMBO_DB[sortedKey] || null;
+
+    if (canon) {
+      return {
+        pairKey: directKey,
+        isCanonPair: true,
+        charA: pA.rawId,
+        charB: pB.rawId,
+        skillCharA: pA.skillCharId,
+        skillCharB: pB.skillCharId,
+        noSpriteA: pA.noSprite,
+        noSpriteB: pB.noSprite,
+        skillA,
+        skillB,
+        nameVi: canon.nameVi,
+        kanji: canon.kanji,
+        breathingName: canon.breathingName,
+        voiceLine: canon.voiceLine,
+        primaryColor: skillA.primaryColor,
+        secondaryColor: skillB.primaryColor,
+        accentColor: '#fde047'
+      };
+    }
+
+    const shortA = pA.titleVi;
+    const shortB = pB.titleVi;
+    return {
+      pairKey: directKey,
+      isCanonPair: false,
+      charA: pA.rawId,
+      charB: pB.rawId,
+      skillCharA: pA.skillCharId,
+      skillCharB: pB.skillCharId,
+      noSpriteA: pA.noSprite,
+      noSpriteB: pB.noSprite,
+      skillA,
+      skillB,
+      nameVi: `Song Kiếm Hợp Bích • ${shortA} × ${shortB} Thập Tự Tuyệt Trảm`,
+      kanji: '双剣合璧・十字絶斬',
+      breathingName: `Tuyệt Kỹ Liên Kích • ${shortA} × ${shortB}`,
+      voiceLine: `${shortA}: “${skillA.voiceLine}” — ${shortB}: “${skillB.voiceLine}”`,
+      primaryColor: skillA.primaryColor,
+      secondaryColor: skillB.primaryColor,
+      accentColor: skillB.accentColor || '#fde047'
+    };
+  }
+
+  function renderDualCrossSlashVfx(ctx, vw, vh, p, spec) {
+    const cx = vw * 0.5;
+    const cy = vh * 0.46;
+    const slashProgress = clamp((p - 0.14) / 0.54, 0, 1);
+    const fadeOut = p > 0.72 ? clamp(1 - (p - 0.72) / 0.28, 0, 1) : 1;
+    if (slashProgress <= 0.01 || fadeOut <= 0.01) return;
+
+    const span = Math.hypot(vw, vh) * 0.44 * easeOutCubic(slashProgress);
+    const angA = Math.atan2(-vh * 0.62, -vw * 0.72); // bottom-right -> top-left
+    const angB = Math.atan2(-vh * 0.62, vw * 0.72);  // bottom-left -> top-right
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    // Beam A (Right-corner Hero -> Top-left)
+    drawGlowLine(
+      ctx,
+      cx - Math.cos(angA) * span,
+      cy - Math.sin(angA) * span,
+      cx + Math.cos(angA) * span,
+      cy + Math.sin(angA) * span,
+      22 * fadeOut,
+      spec.skillA.primaryColor,
+      '#ffffff',
+      0.88 * fadeOut
+    );
+
+    // Beam B (Left-corner Master Persona -> Top-right)
+    drawGlowLine(
+      ctx,
+      cx - Math.cos(angB) * span,
+      cy - Math.sin(angB) * span,
+      cx + Math.cos(angB) * span,
+      cy + Math.sin(angB) * span,
+      22 * fadeOut,
+      spec.skillB.primaryColor,
+      '#fde047',
+      0.88 * fadeOut
+    );
+
+    // Central X-Nexus Shockwave Ring & Sparks
+    if (p >= 0.28) {
+      const ringU = clamp((p - 0.28) / 0.52, 0, 1);
+      const ringR = 24 + easeOutCubic(ringU) * Math.min(vw, vh) * 0.34;
+      drawGlowArc(ctx, cx, cy, ringR, 0, TWO_PI, 6.5 * (1 - ringU * 0.75) * fadeOut, spec.skillA.primaryColor, spec.skillB.primaryColor, 0.85 * fadeOut);
+      drawGlowArc(ctx, cx, cy, ringR * 0.64, ringU * 3.2, ringU * 3.2 + Math.PI * 1.5, 3.8 * fadeOut, '#fde047', '#ffffff', 0.78 * fadeOut);
+
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * TWO_PI + ringU * 1.1;
+        const r1 = ringR * 0.36;
+        const r2 = ringR * 1.12;
+        const col = i % 2 === 0 ? spec.skillA.primaryColor : spec.skillB.primaryColor;
+        drawGlowLine(
+          ctx,
+          cx + Math.cos(a) * r1,
+          cy + Math.sin(a) * r1,
+          cx + Math.cos(a) * r2,
+          cy + Math.sin(a) * r2,
+          2.8 * (1 - ringU * 0.6) * fadeOut,
+          col,
+          '#ffffff',
+          0.74 * fadeOut
+        );
+      }
+    }
+    ctx.restore();
+  }
+
+  function castDualSkill(charA, charB, options) {
+    const opts = options || {};
+    const spec = resolveDualComboSpec(charA, charB);
+    if (!spec || !spec.skillA || !spec.skillB) {
+      return { ok: false, reason: 'invalid_dual_pair' };
+    }
+
+    stopActiveSkill();
+    playSkillSfx(spec.skillA, opts);
+
+    const host = ensureOverlay();
+    if (!host || !canvasEl) {
+      return {
+        ok: true,
+        dual: true,
+        charA: spec.charA,
+        charB: spec.charB,
+        spec,
+        durationMs: 2950,
+        headless: true
+      };
+    }
+
+    const isReduced = prefersReducedMotion();
+    host.style.display = 'block';
+    const pRgb = hexToRgb(spec.primaryColor);
+    if (bannerEl && bannerEl.style) {
+      bannerEl.style.setProperty('--kny-skill-primary', spec.primaryColor);
+      bannerEl.style.setProperty('--kny-skill-accent', spec.secondaryColor);
+      bannerEl.style.setProperty('--kny-skill-glow', `rgba(${pRgb}, 0.52)`);
+    }
+    resetBanner3DVariables(isReduced);
+
+    if (kanjiBgEl) kanjiBgEl.textContent = spec.kanji;
+    if (subLabelEl) subLabelEl.textContent = spec.breathingName;
+    if (titleEl) titleEl.textContent = spec.nameVi;
+    if (voiceEl) voiceEl.textContent = `“${spec.voiceLine}”`;
+
+    if (bannerEl && bannerEl.classList) {
+      bannerEl.classList.remove('is-fading');
+      activeBannerRafId = requestFrame(() => {
+        activeBannerRafId = 0;
+        if (bannerEl && bannerEl.classList) bannerEl.classList.add('is-visible');
+      });
+      activeBannerTimer = setTimeout(() => {
+        activeBannerTimer = 0;
+        if (bannerEl && bannerEl.classList) {
+          bannerEl.classList.remove('is-visible');
+          bannerEl.classList.add('is-fading');
+        }
+      }, 2550);
+    }
+
+    let vw = Math.max(320, Number(ROOT_SCOPE.innerWidth) || 1440);
+    let vh = Math.max(240, Number(ROOT_SCOPE.innerHeight) || 900);
+    let dpr = clamp(Number(ROOT_SCOPE.devicePixelRatio) || 1, 1, 2);
+    canvasEl.width = Math.floor(vw * dpr);
+    canvasEl.height = Math.floor(vh * dpr);
+
+    const ctx = typeof canvasEl.getContext === 'function' ? canvasEl.getContext('2d') : null;
+    const duration = clamp(Number(opts.durationMs) || 2900, 2450, 3250);
+    if (!ctx) {
+      activeHideTimer = setTimeout(stopActiveSkill, duration);
+      return { ok: true, dual: true, charA: spec.charA, charB: spec.charB, spec, durationMs: duration };
+    }
+
+    // Opposite-corner launch origins for true X-Slash convergence!
+    const originA = { x: Math.max(vw * 0.72, vw - 96), y: Math.max(vh * 0.72, vh - 92) };
+    const originB = { x: Math.min(vw * 0.28, 96), y: Math.max(vh * 0.72, vh - 92) };
+
+    const spriteA = spec.noSpriteA ? null : preloadActionSprite(spec.skillCharA, opts.actionStickerA || '');
+    const spriteB = spec.noSpriteB ? null : preloadActionSprite(spec.skillCharB, opts.actionStickerB || '');
+    const heroKeyA = spriteA && spriteA.spriteHeroKey ? spriteA.spriteHeroKey : spec.skillCharA;
+    const heroKeyB = spriteB && spriteB.spriteHeroKey ? spriteB.spriteHeroKey : spec.skillCharB;
+
+    if (isReduced) {
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, vw, vh);
+      renderStageAtmosphere(ctx, vw, vh, 0.42, spec.skillA, originA);
+      renderSkillFrame(ctx, vw, vh, 0.42, spec.skillA, originA, { skipBackdrop: true });
+      renderSkillFrame(ctx, vw, vh, 0.42, spec.skillB, originB, { skipBackdrop: true });
+      renderDualCrossSlashVfx(ctx, vw, vh, 0.48, spec);
+      if (!spec.noSpriteA) drawActionChibiOnStage(ctx, vw, vh, 0.46, spec.skillA, originA, spriteA, null, { dpr, reducedMotion: true });
+      if (!spec.noSpriteB) drawActionChibiOnStage(ctx, vw, vh, 0.46, spec.skillB, originB, spriteB, null, { dpr, reducedMotion: true });
+      ctx.restore();
+      activeHideTimer = setTimeout(stopActiveSkill, 2500);
+      return { ok: true, dual: true, charA: spec.charA, charB: spec.charB, spec, durationMs: 2500, reducedMotion: true };
+    }
+
+    const startTs = nowPerfMs();
+    const IMPACT_FLASH_MS = 35;
+    const HIT_STOP_MS = 45;
+    const TOTAL_FREEZE_MS = IMPACT_FLASH_MS + HIT_STOP_MS;
+    let impactTriggered = false;
+    let impactStartMs = -1;
+    let frozenP = 0.36;
+
+    function tickDual(ts) {
+      const cur = typeof ts === 'number' ? ts : nowPerfMs();
+      const p = Math.max(0, cur - startTs) / duration;
+      if (p >= 1) {
+        stopActiveSkill();
+        if (typeof opts.onComplete === 'function') {
+          try { opts.onComplete(spec); } catch (_) {}
+        }
+        return;
+      }
+
+      let effP = p;
+      let isImpact = false;
+      let impactFlashProg = 0;
+      let shakeX = 0;
+      let shakeY = 0;
+
+      if (!impactTriggered && p >= 0.34 && p < 0.58) {
+        impactTriggered = true;
+        impactStartMs = cur;
+        frozenP = clamp(p, 0.34, 0.42);
+      }
+      if (impactTriggered) {
+        const dtImp = Math.max(0, cur - impactStartMs);
+        const resumeP = Math.min(0.88, frozenP + TOTAL_FREEZE_MS / duration);
+        if (dtImp < IMPACT_FLASH_MS) {
+          isImpact = true;
+          effP = frozenP;
+          impactFlashProg = dtImp / IMPACT_FLASH_MS;
+          shakeX = (impactFlashProg < 0.5 ? 1 : -1) * 4.2;
+          shakeY = (impactFlashProg < 0.5 ? -1 : 1) * 3.1;
+        } else if (dtImp < TOTAL_FREEZE_MS) {
+          effP = frozenP;
+        } else if (p > resumeP) {
+          effP = lerp(frozenP, 1, (p - resumeP) / Math.max(0.05, 1 - resumeP));
+        } else {
+          effP = frozenP;
+        }
+        const dtSpring = dtImp - IMPACT_FLASH_MS;
+        if (dtSpring >= 0 && dtSpring < 240) {
+          const tSec = dtSpring / 1000;
+          const amp = 8.4 * Math.exp(-20 * tSec);
+          shakeX = Math.sin(156 * tSec) * amp;
+          shakeY = Math.cos(188 * tSec + 0.5) * amp * 0.74;
+        }
+      }
+
+      const rOptsA = { dpr, origin: originA, rawP: p, effectiveP: effP, reducedMotion: false };
+      const rOptsB = { dpr, origin: originB, rawP: p, effectiveP: effP, reducedMotion: false };
+      const actorA = resolveStageActor3D(vw, vh, effP, p, spec.skillA, originA, heroKeyA, rOptsA);
+      const actorB = resolveStageActor3D(vw, vh, effP, p, spec.skillB, originB, heroKeyB, rOptsB);
+
+      // Symmetrical X-Slash convergence around center stage (0.12..0.68)
+      const cx = vw * 0.5;
+      const cy = vh * 0.46;
+      const arcU = clamp(effP, 0, 1);
+      if (arcU < 0.44) {
+        const k = easeOutCubic(arcU / 0.44);
+        actorA.x = lerp(originA.x, cx - 54, k);
+        actorA.y = lerp(originA.y, cy - 28, k);
+        actorA.facing = -1;
+        actorB.x = lerp(originB.x, cx + 54, k);
+        actorB.y = lerp(originB.y, cy - 28, k);
+        actorB.facing = 1;
+      } else {
+        const k = easeOutCubic((arcU - 0.44) / 0.56);
+        actorA.x = lerp(cx - 54, originA.x, k);
+        actorA.y = lerp(cy - 28, originA.y, k);
+        actorA.facing = k > 0.55 ? 1 : -1;
+        actorB.x = lerp(cx + 54, originB.x, k);
+        actorB.y = lerp(cy - 28, originB.y, k);
+        actorB.facing = k > 0.55 ? -1 : 1;
+      }
+      actorA.sx = actorA.x;
+      actorA.sy = actorA.y;
+      actorB.sx = actorB.x;
+      actorB.sy = actorB.y;
+
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, shakeX * dpr, shakeY * dpr);
+      ctx.clearRect(-32, -32, vw + 64, vh + 64);
+
+      const warpedP = warpProgressForHitStop(effP);
+      renderStageAtmosphere(ctx, vw, vh, warpedP, spec.skillA, originA);
+      renderSkillFrame(ctx, vw, vh, warpedP, spec.skillA, originA, { skipBackdrop: true });
+      renderSkillFrame(ctx, vw, vh, warpedP, spec.skillB, originB, { skipBackdrop: true });
+      renderDualCrossSlashVfx(ctx, vw, vh, warpedP, spec);
+
+      if (!spec.noSpriteB) {
+        drawActionChibiOnStage(ctx, vw, vh, effP, spec.skillB, originB, spriteB, actorB, rOptsB);
+      }
+      if (!spec.noSpriteA) {
+        drawActionChibiOnStage(ctx, vw, vh, effP, spec.skillA, originA, spriteA, actorA, rOptsA);
+      }
+
+      if (isImpact) {
+        renderFallbackImpactFrame(ctx, vw, vh, actorA, spec.skillA, spriteA, impactFlashProg, rOptsA);
+      }
+
+      ctx.restore();
+      activeRafId = requestFrame(tickDual);
+    }
+
+    activeRafId = requestFrame(tickDual);
+    return {
+      ok: true,
+      dual: true,
+      charA: spec.charA,
+      charB: spec.charB,
+      spec,
+      durationMs: duration
+    };
+  }
+
   function get3DStatus() {
     const vfx3d = get3DVfxKernel();
     if (vfx3d && typeof vfx3d.getDiagnostics === 'function') {
@@ -4665,10 +5150,13 @@
   const API = {
     CHARACTER_IDS,
     SKILLS_DB,
+    DUAL_COMBO_DB,
     resolveCharacterId,
+    resolveDualComboSpec,
     getSkillsForCharacter,
     getAllSkills,
     castSkill,
+    castDualSkill,
     stopActiveSkill,
     preloadActionSprite,
     playSkillSfx,

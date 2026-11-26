@@ -319,8 +319,15 @@ async function waitForInitialAttach(ctx, targetId = 'target-main') {
 /**
  * Tạo HTTP raw request tới 127.0.0.1:<port> cho phép gửi Host/path raw (không chuẩn hóa .. hay %2e%2e).
  */
-function rawHttpRequest({ port, method = 'GET', path: reqPath = '/', headers = {} }) {
+function rawHttpRequest({ port, method = 'GET', path: reqPath = '/', headers = {}, body = null }) {
     return new Promise((resolve, reject) => {
+        const bodyBuf = body != null ? (Buffer.isBuffer(body) ? body : Buffer.from(String(body), 'utf8')) : null;
+        const finalHeaders = {
+            Host: `127.0.0.1:${port}`,
+            Connection: 'close',
+            ...(bodyBuf ? { 'Content-Length': bodyBuf.length } : {}),
+            ...headers,
+        };
         const req = http.request(
             {
                 hostname: '127.0.0.1',
@@ -328,11 +335,7 @@ function rawHttpRequest({ port, method = 'GET', path: reqPath = '/', headers = {
                 method,
                 path: reqPath,
                 agent: false,
-                headers: {
-                    Host: `127.0.0.1:${port}`,
-                    Connection: 'close',
-                    ...headers,
-                },
+                headers: finalHeaders,
             },
             (res) => {
                 const chunks = [];
@@ -353,6 +356,7 @@ function rawHttpRequest({ port, method = 'GET', path: reqPath = '/', headers = {
             }
         );
         req.on('error', reject);
+        if (bodyBuf) req.write(bodyBuf);
         req.end();
     });
 }
@@ -360,7 +364,7 @@ function rawHttpRequest({ port, method = 'GET', path: reqPath = '/', headers = {
 /**
  * Khởi tạo 1 sandbox cô lập hoàn toàn trong os.tmpdir() và chạy daemon/theme_daemon.js.
  */
-async function startIsolatedDaemon({ initialTargetsFactory, withInitialTarget = true, initialConfig = null } = {}) {
+async function startIsolatedDaemon({ initialTargetsFactory, withInitialTarget = true, initialConfig = null, extraEnv = {} } = {}) {
     const sandboxRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-test-daemon-'));
     const daemonDir = path.join(sandboxRoot, 'daemon');
     const distDir = path.join(sandboxRoot, 'dist');
@@ -382,6 +386,10 @@ async function startIsolatedDaemon({ initialTargetsFactory, withInitialTarget = 
 
     const daemonScript = path.join(daemonDir, 'theme_daemon.js');
     fs.copyFileSync(DAEMON_SRC_PATH, daemonScript);
+    const repoPersonasJson = path.join(path.resolve(__dirname, '..'), 'themes', 'personas.json');
+    if (fs.existsSync(repoPersonasJson)) {
+        fs.copyFileSync(repoPersonasJson, path.join(sandboxRoot, 'themes', 'personas.json'));
+    }
 
     const payloadPath = path.join(distDir, 'theme_payload.js');
     fs.writeFileSync(
@@ -437,6 +445,7 @@ async function startIsolatedDaemon({ initialTargetsFactory, withInitialTarget = 
         AGY_DEVTOOLS_PORT_FILE: portFile,
         AGY_PORT_FILE: portFile,
         AGY_DAEMON_STDOUT: '1',
+        ...extraEnv,
     };
 
     const child = spawn(process.execPath, [daemonScript], {
@@ -2069,6 +2078,134 @@ describe('F03 — CDP Lifecycle, Lọc Target, Anti-Double-Inject, Debounce & PI
             assert.equal(snap2.workStateItems[0].status, 'done');
 
             await ctx.cleanup();
+        });
+
+        it('F03-T3-04 [F27 Hydrogen Sidecar]: POST /__npc_warmup, /__npc_chat (SSE stream-json gemini-4-hydrogen-low ấm 2 lượt) & /__npc_reset', async () => {
+            const mockCliDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-mock-cli-'));
+            const chibiSandbox = path.join(mockCliDir, 'chibi_sandbox');
+            const mockJs = path.join(mockCliDir, 'mock_agy_cli.js');
+            fs.writeFileSync(
+                mockJs,
+                `
+const readline = require('readline');
+const args = process.argv.slice(2);
+const modelIdx = args.indexOf('--model');
+const modelName = modelIdx >= 0 ? args[modelIdx + 1] : '';
+const cid = '99999999-aaaa-4bbb-8ccc-dddddddddddd';
+let initSent = false;
+let turnNo = 0;
+const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+rl.on('line', (line) => {
+  if (!line.trim()) return;
+  const msg = JSON.parse(line);
+  if (!initSent) {
+    initSent = true;
+    process.stdout.write(JSON.stringify({ event: 'init', conversation_id: cid, init: { model: modelName } }) + '\\n');
+  }
+  turnNo += 1;
+  const content = String((msg.message && msg.message.content) || '');
+  const hasSoul = content.includes('[CHIBI_SOUL_ANCHOR');
+  const part1 = 'Mặt nước tĩnh lặng (PID=' + process.pid + ', T=' + turnNo + ')... ';
+  const part2 = 'model=' + modelName + (hasSoul ? ' [SOUL_OK]' : ' [WARM_OK]');
+  process.stdout.write(JSON.stringify({ event: 'step_update', step_update: { conversation_id: cid, step_index: 1, state: 'ACTIVE', step_type: 'agent_response', text_delta: part1 } }) + '\\n');
+  process.stdout.write(JSON.stringify({ event: 'step_update', step_update: { conversation_id: cid, step_index: 1, state: 'DONE', step_type: 'agent_response', text_delta: part2 } }) + '\\n');
+  process.stdout.write(JSON.stringify({ event: 'result', result: { conversation_id: cid, status: 'SUCCESS', response: part1 + part2, num_turns: turnNo } }) + '\\n');
+});
+`,
+                'utf8'
+            );
+
+            let mockWrapperPath;
+            if (process.platform === 'win32') {
+                mockWrapperPath = path.join(mockCliDir, 'mock_agy.cmd');
+                fs.writeFileSync(mockWrapperPath, `@echo off\r\n"${process.execPath}" "${mockJs}" %*\r\n`, 'utf8');
+            } else {
+                mockWrapperPath = path.join(mockCliDir, 'mock_agy.sh');
+                fs.writeFileSync(mockWrapperPath, `#!/bin/sh\nexec "${process.execPath}" "${mockJs}" "$@"\n`, { mode: 0o755 });
+            }
+
+            const ctx = await startIsolatedDaemon({
+                extraEnv: {
+                    AGY_CLI_PATH: mockWrapperPath,
+                    AGY_CHIBI_SANDBOX_DIR: chibiSandbox,
+                },
+            });
+            await waitForInitialAttach(ctx, 'target-main');
+
+            // 1. Chặn 403 khi không có X-Agy-Token
+            const unauth = await rawHttpRequest({
+                port: ctx.assetPort,
+                method: 'POST',
+                path: '/__npc_chat',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ charId: 'giyu', message: 'Chào' }),
+            });
+            assert.equal(unauth.status, 403, 'Thiếu X-Agy-Token phải bị chặn 403');
+
+            // 2. Warmup trước khi gõ xong câu hỏi
+            const warmRes = await rawHttpRequest({
+                port: ctx.assetPort,
+                method: 'POST',
+                path: '/__npc_warmup',
+                headers: { 'X-Agy-Token': ctx.token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ charId: 'giyu', masterId: 'shinobu' }),
+            });
+            assert.equal(warmRes.status, 200);
+            assert.equal(warmRes.json().model, 'gemini-4-hydrogen-low');
+
+            // 3. Lượt 1 qua SSE streaming: phải nhận [SOUL_OK] + model=gemini-4-hydrogen-low
+            const sseTurn1 = await rawHttpRequest({
+                port: ctx.assetPort,
+                method: 'POST',
+                path: '/__npc_chat',
+                headers: { 'X-Agy-Token': ctx.token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    charId: 'giyu',
+                    masterId: 'shinobu',
+                    message: 'Hôm nay mặt hồ thế nào anh Giyu?',
+                    liveContext: { ctxTokens: '64.2K', bladePct: 80, aiWorking: false },
+                }),
+            });
+            assert.equal(sseTurn1.status, 200);
+            const rawSse1 = sseTurn1.text();
+            assert.match(rawSse1, /"type":"delta"/, 'Phải đẩy từng mảnh delta qua SSE');
+            assert.match(rawSse1, /model=gemini-4-hydrogen-low \[SOUL_OK\]/, 'Lượt 1 phải gắn CHIBI_SOUL_ANCHOR và dùng model gemini-4-hydrogen-low');
+            const pidMatch1 = rawSse1.match(/PID=(\d+)/);
+            assert.ok(pidMatch1, 'Phải có PID tiến trình sidecar');
+
+            // 4. Lượt 2 trên cùng nhân vật: phải tái sử dụng đúng cùng PID ấm (T=2, [WARM_OK])!
+            const jsonTurn2 = await rawHttpRequest({
+                port: ctx.assetPort,
+                method: 'POST',
+                path: '/__npc_chat',
+                headers: { 'X-Agy-Token': ctx.token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    charId: 'giyu',
+                    masterId: 'shinobu',
+                    message: 'Ăn cá hồi hầm củ cải không?',
+                    stream: false,
+                }),
+            });
+            assert.equal(jsonTurn2.status, 200);
+            const out2 = jsonTurn2.json();
+            assert.equal(out2.ok, true);
+            assert.match(out2.reply, new RegExp(`PID=${pidMatch1[1]}, T=2`));
+            assert.match(out2.reply, /\[WARM_OK\]/);
+
+            // 5. Reset trí nhớ nhân vật -> xóa khỏi sessions.json
+            const resetRes = await rawHttpRequest({
+                port: ctx.assetPort,
+                method: 'POST',
+                path: '/__npc_reset',
+                headers: { 'X-Agy-Token': ctx.token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ charId: 'giyu', masterId: 'shinobu' }),
+            });
+            assert.equal(resetRes.status, 200);
+            const savedSessions = JSON.parse(fs.readFileSync(path.join(chibiSandbox, 'sessions.json'), 'utf8'));
+            assert.equal(savedSessions['giyu::shinobu'], undefined, 'POST /__npc_reset phải xóa conversationId đã lưu của cặp nhân vật');
+
+            await ctx.cleanup();
+            try { fs.rmSync(mockCliDir, { recursive: true, force: true }); } catch (_) {}
         });
     });
 });

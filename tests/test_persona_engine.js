@@ -609,5 +609,12 @@ describe('F22 — Hệ thống Đồng bộ Tính cách Trụ Cột & Kiểm đ�
       }
     });
     assert.equal(fs.existsSync(pluginStateDir), false, 'uninstall --purge phải dọn sạch thư mục plugin_data/*/persona_state');
+
+    // 5. Cô lập tuyệt đối tiến trình Chibi Hydrogen Sidecar (AGY_CHIBI_SIDECAR=1 / chibi_npc_sandbox) khỏi các Hook chính
+    const sidecarPre = runPreHook(
+      { conversationId: '77770000-1111-4222-8333-444455556666', invocationNum: 0, lastUserInput: 'Chào Shinobu', cwd: path.join(tmp, 'chibi_npc_sandbox') },
+      { AGY_CONFIG_PATH: cleanCfg, AGY_CHIBI_SIDECAR: '1' }
+    );
+    assert.deepEqual(sidecarPre, {}, 'Tiến trình Chibi Sidecar tuyệt đối không được bị tiêm [AGY_PERSONA_SHIFT] của trợ lý chính');
   });
 });

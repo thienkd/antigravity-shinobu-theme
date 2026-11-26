@@ -247,6 +247,9 @@ fn is_subagent_session_start(parsed: Option<&Map<String, Value>>) -> bool {
 }
 
 pub fn run_session_start_with_input(raw_in: &str, default_code_root: &Path) -> String {
+    if std::env::var("AGY_CHIBI_SIDECAR").ok().as_deref() == Some("1") {
+        return "{}\n".to_string();
+    }
     let code_root = std::env::var("PLUGIN_ROOT")
         .ok()
         .filter(|s| !s.trim().is_empty())
@@ -278,6 +281,18 @@ pub fn run_session_start_with_input(raw_in: &str, default_code_root: &Path) -> S
         });
 
     let parsed = parse_hook_input_safe(raw_in);
+    if let Some(ref obj) = parsed {
+        let cwd_s = obj.get("cwd").and_then(|v| v.as_str()).unwrap_or("");
+        let ws0_s = obj
+            .get("workspacePaths")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if cwd_s.contains("chibi_npc_sandbox") || ws0_s.contains("chibi_npc_sandbox") {
+            return "{}\n".to_string();
+        }
+    }
     if is_subagent_session_start(parsed.as_ref()) {
         let _ = ensure_daemon_awake(&code_root, &root_dir, &pid_file);
         return "{}\n".to_string();

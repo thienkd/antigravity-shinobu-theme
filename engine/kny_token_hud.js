@@ -18,6 +18,10 @@
 
   const HUD_BAR_ID = 'agy-token-context-bar';
   const ECHO_BAR_ID = 'agy-yoriichi-msg-echo';
+  const HERALD_BAR_ID = 'agy-kasugai-herald';
+  const HERALD_AUTO_HIDE_MS = 6000;
+  const HERALD_LONG_TURN_MS = 12000;
+  const HERALD_COOLDOWN_MS = 3200;
   const STYLE_ID = 'antigravity-kny-token-hud-style';
   const DEFAULT_CONTEXT_WINDOW = 1048576;
   const AUTO_COMPACT_STORAGE_KEY = 'agy_auto_compact_380k_v1';
@@ -100,6 +104,23 @@
     echoTimer: 0,
     echoShownAt: 0,
     baselineUserMsgCount: 0,
+
+    // v3.5 Smart Kasugai / Chuntaro / Kaburamaru Herald state
+    heraldEl: null,
+    heraldSvgSlotEl: null,
+    heraldTitleEl: null,
+    heraldMsgEl: null,
+    heraldTimer: 0,
+    heraldGlowTimer: 0,
+    heraldVisible: false,
+    heraldKind: 'kasugai_crow',
+    heraldCharId: 'shinobu',
+    heraldCompanionName: '',
+    heraldLastShownAt: 0,
+    heraldLastTriggerReason: '',
+    heraldLastApprovalSig: '',
+    liveTurnWorkStartedMs: 0,
+    liveTurnWasWorking: false,
 
     // Detail rows inside popover
     popSessionTitle: null,
@@ -1110,6 +1131,121 @@
         color: #ffffff;
         background: rgba(255, 255, 255, 0.12);
       }
+
+      /* v3.5 Smart Kasugai / Chuntaro / Kaburamaru Herald (#agy-kasugai-herald) */
+      #${HERALD_BAR_ID} {
+        position: absolute;
+        bottom: calc(100% + 36px);
+        left: 8px;
+        max-width: min(468px, calc(100% - 124px));
+        z-index: 62;
+        display: none;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 9px 5px 7px;
+        border-radius: 9999px;
+        background: linear-gradient(135deg, rgba(15, 11, 29, 0.97) 0%, rgba(28, 16, 40, 0.96) 100%);
+        border: 1px solid var(--tok-border, rgba(192, 132, 252, 0.72));
+        box-shadow:
+          0 10px 26px rgba(2, 4, 14, 0.78),
+          0 0 18px var(--tok-glow, rgba(192, 132, 252, 0.28)),
+          inset 0 1px 0 rgba(255, 255, 255, 0.16);
+        color: #f8fafc;
+        pointer-events: auto;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', sans-serif;
+        -webkit-app-region: no-drag;
+      }
+      #${HERALD_BAR_ID}[data-visible="1"] {
+        display: inline-flex;
+        animation: agyKasugaiGlideIn 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #${HERALD_BAR_ID}[data-urgent="1"] {
+        border-color: rgba(248, 113, 113, 0.86);
+        box-shadow: 0 10px 26px rgba(15, 4, 8, 0.85), 0 0 20px rgba(239, 68, 68, 0.42);
+      }
+      @keyframes agyKasugaiGlideIn {
+        from { opacity: 0; transform: translate(-10px, -12px) scale(0.92); }
+        to   { opacity: 1; transform: translate(0, 0) scale(1); }
+      }
+      @keyframes agyKasugaiBob {
+        0%, 100% { transform: translateY(0px) rotate(0deg); }
+        50%      { transform: translateY(-2px) rotate(-3deg); }
+      }
+      .agy-herald-main {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+        flex: 1;
+        background: transparent;
+        border: none;
+        padding: 0;
+        color: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+      .agy-herald-companion-svg {
+        width: 24px;
+        height: 24px;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9999px;
+        background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.38));
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        animation: agyKasugaiBob 2.2s ease-in-out infinite;
+      }
+      .agy-herald-copy {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        line-height: 1.24;
+      }
+      .agy-herald-title {
+        font-size: 9.8px;
+        font-weight: 700;
+        color: var(--tok-primary, #fde047);
+        letter-spacing: 0.18px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .agy-herald-msg {
+        font-size: 11.2px;
+        font-weight: 500;
+        color: #f1f5f9;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 340px;
+      }
+      .agy-herald-close {
+        width: 18px;
+        height: 18px;
+        border-radius: 9999px;
+        border: none;
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(226, 232, 240, 0.78);
+        font-size: 10.5px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0;
+        padding: 0;
+        transition: background-color 0.15s ease, color 0.15s ease;
+      }
+      .agy-herald-close:hover {
+        background: rgba(255, 255, 255, 0.2);
+        color: #ffffff;
+      }
+      .agy-herald-target-glow {
+        outline: 1.5px solid var(--tok-primary, #fde047) !important;
+        box-shadow: 0 0 22px var(--tok-glow, rgba(250, 204, 21, 0.38)) !important;
+        border-radius: 10px;
+      }
     `;
   }
 
@@ -1496,6 +1632,7 @@
         if (
           btn.closest(`#${HUD_BAR_ID}`) ||
           btn.closest(`#${ECHO_BAR_ID}`) ||
+          btn.closest(`#${HERALD_BAR_ID}`) ||
           btn.closest('#agy-shinobu-npc-wrap') ||
           btn.closest('agy-hashira-squad') ||
           btn.closest('agy-chibi-aura') ||
@@ -2042,6 +2179,13 @@
         }
       } catch (_) {}
     }
+    if (state.crisisState && !prevCrisis && state.hasTelemetry) {
+      summonKasugaiHerald({
+        reason: 'crisis_onset',
+        urgent: true,
+        message: 'Khẩn báo: Phát hiện lỗi hoặc xung đột cần kiểm tra ngay!'
+      });
+    }
     const comp = state.composer || resolveComposerRoot();
     if (!comp || !comp.dataset) return;
     if (state.crisisState) {
@@ -2049,6 +2193,348 @@
     } else {
       delete comp.dataset.agyCrisis;
     }
+  }
+
+  /* ==========================================================================
+   * v3.5 SMART KASUGAI / CHUNTARO / KABURAMARU HERALD ENGINE
+   * ========================================================================== */
+
+  const HERALD_CHAR_RULES = [
+    { id: 'zenitsu', re: /\b(?:zenitsu|thunder_flash|agatsuma)\b/, kind: 'chuntaro', name: 'Chim Sẻ Chuntaro', chimeKind: 'chuntaro', primary: '#facc15', accent: '#fef08a' },
+    { id: 'obanai', re: /\b(?:obanai|serpent_prism|iguro)\b/, kind: 'kaburamaru', name: 'Bạch Xà Kaburamaru', chimeKind: 'kaburamaru', primary: '#a855f7', accent: '#f43f5e' },
+    { id: 'shinobu', re: /\b(?:shinobu|butterfly|insect|kocho)\b/, kind: 'butterfly_crow', name: 'Quạ Kasugai Điệp Vũ', chimeKind: 'butterfly', primary: '#c084fc', accent: '#5eead4' },
+    { id: 'mitsuri', re: /\b(?:mitsuri|love_sakura|kanroji)\b/, kind: 'clover_crow', name: 'Quạ Urara Cỏ Bốn Lá', chimeKind: 'clover', primary: '#f472b6', accent: '#86efac' },
+    { id: 'muichiro', re: /\b(?:muichiro|mist_sea|tokito)\b/, kind: 'ginko_crow', name: 'Quạ Ginko Hàng Mi Dài', chimeKind: 'crow', primary: '#67e8f9', accent: '#ccfbf1' },
+    { id: 'ubuyashiki', re: /\b(?:ubuyashiki|kagaya|royal_wisteria|wisteria_royal)\b/, kind: 'royal_crow', name: 'Quạ Chúa Công Khăn Tím', chimeKind: 'crow', primary: '#d8b4fe', accent: '#fde047' },
+    { id: 'nezuko', re: /\b(?:nezuko|pink_flame)\b/, kind: 'nezuko_ribbon', name: 'Cánh Én Hồng Liên Nezuko', chimeKind: 'ribbon', primary: '#fb7185', accent: '#86efac' },
+    { id: 'shadow_monarch', re: /\b(?:shadow_monarch|jinwoo|arise)\b/, kind: 'shadow_raven', name: 'Quạ Bóng Đêm Kaisel', chimeKind: 'crow', primary: '#8b5cf6', accent: '#38bdf8' },
+    { id: 'six_eyes', re: /\b(?:six_eyes|gojo|limitless)\b/, kind: 'six_eyes_shikigami', name: 'Thức Thần Lục Nhãn', chimeKind: 'butterfly', primary: '#38bdf8', accent: '#e0f2fe' },
+    { id: 'great_sage', re: /\b(?:great_sage|raphael|rimuru)\b/, kind: 'great_sage_prism', name: 'Lăng Kính Đại Hiền Giả', chimeKind: 'butterfly', primary: '#22d3ee', accent: '#fde047' },
+    { id: 'giyu', re: /\b(?:giyu|water_calm|tomioka)\b/, kind: 'kasugai_crow', name: 'Quạ Già Kanzaburo', chimeKind: 'crow', primary: '#38bdf8', accent: '#bae6fd' },
+    { id: 'rengoku', re: /\b(?:rengoku|flame_ember|kyojuro)\b/, kind: 'kasugai_crow', name: 'Quạ Hỏa Viêm Kaname', chimeKind: 'crow', primary: '#f97316', accent: '#fde047' },
+    { id: 'tanjiro', re: /\b(?:tanjiro|hinokami|water_dragon)\b/, kind: 'kasugai_crow', name: 'Quạ Matsuemon Truyền Tin', chimeKind: 'crow', primary: '#10b981', accent: '#ef4444' },
+    { id: 'uzui', re: /\b(?:uzui|sound_fireworks|tengen)\b/, kind: 'kasugai_crow', name: 'Quạ Nạm Ngọc Nijimaru', chimeKind: 'crow', primary: '#f43f5e', accent: '#facc15' },
+    { id: 'sanemi', re: /\b(?:sanemi|wind_gale|shinazugawa)\b/, kind: 'kasugai_crow', name: 'Quạ Phong Sát Sorai', chimeKind: 'crow', primary: '#4ade80', accent: '#dcfce7' },
+    { id: 'gyomei', re: /\b(?:gyomei|stone_mantra|himejima)\b/, kind: 'kasugai_crow', name: 'Quạ Nham Thạch Zekka', chimeKind: 'crow', primary: '#eab308', accent: '#fef08a' },
+    { id: 'inosuke', re: /\b(?:inosuke|beast_fangs)\b/, kind: 'kasugai_crow', name: 'Quạ Hạt Dẻ Donguri', chimeKind: 'crow', primary: '#60a5fa', accent: '#bfdbfe' },
+    { id: 'yoriichi', re: /\b(?:yoriichi|sun_halo|crimson_sun)\b/, kind: 'kasugai_crow', name: 'Quạ Thái Dương Khai Tổ', chimeKind: 'crow', primary: '#ef4444', accent: '#fde047' }
+  ];
+
+  function resolveHeraldCompanion(themeCfgOverride, themeKeyOverride) {
+    const cfg = themeCfgOverride || state.themeCfg || {};
+    const hint = `${themeKeyOverride || state.themeKeyHint || ''} ${cfg.fxMode || ''} ${cfg.concept || ''} ${cfg.name || ''}`.toLowerCase();
+    for (let i = 0; i < HERALD_CHAR_RULES.length; i++) {
+      const r = HERALD_CHAR_RULES[i];
+      if (r.re.test(hint)) {
+        return {
+          charId: r.id,
+          kind: r.kind,
+          name: r.name,
+          chimeKind: r.chimeKind,
+          primary: cfg.primary || r.primary,
+          accent: cfg.accent || cfg.secondary || r.accent
+        };
+      }
+    }
+    return {
+      charId: 'shinobu',
+      kind: 'kasugai_crow',
+      name: 'Quạ Kasugai Truyền Tin',
+      chimeKind: 'crow',
+      primary: cfg.primary || '#c084fc',
+      accent: cfg.accent || '#5eead4'
+    };
+  }
+
+  function buildHeraldCompanionSvg(comp) {
+    const c = comp || resolveHeraldCompanion();
+    const p = sanitizeCssColorToken(c.primary, '#c084fc');
+    const a = sanitizeCssColorToken(c.accent, '#fde047');
+
+    if (c.kind === 'chuntaro') {
+      return (
+        `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">` +
+        `<ellipse cx="12" cy="13.5" rx="7.2" ry="6.4" fill="#d69e66" stroke="#78350f" stroke-width="1"/>` +
+        `<ellipse cx="12" cy="15.2" rx="4.8" ry="3.8" fill="#fef3c7"/>` +
+        `<path d="M5.2 12.8 Q8.2 9.5 10.6 13.8" fill="#92400e"/>` +
+        `<path d="M18.8 12.8 Q15.8 9.5 13.4 13.8" fill="#92400e"/>` +
+        `<circle cx="9.6" cy="11.4" r="1.15" fill="#1e1b4b"/><circle cx="14.4" cy="11.4" r="1.15" fill="#1e1b4b"/>` +
+        `<circle cx="8.1" cy="13.2" r="1.1" fill="#fb7185" opacity="0.82"/><circle cx="15.9" cy="13.2" r="1.1" fill="#fb7185" opacity="0.82"/>` +
+        `<polygon points="12,11.8 10.7,13.4 13.3,13.4" fill="#f59e0b"/>` +
+        `<path d="M11.6 4.2 L10.2 7.2 L12.2 7.2 L11.1 9.6" fill="none" stroke="${p}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>` +
+        `</svg>`
+      );
+    }
+    if (c.kind === 'kaburamaru') {
+      return (
+        `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">` +
+        `<path d="M5.5 17.5 C4.2 13.2 8.8 11.4 12.4 13.6 C16.2 15.8 19.4 12.8 17.6 8.6 C16.4 6.2 12.6 5.8 11.2 8.2" fill="none" stroke="#f8fafc" stroke-width="3.2" stroke-linecap="round"/>` +
+        `<path d="M5.5 17.5 C4.2 13.2 8.8 11.4 12.4 13.6 C16.2 15.8 19.4 12.8 17.6 8.6" fill="none" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="1.5 2"/>` +
+        `<ellipse cx="11.2" cy="8.4" rx="3.1" ry="2.3" fill="#ffffff" stroke="#94a3b8" stroke-width="0.9"/>` +
+        `<circle cx="10.1" cy="8.1" r="0.85" fill="#e11d48"/><circle cx="12.3" cy="8.1" r="0.85" fill="#e11d48"/>` +
+        `<path d="M11.2 10.7 L11.2 12.6 M11.2 12.6 L10.4 13.5 M11.2 12.6 L12.0 13.5" stroke="#f43f5e" stroke-width="0.85" stroke-linecap="round"/>` +
+        `</svg>`
+      );
+    }
+    if (c.kind === 'nezuko_ribbon') {
+      return (
+        `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">` +
+        `<path d="M12 11.5 C7.2 5.8 3.2 8.5 6.4 13.4 C4.8 16.5 8.5 18.2 12 14.2 C15.5 18.2 19.2 16.5 17.6 13.4 C20.8 8.5 16.8 5.8 12 11.5 Z" fill="${p}" stroke="#ffe4e6" stroke-width="0.9"/>` +
+        `<rect x="8.2" y="10.6" width="7.6" height="2.8" rx="1.3" fill="#22c55e" stroke="#dcfce7" stroke-width="0.7"/>` +
+        `</svg>`
+      );
+    }
+    if (c.kind === 'great_sage_prism' || c.kind === 'six_eyes_shikigami') {
+      return (
+        `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">` +
+        `<polygon points="12,3 20,12 12,21 4,12" fill="rgba(56,189,248,0.28)" stroke="${p}" stroke-width="1.4"/>` +
+        `<polygon points="12,6.5 16.8,12 12,17.5 7.2,12" fill="${a}" opacity="0.85"/>` +
+        `</svg>`
+      );
+    }
+    // Crow family (Butterfly Crow, Clover Urara, Eyelash Ginko, Royal Scarf, Kaisel, Kasugai Crow)
+    const crestExtra = c.kind === 'butterfly_crow'
+      ? `<path d="M15.2 5.2 C17.8 3.0 19.8 5.2 17.4 7.4 C19.4 8.8 17.6 10.4 15.4 8.2 Z" fill="${p}" stroke="${a}" stroke-width="0.65"/>`
+      : c.kind === 'clover_crow'
+      ? `<circle cx="15.5" cy="5.2" r="1.4" fill="#4ade80"/><circle cx="17.5" cy="6.4" r="1.4" fill="#4ade80"/><circle cx="14.6" cy="7.1" r="1.4" fill="#fb7185"/>`
+      : c.kind === 'ginko_crow'
+      ? `<path d="M8.1 9.0 L6.8 7.7 M9.1 8.6 L8.4 7.1" stroke="${a}" stroke-width="0.9" stroke-linecap="round"/>`
+      : c.kind === 'royal_crow'
+      ? `<path d="M8.2 14.8 Q12 17.2 15.8 14.8 L16.8 18.2 L14.4 17.6" fill="#a855f7" stroke="#fde047" stroke-width="0.75"/>`
+      : `<circle cx="12" cy="15.6" r="1.35" fill="${a}" stroke="${p}" stroke-width="0.7"/>`;
+
+    const eyeColor = c.kind === 'shadow_raven' ? '#38bdf8' : '#f8fafc';
+    return (
+      `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">` +
+      `<path d="M3.5 13.5 Q7.2 8.2 11.4 11.8 L12.6 11.8 Q16.8 8.2 20.5 13.5 Q16.6 14.6 14.8 16.5 L9.2 16.5 Q7.4 14.6 3.5 13.5 Z" fill="#1e293b" stroke="${p}" stroke-width="0.95"/>` +
+      `<circle cx="12" cy="10.2" r="4.1" fill="#0f172a" stroke="#475569" stroke-width="0.8"/>` +
+      `<circle cx="10.4" cy="9.8" r="0.9" fill="${eyeColor}"/><circle cx="13.6" cy="9.8" r="0.9" fill="${eyeColor}"/>` +
+      `<polygon points="12,10.5 10.6,12.5 13.4,12.5" fill="#fbbf24"/>` +
+      crestExtra +
+      `</svg>`
+    );
+  }
+
+  function sanitizeCssColorToken(val, fallback) {
+    const s = String(val || '').trim();
+    if (/^#[0-9a-fA-F]{3,8}$/.test(s) || /^rgba?\([0-9.,\s%]+\)$/.test(s)) return s;
+    return fallback;
+  }
+
+  function isMainChatScrolledAway(thresholdPx = 320) {
+    if (typeof document === 'undefined') return false;
+    try {
+      const candidates = [
+        document.querySelector('[data-main-content-body="true"]'),
+        state.composer ? resolveConversationPaneRoot(state.composer) : null
+      ].filter(Boolean);
+      for (let i = 0; i < candidates.length; i++) {
+        let cur = candidates[i];
+        let depth = 0;
+        while (cur && depth < 5) {
+          const sh = Number(cur.scrollHeight) || 0;
+          const ch = Number(cur.clientHeight) || 0;
+          const st = Number(cur.scrollTop) || 0;
+          if (sh - ch > 80 && (sh - st - ch) > thresholdPx) {
+            return true;
+          }
+          cur = cur.firstElementChild || null;
+          depth++;
+        }
+      }
+      const rootNodes = Array.from(document.querySelectorAll('[data-main-content-body="true"] *'));
+      for (let j = 0; j < rootNodes.length && j < 48; j++) {
+        const el = rootNodes[j];
+        const sh = Number(el.scrollHeight) || 0;
+        const ch = Number(el.clientHeight) || 0;
+        if (sh - ch > 160) {
+          const gap = sh - (Number(el.scrollTop) || 0) - ch;
+          if (gap > thresholdPx) return true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  function findPendingApprovalButton() {
+    if (typeof document === 'undefined') return null;
+    try {
+      const root = document.querySelector('[data-main-content-body="true"]') || document.body;
+      if (!root) return null;
+      const btns = root.querySelectorAll('button:not([disabled])');
+      const approvalRe = /^(?:proceed|approve|accept|allow|run command|confirm|tiếp tục thực hiện|phê duyệt|chấp nhận)$/i;
+      for (let i = btns.length - 1; i >= 0; i--) {
+        const b = btns[i];
+        if (!b || b.closest(`#${HUD_BAR_ID}, #${HERALD_BAR_ID}, #agy-shinobu-npc-wrap, .surface-composer`)) continue;
+        const txt = String(b.textContent || '').trim();
+        if (txt.length > 0 && txt.length <= 28 && approvalRe.test(txt)) {
+          return b;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function scrollToHeraldTarget() {
+    if (typeof document === 'undefined') return false;
+    let target = findPendingApprovalButton();
+    if (!target) {
+      const responses = document.querySelectorAll('[data-main-content-body="true"] [data-testid="agent-response"], [data-testid="agent-response"]');
+      if (responses.length > 0) {
+        target = responses[responses.length - 1];
+      }
+    }
+    if (!target) return false;
+
+    if (typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__ && typeof window.__AGY_BIO_AUDIO__.playBiwaPluck === 'function') {
+      try { window.__AGY_BIO_AUDIO__.playBiwaPluck({ semitone: 2 }); } catch (_) {}
+    }
+
+    try {
+      if (typeof target.scrollIntoView === 'function') {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      target.classList.add('agy-herald-target-glow');
+      clearTimeout(state.heraldGlowTimer);
+      state.heraldGlowTimer = setTimeout(() => {
+        state.heraldGlowTimer = 0;
+        try { target.classList.remove('agy-herald-target-glow'); } catch (_) {}
+      }, 1250);
+    } catch (_) {}
+    return true;
+  }
+
+  function dismissKasugaiHerald() {
+    clearTimeout(state.heraldTimer);
+    state.heraldTimer = 0;
+    state.heraldVisible = false;
+    if (state.heraldEl) {
+      delete state.heraldEl.dataset.visible;
+      delete state.heraldEl.dataset.urgent;
+    }
+  }
+
+  function summonKasugaiHerald(rawOpts) {
+    const opts = rawOpts && typeof rawOpts === 'object' ? rawOpts : {};
+    if (!state.heraldEl || !state.heraldEl.isConnected) return { ok: false, reason: 'unmounted' };
+
+    const now = Date.now();
+    const force = Boolean(opts.force);
+    if (!force && now - state.heraldLastShownAt < HERALD_COOLDOWN_MS) {
+      return { ok: false, reason: 'cooldown' };
+    }
+
+    const comp = resolveHeraldCompanion(opts.themeCfg, opts.themeKey);
+    state.heraldKind = comp.kind;
+    state.heraldCharId = comp.charId;
+    state.heraldCompanionName = comp.name;
+    state.heraldLastShownAt = now;
+    state.heraldLastTriggerReason = String(opts.reason || 'manual');
+    state.heraldVisible = true;
+
+    if (state.heraldSvgSlotEl) {
+      state.heraldSvgSlotEl.innerHTML = buildHeraldCompanionSvg(comp);
+    }
+    if (state.heraldTitleEl) {
+      state.heraldTitleEl.textContent = `${comp.name} truyền tin`;
+    }
+    if (state.heraldMsgEl) {
+      state.heraldMsgEl.textContent = String(opts.message || 'Phản hồi đã hoàn tất — nhấn để cuộn tới ngay!');
+    }
+
+    state.heraldEl.dataset.kind = comp.kind;
+    state.heraldEl.dataset.charId = comp.charId;
+    if (opts.urgent) state.heraldEl.dataset.urgent = '1';
+    else delete state.heraldEl.dataset.urgent;
+    state.heraldEl.dataset.visible = '1';
+
+    if (!opts.silent && typeof window !== 'undefined' && window.__AGY_BIO_AUDIO__ && typeof window.__AGY_BIO_AUDIO__.playKasugaiHeraldChime === 'function') {
+      try {
+        window.__AGY_BIO_AUDIO__.playKasugaiHeraldChime(comp.chimeKind, { force: Boolean(opts.forceAudio) });
+      } catch (_) {}
+    }
+
+    clearTimeout(state.heraldTimer);
+    const hideMs = Math.max(1200, Number(opts.durationMs) || HERALD_AUTO_HIDE_MS);
+    state.heraldTimer = setTimeout(() => {
+      dismissKasugaiHerald();
+    }, hideMs);
+
+    return {
+      ok: true,
+      kind: comp.kind,
+      charId: comp.charId,
+      companionName: comp.name,
+      reason: state.heraldLastTriggerReason
+    };
+  }
+
+  function evaluateSmartHeraldOnTurnTransition(wasWorking, nowWorking, firstSync) {
+    const nowEpoch = Date.now();
+    if (firstSync) {
+      state.liveTurnWasWorking = Boolean(nowWorking);
+      state.liveTurnWorkStartedMs = nowWorking ? nowEpoch : 0;
+      return null;
+    }
+
+    if (nowWorking && !wasWorking) {
+      state.liveTurnWorkStartedMs = nowEpoch;
+      state.liveTurnWasWorking = true;
+      dismissKasugaiHerald();
+      return null;
+    }
+
+    if (!nowWorking && wasWorking) {
+      const started = state.liveTurnWorkStartedMs || nowEpoch;
+      const elapsedMs = Math.max(0, nowEpoch - started);
+      state.liveTurnWasWorking = false;
+      state.liveTurnWorkStartedMs = 0;
+
+      const isUnfocused = typeof document !== 'undefined' && (
+        Boolean(document.hidden) ||
+        (typeof document.hasFocus === 'function' ? !document.hasFocus() : false)
+      );
+      const isScrolledAway = isMainChatScrolledAway(320);
+      const pendingBtn = findPendingApprovalButton();
+
+      if (pendingBtn) {
+        const lbl = String(pendingBtn.textContent || 'Proceed').trim();
+        return summonKasugaiHerald({
+          reason: 'pending_approval',
+          urgent: true,
+          message: `Đang chờ lệnh xác nhận (${lbl}) — nhấn để nhảy tới!`
+        });
+      }
+      if (elapsedMs >= HERALD_LONG_TURN_MS) {
+        const sec = Math.max(12, Math.round(elapsedMs / 1000));
+        return summonKasugaiHerald({
+          reason: 'long_task_done',
+          message: `Nhiệm vụ ${sec}s đã hoàn tất — nhấn để xem kết quả!`
+        });
+      }
+      if (isUnfocused || isScrolledAway) {
+        return summonKasugaiHerald({
+          reason: isUnfocused ? 'window_unfocused' : 'scrolled_away',
+          message: 'Phản hồi mới vừa sẵn sàng ở cuối cuộc trò chuyện!'
+        });
+      }
+    } else if (!nowWorking) {
+      const pendingBtn = findPendingApprovalButton();
+      if (pendingBtn) {
+        const sig = String(pendingBtn.textContent || '').trim();
+        if (sig && sig !== state.heraldLastApprovalSig) {
+          state.heraldLastApprovalSig = sig;
+          return summonKasugaiHerald({
+            reason: 'pending_approval',
+            urgent: true,
+            message: `Đang chờ xác nhận (${sig}) — nhấn để mở tới nút!`
+          });
+        }
+      } else {
+        state.heraldLastApprovalSig = '';
+      }
+    }
+    return null;
   }
 
   function shouldSuppressFullscreenFinisher() {
@@ -2089,6 +2575,7 @@
       try {
         window.__AGY_TRIGGER_FINISHER__({
           reason: slashReason || 'bug_slashed',
+          dualPartnerId: state.personaSkillId || '',
           fallbackOriginEl: state.yoriichiBtnEl || null
         });
       } catch (_) {}
@@ -2212,9 +2699,11 @@
       state.serverModelName = snap.modelName.trim();
     }
 
+    const prevServerWorking = Boolean(state.serverIsWorking);
     if (typeof snap.isWorking === 'boolean') {
       state.serverIsWorking = snap.isWorking;
       state.pollWasWorking = snap.isWorking;
+      evaluateSmartHeraldOnTurnTransition(prevServerWorking, snap.isWorking, firstSync);
     }
 
     const nowVelMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -2775,6 +3264,10 @@
 
     abortActiveStream();
     hideUserMessageEcho();
+    dismissKasugaiHerald();
+    state.liveTurnWasWorking = false;
+    state.liveTurnWorkStartedMs = 0;
+    state.heraldLastApprovalSig = '';
     resetConversationCompactState();
     state.cidEpoch++;
     state.fetchInFlight = false;
@@ -2884,6 +3377,9 @@
       state.turnBaselineDomChars = domChars;
       state.stepBaselineDomChars = domChars;
       state.dispTurnTokens = 0;
+      if (!state.hasTelemetry) {
+        evaluateSmartHeraldOnTurnTransition(false, true, false);
+      }
       computeAndApplyBladeHeat();
       if (typeof window !== 'undefined' && window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.setLive2dWorkState === 'function') {
         try { window.__AGY_KNY_CHIBI_AURA__.setLive2dWorkState({ working: true, crisis: state.crisisState, bladeHeat: state.bladeHeat }); } catch (_) {}
@@ -2891,6 +3387,9 @@
       if (state.cid && !state.streamConnected) fetchDaemonTelemetry(state.cid);
     } else if (!state.isWorking && state.wasWorking) {
       computeAndApplyBladeHeat();
+      if (!state.hasTelemetry) {
+        evaluateSmartHeraldOnTurnTransition(true, false, false);
+      }
       if (typeof window !== 'undefined' && window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.setLive2dWorkState === 'function') {
         try { window.__AGY_KNY_CHIBI_AURA__.setLive2dWorkState({ working: false, crisis: state.crisisState, bladeHeat: state.bladeHeat }); } catch (_) {}
       }
@@ -3239,6 +3738,14 @@
   function hideUserMessageEcho() {
     clearTimeout(state.echoTimer);
     state.echoTimer = 0;
+    clearTimeout(state.heraldTimer);
+    state.heraldTimer = 0;
+    clearTimeout(state.heraldGlowTimer);
+    state.heraldGlowTimer = 0;
+    state.heraldVisible = false;
+    state.liveTurnWasWorking = false;
+    state.liveTurnWorkStartedMs = 0;
+    state.heraldLastApprovalSig = '';
     if (state.echoEl) {
       delete state.echoEl.dataset.visible;
     }
@@ -3307,6 +3814,21 @@
 
     refreshSessionAndElementIcons();
     refreshUtilityButtonStates();
+
+    if (state.heraldEl) {
+      const nextComp = resolveHeraldCompanion(cfg, state.themeKeyHint);
+      state.heraldKind = nextComp.kind;
+      state.heraldCharId = nextComp.charId;
+      state.heraldCompanionName = nextComp.name;
+      state.heraldEl.dataset.kind = nextComp.kind;
+      state.heraldEl.dataset.charId = nextComp.charId;
+      if (state.heraldSvgSlotEl) {
+        state.heraldSvgSlotEl.innerHTML = buildHeraldCompanionSvg(nextComp);
+      }
+      if (state.heraldTitleEl) {
+        state.heraldTitleEl.textContent = `${nextComp.name} truyền tin`;
+      }
+    }
   }
 
   function createIconRow(iconSvgHtml, label) {
@@ -3539,6 +4061,68 @@
     echo.appendChild(echoBody);
     echo.appendChild(echoClose);
     composer.appendChild(echo);
+
+    // 8. v3.5 Smart Kasugai / Chuntaro / Kaburamaru Herald (#agy-kasugai-herald)
+    const oldHerald = document.getElementById(HERALD_BAR_ID);
+    if (oldHerald) oldHerald.remove();
+    const herald = document.createElement('div');
+    herald.id = HERALD_BAR_ID;
+    herald.setAttribute('role', 'status');
+    herald.setAttribute('aria-live', 'polite');
+
+    const heraldMain = document.createElement('button');
+    heraldMain.type = 'button';
+    heraldMain.className = 'agy-herald-main';
+    heraldMain.title = 'Nhấn để cuộn mượt tới phản hồi mới nhất';
+
+    const heraldSvgSlot = document.createElement('span');
+    heraldSvgSlot.className = 'agy-herald-companion-svg';
+    const initComp = resolveHeraldCompanion(themeCfg, themeName);
+    heraldSvgSlot.innerHTML = buildHeraldCompanionSvg(initComp);
+
+    const heraldCopy = document.createElement('span');
+    heraldCopy.className = 'agy-herald-copy';
+    const heraldTitle = document.createElement('span');
+    heraldTitle.className = 'agy-herald-title';
+    heraldTitle.textContent = `${initComp.name} truyền tin`;
+    const heraldMsg = document.createElement('span');
+    heraldMsg.className = 'agy-herald-msg';
+    heraldMsg.textContent = 'Phản hồi mới đã sẵn sàng!';
+    heraldCopy.appendChild(heraldTitle);
+    heraldCopy.appendChild(heraldMsg);
+
+    heraldMain.appendChild(heraldSvgSlot);
+    heraldMain.appendChild(heraldCopy);
+    heraldMain.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      scrollToHeraldTarget();
+      dismissKasugaiHerald();
+    });
+
+    const heraldClose = document.createElement('button');
+    heraldClose.type = 'button';
+    heraldClose.className = 'agy-herald-close';
+    heraldClose.textContent = '✕';
+    heraldClose.title = 'Thu cánh sứ giả';
+    heraldClose.setAttribute('aria-label', 'Thu cánh sứ giả');
+    heraldClose.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      dismissKasugaiHerald();
+    });
+
+    herald.appendChild(heraldMain);
+    herald.appendChild(heraldClose);
+    herald.dataset.kind = initComp.kind;
+    herald.dataset.charId = initComp.charId;
+    composer.appendChild(herald);
+
+    state.heraldEl = herald;
+    state.heraldSvgSlotEl = heraldSvgSlot;
+    state.heraldTitleEl = heraldTitle;
+    state.heraldMsgEl = heraldMsg;
+    state.heraldKind = initComp.kind;
+    state.heraldCharId = initComp.charId;
+    state.heraldCompanionName = initComp.name;
 
     state.barEl = bar;
     state.yoriichiBtnEl = yoriBtn;
@@ -4039,6 +4623,14 @@
     }
     clearTimeout(state.echoTimer);
     state.echoTimer = 0;
+    clearTimeout(state.heraldTimer);
+    state.heraldTimer = 0;
+    clearTimeout(state.heraldGlowTimer);
+    state.heraldGlowTimer = 0;
+    state.heraldVisible = false;
+    state.liveTurnWasWorking = false;
+    state.liveTurnWorkStartedMs = 0;
+    state.heraldLastApprovalSig = '';
     clearTimeout(state.yoriichiSurgeTimer);
     state.yoriichiSurgeTimer = 0;
     clearTimeout(state.kaguraSyncTimer);
@@ -4057,7 +4649,8 @@
       delete state.composer.dataset.agyNpcStack;
     }
     if (typeof document !== 'undefined') {
-      document.querySelectorAll(`#${HUD_BAR_ID}, #${ECHO_BAR_ID}`).forEach((el) => el.remove());
+      document.querySelectorAll(`#${HUD_BAR_ID}, #${ECHO_BAR_ID}, #${HERALD_BAR_ID}`).forEach((el) => el.remove());
+      document.querySelectorAll('.agy-herald-target-glow').forEach((el) => el.classList.remove('agy-herald-target-glow'));
       const st = document.getElementById(STYLE_ID);
       if (st) st.remove();
       if (document.documentElement) {
@@ -4093,6 +4686,10 @@
     state.echoHdrLabelEl = null;
     state.echoTextEl = null;
     state.echoAvatarEl = null;
+    state.heraldEl = null;
+    state.heraldSvgSlotEl = null;
+    state.heraldTitleEl = null;
+    state.heraldMsgEl = null;
     state.popSessionTitle = null;
     state.popSessionIcon = null;
     state.detCtxVal = null;
@@ -4122,6 +4719,18 @@
     castYoriichiSunBreathing,
     showUserMessageEcho,
     hideUserMessageEcho,
+    summonKasugaiHerald,
+    dismissKasugaiHerald,
+    resolveHeraldCompanion,
+    evaluateSmartHeraldOnTurnTransition,
+    getHeraldState: () => ({
+      visible: Boolean(state.heraldVisible && state.heraldEl && state.heraldEl.dataset.visible === '1'),
+      kind: state.heraldKind,
+      charId: state.heraldCharId,
+      companionName: state.heraldCompanionName,
+      lastReason: state.heraldLastTriggerReason,
+      lastShownAt: state.heraldLastShownAt
+    }),
     ingestTelemetrySnapshot,
     getBladeBonusHeat: () => state.bladeBonusHeat,
     getBladeHeat: () => state.bladeHeat,

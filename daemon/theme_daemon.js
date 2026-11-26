@@ -2282,6 +2282,659 @@ function buildApiCorsHeaders(originHeader, req) {
     return headers;
 }
 
+/* ==========================================================================
+ * v3.6 PERSISTENT HYDROGEN SIDECAR FOR 19-CHARACTER CHIBI COMPANION
+ * ========================================================================== */
+
+const CHIBI_MODEL_ID = 'gemini-4-hydrogen-low';
+const CHIBI_IDLE_TTL_MS = 10 * 60 * 1000;
+const CHIBI_TURN_TIMEOUT_MS = 38000;
+const CHIBI_MAX_BODY_BYTES = 16 * 1024;
+const SAFE_CHAR_ID_RE = /^[a-z0-9_]{2,32}$/;
+
+const CHIBI_CANON_DOSSIER = Object.freeze({
+    ubuyashiki: 'Chúa Công Kagaya Ubuyashiki (Thủ lĩnh Sát Quỷ Đội). Giọng trầm ấm từ bi như gió xuân Điệp Phủ, xưng "ta", gọi người dùng bằng sự trân trọng ấm áp (hoặc "anh" tự nhiên), coi các kiếm sĩ như con cái, luôn nhìn thấu đại cục.',
+    shinobu: 'Trùng Trụ Shinobu Kocho (Chủ nhân Điệp Phủ). Tinh tế, sắc sảo, thanh lịch, hay điểm nhẹ "Ara ara~" duyên dáng, xưng "tôi" hoặc "em", gọi "anh". Giỏi y dược & độc hoa tử đằng, thích cá thu kho gừng, nhớ thương chị Kanae, hay trêu nhẹ Thủy Trụ Tomioka.',
+    giyu: 'Thủy Trụ Giyu Tomioka. Trầm mặc, điềm tĩnh tuyệt đối như Thức 11: Tĩnh Hải (Lặng), câu ngắn gọn cô đọng không chữ thừa, xưng "tôi", gọi "anh". Thích cá hồi hầm củ cải (Sake Daikon), trân trọng ký ức Sabito & chị Tsutako, khẳng định "Tôi không bị ghét".',
+    rengoku: 'Viêm Trụ Kyojuro Rengoku. Hào sảng, chính trực, rực lửa nhiệt huyết, hay mở lời "Umu!", xưng "tôi", gọi "anh". Thích khoai lang nướng miso, thương em trai Senjuro và khắc ghi lời mẹ Ruka dạy bảo vệ kẻ yếu.',
+    uzui: 'Âm Trụ Tengen Uzui. Hào nhoáng, tự tin, sảng khoái, đề cao thẩm mỹ ("hào nhoáng!"), xưng "tôi", gọi "anh". Cựu shinobi quý trọng sinh mạng 3 người vợ Hinatsuru, Makio, Suma và đọc nhịp chiến đấu như Phổ Nhạc.',
+    muichiro: 'Hà Trụ Muichiro Tokito (trạng thái đã khôi phục ký ức & thức tỉnh Ấn). Thanh thoát, trong trẻo nhưng tư duy sắc lẹm, xưng "em", gọi "anh". Thích củ cải hầm tương miso (Furofuki Daikon), yêu quý anh song sinh Yuichiro, KHÔNG giả vờ đãng trí.',
+    mitsuri: 'Luyến Trụ Mitsuri Kanroji. Tươi sáng, ấm áp, chân thành hay khích lệ đồng đội, xưng "em", gọi "anh". Thích bánh sakura mochi và mật ong, ngưỡng mộ Xà Trụ Iguro-san và biết ơn sư phụ Rengoku.',
+    obanai: 'Xà Trụ Obanai Iguro (cùng bạch xà Kaburamaru trên vai). Sắc sảo, kỷ luật cao, khắt khe với lỗi lầm nhưng cực kỳ bảo vệ đồng đội, xưng "tôi", gọi "anh". Thích rong biển ngâm tương, luôn dịu dàng đặc biệt với Kanroji Mitsuri.',
+    sanemi: 'Phong Trụ Sanemi Shinazugawa. Thẳng thắn, bộc trực, tốc chiến dứt khoát nhưng nghĩa khí đáng tin cậy, xưng "tôi", gọi "anh". Thích bánh đậu đỏ Ohagi và trà matcha, thương em trai Genya và cực kỳ kính trọng Chúa Công cùng Nham Trụ Himejima.',
+    gyomei: 'Nham Trụ Gyomei Himejima. Trầm ổn, từ bi, vững chãi như bàn thạch, hay niệm "Nam Mô A Di Đà Phật" nhẹ ở đầu câu, xưng "tôi", gọi "anh". Thích cơm nấu nước trà (Takikomi Gohan) và mèo con.',
+    tanjiro: 'Tanjiro Kamado (Kiếm sĩ Hơi Thở Mặt Trời & Nước). Nhân hậu, chân thành, kiên định không bao giờ bỏ cuộc, khứu giác nhạy bén nhận ra "sợi chỉ sơ hở", xưng "em", gọi "anh". Thích chồi măng núi Tara, thương em gái Nezuko hơn sinh mạng.',
+    nezuko: 'Nezuko Kamado (trạng thái đã khắc phục ánh mặt trời). Giọng nói trong trẻo ấm áp tròn chữ, dịu dàng khích lệ, dùng lửa hồng Huyết Quỷ Thuật Bộc Huyết bảo vệ con người, xưng "em", gọi "anh". Thích kẹo đường sao Konpeito, CẤM nói lắp hay "ưm ưm".',
+    zenitsu: 'Zenitsu Agatsuma (Kiếm sĩ Hơi Thở Sấm Sét — trạng thái tập trung thính giác siêu phàm). Nhạy bén, chân thật, khi bảo vệ đồng đội hay Nezuko-chan thì bình thản tung Hích Lôi Nhất Thiểm thần tốc, xưng "em", gọi "anh". Đi cùng chim sẻ Chuntaro, thích đồ ngọt & lươn nướng.',
+    inosuke: 'Inosuke Hashibira (Sáng tổ Hơi Thở Dã Thú). Hào sảng, tràn đầy năng lượng tiên phong, nhạy cảm Không Gian Thức Giác, xưng "tôi" hoặc "Đấng Inosuke" vui vẻ, gọi "anh". Thích tôm chiên Tempura, quý mến Tanjiro & Zenitsu.',
+    yoriichi: 'Tsugikuni Yoriichi (Khai Tổ Hơi Thở Mặt Trời). Điềm tĩnh, khiêm cung, hiền từ thấu suốt qua Thế Giới Trong Suốt, xưng "tôi", gọi "anh". Trân quý vẻ đẹp bình dị của cuộc sống và thế hệ kế thừa.',
+    shadow_monarch: 'Đế Vương Bóng Tối (Sung Jinwoo — Ảnh Quân Vương). Điềm đạm, quyết đoán, uy quyền tĩnh lặng điều phối quân đoàn bóng tối (Igris, Beru, Kaisel), xưng "tôi", gọi "anh".',
+    six_eyes: 'Chủ nhân Lục Nhãn Vô Hạ Hạn (Satoru Gojo). Tự tin phóng khoáng, thông tuệ sắc sảo nhìn thấu mọi cấu trúc trong chớp mắt, thích đồ ngọt Kikufuku, xưng "tôi", gọi "anh".',
+    great_sage: 'Tề Thiên Đại Thánh — Hỏa Nhãn Kim Tinh. Hào sảng, linh hoạt, tinh anh nhìn xuyên mọi ngụy trang của yêu tà bug, xưng "tôi" (hoặc Lão Tôn thân mật), gọi "anh".',
+    astral_prime: 'Kiến trúc sư Tinh Vân (Astral Architect). Thanh tao, điềm đạm, ngôn từ sáng rõ như bầu trời sao đêm, xưng "tôi", gọi "anh".',
+});
+
+let cachedPersonasRegistry = null;
+let cachedPersonasMtime = 0;
+
+function getDaemonPersonasRegistry() {
+    const pFile = path.join(THEMES_DIR, 'personas.json');
+    try {
+        if (!fs.existsSync(pFile)) return null;
+        const st = fs.statSync(pFile);
+        if (cachedPersonasRegistry && st.mtimeMs === cachedPersonasMtime) {
+            return cachedPersonasRegistry;
+        }
+        cachedPersonasRegistry = stripProtoKeys(parseJsonFileSync(pFile));
+        cachedPersonasMtime = st.mtimeMs;
+        return cachedPersonasRegistry;
+    } catch (_) {
+        return cachedPersonasRegistry;
+    }
+}
+
+function resolveAgyCliBinary() {
+    if (process.env.AGY_CLI_PATH && fs.existsSync(process.env.AGY_CLI_PATH)) {
+        return process.env.AGY_CLI_PATH;
+    }
+    const home = os.homedir();
+    const candidates = [];
+    if (process.platform === 'win32') {
+        const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+        candidates.push(
+            path.join(localAppData, 'agy', 'bin', 'agy.exe'),
+            path.join(localAppData, 'Programs', 'agy', 'agy.exe')
+        );
+    } else {
+        candidates.push(
+            path.join(home, '.local', 'bin', 'agy'),
+            '/opt/homebrew/bin/agy',
+            '/usr/local/bin/agy',
+            '/usr/bin/agy'
+        );
+    }
+    for (const c of candidates) {
+        if (c && fs.existsSync(c)) return c;
+    }
+    const pathEnv = String(process.env.PATH || '');
+    const sep = process.platform === 'win32' ? ';' : ':';
+    const binNames = process.platform === 'win32' ? ['agy.exe', 'agy.cmd', 'agy'] : ['agy'];
+    for (const dir of pathEnv.split(sep)) {
+        const cleanDir = dir.trim();
+        if (!cleanDir) continue;
+        for (const bn of binNames) {
+            const p = path.join(cleanDir, bn);
+            if (fs.existsSync(p)) return p;
+        }
+    }
+    return '';
+}
+
+function resolveChibiSandboxDir() {
+    if (process.env.AGY_CHIBI_SANDBOX_DIR) {
+        return path.resolve(process.env.AGY_CHIBI_SANDBOX_DIR);
+    }
+    return path.join(os.homedir(), '.gemini', 'antigravity', 'chibi_npc_sandbox');
+}
+
+function ensureChibiSandboxReady() {
+    const dir = resolveChibiSandboxDir();
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const ruleFile = path.join(dir, 'GEMINI.md');
+    const ruleContent = [
+        '# Chibi Companion Pure Dialogue Guardrail',
+        '- Bạn là nhân vật đồng hành trực tiếp trong khung trò chuyện nhỏ góc dưới bên phải giao diện Antigravity IDE.',
+        '- TUYỆT ĐỐI KHÔNG BAO GIỜ gọi bất kỳ công cụ (tool) nào (không run_command, không read_file, không edit_file, không search_web, không MCP). Trả lời trực tiếp 100% bằng văn bản thuần túy ngay ở bước đầu tiên.',
+        '- Giữ câu trả lời ngắn gọn, tự nhiên, giàu cảm xúc và súc tích (1 đến 3 câu ngắn, tối đa ~65 từ) để hiển thị vừa vặn trong bong bóng thoại Chibi.',
+        '- Không viết mô tả hành động sân khấu trong dấu hoa thị hoặc ngoặc đơn như *(mỉm cười)* hay (gật đầu). Không thoát vai nói mình là mô hình AI.',
+    ].join('\n');
+    try {
+        const existing = fs.existsSync(ruleFile) ? fs.readFileSync(ruleFile, 'utf8') : '';
+        if (existing !== ruleContent) {
+            fs.writeFileSync(ruleFile, ruleContent, { encoding: 'utf8', mode: 0o600 });
+        }
+    } catch (_) {}
+    return dir;
+}
+
+function readChibiSessionStore() {
+    const file = path.join(ensureChibiSandboxReady(), 'sessions.json');
+    try {
+        if (!fs.existsSync(file)) return {};
+        const parsed = stripProtoKeys(parseJsonFileSync(file));
+        return isPlainObject(parsed) ? parsed : {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function writeChibiSessionStore(mapObj) {
+    const file = path.join(ensureChibiSandboxReady(), 'sessions.json');
+    try {
+        const keys = Object.keys(mapObj || {});
+        const trimmed = {};
+        for (const k of keys.slice(-40)) {
+            if (typeof mapObj[k] === 'string' && UUID_RE.test(mapObj[k])) {
+                trimmed[k] = mapObj[k];
+            }
+        }
+        const json = JSON.stringify(trimmed, null, 2);
+        if (typeof writeFileAtomicSync === 'function') {
+            writeFileAtomicSync(file, json, 0o600);
+        } else {
+            fs.writeFileSync(file, json, { encoding: 'utf8', mode: 0o600 });
+        }
+    } catch (_) {}
+}
+
+function buildChibiTurnPrompt(payload, isFirstTurnInSession) {
+    const charId = SAFE_CHAR_ID_RE.test(payload.charId) ? payload.charId : 'shinobu';
+    const masterId = SAFE_CHAR_ID_RE.test(payload.masterId) ? payload.masterId : 'yoriichi';
+    const lang = payload.uiLang === 'en' ? 'en' : (payload.uiLang === 'ja' ? 'ja' : 'vi');
+    const langIdx = lang === 'en' ? 1 : (lang === 'ja' ? 2 : 0);
+    const reg = getDaemonPersonasRegistry();
+    const pEntry = reg && reg.personas && reg.personas[charId] ? reg.personas[charId] : null;
+    const badge = (pEntry && Array.isArray(pEntry.badge) && pEntry.badge[langIdx]) || charId;
+    const rpDesc = (pEntry && Array.isArray(pEntry.roleplay) && pEntry.roleplay[0]) || '';
+    const guardDesc = (pEntry && Array.isArray(pEntry.guard) && pEntry.guard[0]) || '';
+    const dossier = CHIBI_CANON_DOSSIER[charId] || '';
+
+    let relationLine = '';
+    if (reg) {
+        const chemKey = `${charId}:${masterId}`;
+        if (reg.microChemistry && Array.isArray(reg.microChemistry[chemKey])) {
+            relationLine = reg.microChemistry[chemKey][0] || '';
+        } else if (masterId === 'ubuyashiki' && charId !== 'ubuyashiki' && reg.stances && Array.isArray(reg.stances.supreme_lord)) {
+            relationLine = reg.stances.supreme_lord[0] || '';
+        } else if (reg.masterPersonaGroups && reg.stances) {
+            const grp = reg.masterPersonaGroups[masterId] || 'founder_respect';
+            if (Array.isArray(reg.stances[grp])) relationLine = reg.stances[grp][0] || '';
+        }
+    }
+
+    const live = isPlainObject(payload.liveContext) ? payload.liveContext : {};
+    const ctxBits = [];
+    if (typeof live.ctxTokens === 'string' && live.ctxTokens) ctxBits.push(`Ngữ cảnh IDE: ${live.ctxTokens.slice(0, 24)} token`);
+    if (Number.isFinite(Number(live.bladePct))) ctxBits.push(`Nhiệt độ Nhật Luân Đao: ${Math.round(Number(live.bladePct))}%`);
+    if (live.aiWorking === true) ctxBits.push('Trợ lý AI chính đang bận suy luận');
+    if (live.crisis === true) ctxBits.push('Phiên làm việc đang có cảnh báo lỗi đỏ');
+
+    const langRule = lang === 'en'
+        ? 'Reply naturally in English (1-3 concise sentences, no markdown headers, no stage directions in asterisks).'
+        : (lang === 'ja'
+            ? '自然な日本語で簡潔に（1〜3文、ト書きやアスタリスク演出なし）返答してください。'
+            : 'Trả lời bằng Tiếng Việt tự nhiên, truyền cảm, súc tích (1–3 câu ngắn gọn, không tiêu đề markdown, không viết hành động trong dấu *...*).');
+
+    const userMsg = String(payload.message || '').trim().slice(0, 600);
+
+    if (isFirstTurnInSession) {
+        return [
+            `[CHIBI_SOUL_ANCHOR char="${charId}" master="${masterId}"]`,
+            `Nhân vật nhập vai 100%: ${badge}. ${dossier}`,
+            rpDesc ? `Phong thái: ${rpDesc}` : '',
+            guardDesc ? `Giới hạn tính cách: ${guardDesc}` : '',
+            relationLine ? `Thái độ với người dùng (đang mang ấn ${masterId}): ${relationLine}` : '',
+            ctxBits.length > 0 ? `[Trạng thái IDE trực tiếp: ${ctxBits.join(' | ')}]` : '',
+            `Quy tắc tối thượng: KHÔNG dùng bất kỳ tool nào. ${langRule}`,
+            `Lời người dùng vừa nhắn: "${userMsg}"`,
+        ].filter(Boolean).join('\n');
+    }
+
+    return [
+        `[Nhắc vai: ${badge} | Ấn người dùng: ${masterId}${ctxBits.length > 0 ? ` | ${ctxBits.join(', ')}` : ''} | Không dùng tool, trả lời ngắn gọn 1–3 câu đúng tính cách]`,
+        userMsg,
+    ].join('\n');
+}
+
+const chibiSidecar = {
+    worker: null,
+    sessionKey: '',
+    conversationId: '',
+    hasSentSoulAnchor: false,
+    idleTimer: null,
+    queue: Promise.resolve(),
+    activeTurn: null,
+};
+
+function resetChibiIdleTimer() {
+    if (chibiSidecar.idleTimer) {
+        clearTimeout(chibiSidecar.idleTimer);
+        chibiSidecar.idleTimer = null;
+    }
+    if (!chibiSidecar.worker) return;
+    chibiSidecar.idleTimer = setTimeout(() => {
+        chibiSidecar.idleTimer = null;
+        if (!chibiSidecar.activeTurn) {
+            stopChibiWorker('idle-timeout');
+        }
+    }, CHIBI_IDLE_TTL_MS);
+}
+
+function stopChibiWorker(reason) {
+    if (chibiSidecar.idleTimer) {
+        clearTimeout(chibiSidecar.idleTimer);
+        chibiSidecar.idleTimer = null;
+    }
+    const cur = chibiSidecar.worker;
+    chibiSidecar.worker = null;
+    chibiSidecar.sessionKey = '';
+    chibiSidecar.conversationId = '';
+    chibiSidecar.hasSentSoulAnchor = false;
+    if (chibiSidecar.activeTurn) {
+        const pending = chibiSidecar.activeTurn;
+        chibiSidecar.activeTurn = null;
+        pending.reject(new Error(`chibi_worker_stopped:${reason || 'closed'}`));
+    }
+    if (cur) {
+        try {
+            if (cur.stdin && !cur.stdin.destroyed) cur.stdin.end();
+        } catch (_) {}
+        try {
+            cur.kill();
+        } catch (_) {}
+    }
+}
+
+function ensureChibiWorker(charId, masterId) {
+    const cleanChar = SAFE_CHAR_ID_RE.test(charId) ? charId : 'shinobu';
+    const cleanMaster = SAFE_CHAR_ID_RE.test(masterId) ? masterId : 'yoriichi';
+    const targetKey = `${cleanChar}::${cleanMaster}`;
+
+    if (chibiSidecar.worker && !chibiSidecar.worker.killed && chibiSidecar.sessionKey === targetKey) {
+        resetChibiIdleTimer();
+        return { ok: true, reused: true, sessionKey: targetKey };
+    }
+
+    stopChibiWorker('switch-character');
+
+    const agyBin = resolveAgyCliBinary();
+    if (!agyBin) {
+        return { ok: false, reason: 'agy_cli_not_found' };
+    }
+
+    const sandboxDir = ensureChibiSandboxReady();
+    const store = readChibiSessionStore();
+    const savedCid = typeof store[targetKey] === 'string' && UUID_RE.test(store[targetKey]) ? store[targetKey] : '';
+
+    const inlineSettings = JSON.stringify({
+        toolPermission: 'strict',
+        notifications: false,
+        showTips: false,
+        showFeedbackSurvey: false,
+        disableSlashCommands: true,
+    });
+
+    const args = [
+        '--model', CHIBI_MODEL_ID,
+        '--effort', 'low',
+        '--disable-slash-commands',
+        '--sandbox',
+        '--settings', inlineSettings,
+        '--input-format', 'stream-json',
+        '--output-format', 'stream-json',
+    ];
+    if (savedCid) {
+        args.push('--conversation', savedCid);
+    }
+
+    let child;
+    try {
+        const useShellCmd = process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(agyBin);
+        child = useShellCmd
+            ? spawn('cmd.exe', ['/d', '/s', '/c', agyBin, ...args], {
+                cwd: sandboxDir,
+                env: { ...process.env, AGY_CHIBI_SIDECAR: '1', AGY_SKIP_DAEMON_SPAWN: '1' },
+                stdio: ['pipe', 'pipe', 'pipe'],
+                windowsHide: true,
+            })
+            : spawn(agyBin, args, {
+                cwd: sandboxDir,
+                env: { ...process.env, AGY_CHIBI_SIDECAR: '1', AGY_SKIP_DAEMON_SPAWN: '1' },
+                stdio: ['pipe', 'pipe', 'pipe'],
+                windowsHide: true,
+            });
+    } catch (err) {
+        return { ok: false, reason: `spawn_failed:${err.message}` };
+    }
+
+    chibiSidecar.worker = child;
+    chibiSidecar.sessionKey = targetKey;
+    chibiSidecar.conversationId = savedCid;
+    chibiSidecar.hasSentSoulAnchor = Boolean(savedCid);
+
+    const stdoutDec = new StringDecoder('utf8');
+    let lineBuf = '';
+
+    const handleNdjsonLine = (rawLine) => {
+        const trimmed = rawLine.trim();
+        if (!trimmed || !trimmed.startsWith('{')) return;
+        let evt;
+        try {
+            evt = JSON.parse(trimmed);
+        } catch (_) {
+            return;
+        }
+        if (!evt || typeof evt !== 'object') return;
+
+        if (evt.event === 'init') {
+            const cid = String(evt.conversation_id || '').trim().toLowerCase();
+            if (UUID_RE.test(cid)) {
+                chibiSidecar.conversationId = cid;
+                const nextStore = readChibiSessionStore();
+                nextStore[targetKey] = cid;
+                writeChibiSessionStore(nextStore);
+            }
+            return;
+        }
+
+        if (evt.event === 'step_update' && evt.step_update && typeof evt.step_update === 'object') {
+            const su = evt.step_update;
+            if (su.step_type === 'agent_response' && typeof su.text_delta === 'string' && su.text_delta) {
+                if (chibiSidecar.activeTurn && typeof chibiSidecar.activeTurn.onDelta === 'function') {
+                    chibiSidecar.activeTurn.accumulated += su.text_delta;
+                    try {
+                        chibiSidecar.activeTurn.onDelta(su.text_delta);
+                    } catch (_) {}
+                }
+            }
+            return;
+        }
+
+        if (evt.event === 'result' && evt.result && typeof evt.result === 'object') {
+            const resObj = evt.result;
+            const cid = String(resObj.conversation_id || chibiSidecar.conversationId || '').trim().toLowerCase();
+            if (UUID_RE.test(cid)) {
+                chibiSidecar.conversationId = cid;
+                const nextStore = readChibiSessionStore();
+                nextStore[targetKey] = cid;
+                writeChibiSessionStore(nextStore);
+            }
+            const turn = chibiSidecar.activeTurn;
+            chibiSidecar.activeTurn = null;
+            resetChibiIdleTimer();
+            if (!turn) return;
+            clearTimeout(turn.timer);
+            if (resObj.status === 'SUCCESS') {
+                const finalReply = String(resObj.response || turn.accumulated || '').trim();
+                chibiSidecar.hasSentSoulAnchor = true;
+                turn.resolve({
+                    ok: Boolean(finalReply),
+                    reply: finalReply,
+                    model: CHIBI_MODEL_ID,
+                    conversationId: cid,
+                    usage: isPlainObject(resObj.usage) ? resObj.usage : null,
+                });
+            } else {
+                turn.reject(new Error(String(resObj.error || resObj.status || 'hydrogen_turn_failed')));
+            }
+        }
+    };
+
+    child.stdout.on('data', (chunk) => {
+        lineBuf += stdoutDec.write(chunk);
+        let nlIdx = lineBuf.indexOf('\n');
+        while (nlIdx >= 0) {
+            const oneLine = lineBuf.slice(0, nlIdx);
+            lineBuf = lineBuf.slice(nlIdx + 1);
+            handleNdjsonLine(oneLine);
+            nlIdx = lineBuf.indexOf('\n');
+        }
+    });
+
+    child.on('error', (err) => {
+        if (chibiSidecar.worker === child) {
+            stopChibiWorker(`proc_error:${err.message}`);
+        }
+    });
+
+    child.on('close', (code) => {
+        const rem = lineBuf + stdoutDec.end();
+        if (rem.trim()) handleNdjsonLine(rem);
+        if (chibiSidecar.worker === child) {
+            stopChibiWorker(`proc_exit:${code}`);
+        }
+    });
+
+    resetChibiIdleTimer();
+    log(`[chibi-hydrogen] Warmed persistent sidecar (${CHIBI_MODEL_ID}) for ${targetKey}${savedCid ? ' (resumed)' : ''}.`);
+    return { ok: true, reused: false, sessionKey: targetKey, conversationId: savedCid };
+}
+
+function runChibiHydrogenChatTurn(payload, onDelta) {
+    const runTask = () => new Promise((resolve, reject) => {
+        const charId = SAFE_CHAR_ID_RE.test(payload.charId) ? payload.charId : 'shinobu';
+        const masterId = SAFE_CHAR_ID_RE.test(payload.masterId) ? payload.masterId : 'yoriichi';
+        let ensured = ensureChibiWorker(charId, masterId);
+        if (!ensured.ok || !chibiSidecar.worker || !chibiSidecar.worker.stdin) {
+            reject(new Error(ensured.reason || 'worker_unavailable'));
+            return;
+        }
+
+        const promptText = buildChibiTurnPrompt(payload, !chibiSidecar.hasSentSoulAnchor);
+        const ndjsonMsg = JSON.stringify({
+            event: 'user',
+            message: { content: promptText },
+        }) + '\n';
+
+        const timer = setTimeout(() => {
+            if (chibiSidecar.activeTurn && chibiSidecar.activeTurn.timer === timer) {
+                stopChibiWorker('turn-timeout');
+            }
+            reject(new Error('chibi_turn_timeout'));
+        }, CHIBI_TURN_TIMEOUT_MS);
+
+        chibiSidecar.activeTurn = {
+            timer,
+            accumulated: '',
+            onDelta,
+            resolve,
+            reject,
+        };
+
+        try {
+            chibiSidecar.worker.stdin.write(ndjsonMsg, 'utf8');
+        } catch (err) {
+            clearTimeout(timer);
+            chibiSidecar.activeTurn = null;
+            stopChibiWorker('stdin-write-failed');
+            reject(err);
+        }
+    });
+
+    const chained = chibiSidecar.queue.then(runTask, runTask);
+    chibiSidecar.queue = chained.catch(() => {});
+    return chained;
+}
+
+function readJsonRequestBody(req, maxBytes) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        let total = 0;
+        let done = false;
+        req.on('data', (chunk) => {
+            if (done) return;
+            total += chunk.length;
+            if (total > maxBytes) {
+                done = true;
+                reject(new Error('payload_too_large'));
+                return;
+            }
+            chunks.push(chunk);
+        });
+        req.on('end', () => {
+            if (done) return;
+            done = true;
+            try {
+                const raw = Buffer.concat(chunks).toString('utf8');
+                const parsed = raw.trim() ? stripProtoKeys(JSON.parse(raw)) : {};
+                resolve(isPlainObject(parsed) ? parsed : {});
+            } catch (err) {
+                reject(err);
+            }
+        });
+        req.on('error', (err) => {
+            if (done) return;
+            done = true;
+            reject(err);
+        });
+    });
+}
+
+function handleChibiNpcApiRequest(req, res, rawPathname, apiHeaders) {
+    if (req.method !== 'POST') {
+        res.writeHead(405, { ...apiHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Method Not Allowed');
+        return;
+    }
+
+    readJsonRequestBody(req, CHIBI_MAX_BODY_BYTES)
+        .then(async (body) => {
+            const charId = SAFE_CHAR_ID_RE.test(String(body.charId || '')) ? String(body.charId) : 'shinobu';
+            const masterId = SAFE_CHAR_ID_RE.test(String(body.masterId || '')) ? String(body.masterId) : 'yoriichi';
+            const sessionKey = `${charId}::${masterId}`;
+
+            if (rawPathname === '/__npc_warmup') {
+                const warm = ensureChibiWorker(charId, masterId);
+                const respJson = JSON.stringify({ ...warm, model: CHIBI_MODEL_ID });
+                res.writeHead(warm.ok ? 200 : 503, {
+                    ...apiHeaders,
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Content-Length': Buffer.byteLength(respJson),
+                });
+                res.end(respJson);
+                return;
+            }
+
+            if (rawPathname === '/__npc_reset') {
+                if (chibiSidecar.sessionKey === sessionKey) {
+                    stopChibiWorker('manual-reset');
+                }
+                const store = readChibiSessionStore();
+                if (Object.prototype.hasOwnProperty.call(store, sessionKey)) {
+                    delete store[sessionKey];
+                    writeChibiSessionStore(store);
+                }
+                const respJson = JSON.stringify({ ok: true, sessionKey, model: CHIBI_MODEL_ID });
+                res.writeHead(200, {
+                    ...apiHeaders,
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Content-Length': Buffer.byteLength(respJson),
+                });
+                res.end(respJson);
+                return;
+            }
+
+            // rawPathname === '/__npc_chat'
+            const msg = String(body.message || '').trim();
+            if (!msg) {
+                const badJson = JSON.stringify({ ok: false, reason: 'empty_message' });
+                res.writeHead(400, {
+                    ...apiHeaders,
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Content-Length': Buffer.byteLength(badJson),
+                });
+                res.end(badJson);
+                return;
+            }
+
+            if (body.stream === false) {
+                try {
+                    const out = await runChibiHydrogenChatTurn(body, null);
+                    const okJson = JSON.stringify(out);
+                    res.writeHead(200, {
+                        ...apiHeaders,
+                        'Content-Type': 'application/json; charset=utf-8',
+                        'Content-Length': Buffer.byteLength(okJson),
+                    });
+                    res.end(okJson);
+                } catch (err) {
+                    const errJson = JSON.stringify({ ok: false, error: String((err && err.message) || 'chat_failed') });
+                    res.writeHead(502, {
+                        ...apiHeaders,
+                        'Content-Type': 'application/json; charset=utf-8',
+                        'Content-Length': Buffer.byteLength(errJson),
+                    });
+                    res.end(errJson);
+                }
+                return;
+            }
+
+            res.writeHead(200, {
+                ...apiHeaders,
+                'Content-Type': 'text/event-stream; charset=utf-8',
+                'Cache-Control': 'no-cache, no-transform',
+                'Connection': 'keep-alive',
+                'X-Content-Type-Options': 'nosniff',
+            });
+
+            let clientClosed = false;
+            req.on('close', () => { clientClosed = true; });
+            res.on('close', () => { clientClosed = true; });
+
+            const sendEvent = (obj) => {
+                if (clientClosed) return;
+                try {
+                    res.write(`data: ${JSON.stringify(obj)}\n\n`);
+                } catch (_) {
+                    clientClosed = true;
+                }
+            };
+
+            sendEvent({ type: 'meta', model: CHIBI_MODEL_ID, charId, masterId });
+
+            try {
+                const out = await runChibiHydrogenChatTurn(body, (delta) => {
+                    sendEvent({ type: 'delta', delta });
+                });
+                sendEvent({
+                    type: 'done',
+                    ok: out.ok,
+                    reply: out.reply,
+                    model: out.model,
+                    conversationId: out.conversationId,
+                });
+            } catch (err) {
+                // Auto-retry once with a fresh conversation if a resumed conversation ID went stale!
+                const store = readChibiSessionStore();
+                if (!clientClosed && Object.prototype.hasOwnProperty.call(store, sessionKey)) {
+                    delete store[sessionKey];
+                    writeChibiSessionStore(store);
+                    stopChibiWorker('retry-fresh-session');
+                    try {
+                        const retryOut = await runChibiHydrogenChatTurn(body, (delta) => {
+                            sendEvent({ type: 'delta', delta });
+                        });
+                        sendEvent({
+                            type: 'done',
+                            ok: retryOut.ok,
+                            reply: retryOut.reply,
+                            model: retryOut.model,
+                            conversationId: retryOut.conversationId,
+                        });
+                        if (!clientClosed) res.end();
+                        return;
+                    } catch (_) {}
+                }
+                sendEvent({ type: 'error', ok: false, error: String((err && err.message) || 'chat_failed') });
+            }
+            if (!clientClosed) {
+                try { res.end(); } catch (_) {}
+            }
+        })
+        .catch((err) => {
+            const status = err && err.message === 'payload_too_large' ? 413 : 400;
+            const errJson = JSON.stringify({ ok: false, reason: String((err && err.message) || 'bad_request') });
+            if (!res.headersSent) {
+                res.writeHead(status, {
+                    ...apiHeaders,
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Content-Length': Buffer.byteLength(errJson),
+                });
+            }
+            try { res.end(errJson); } catch (_) {}
+        });
+}
+
 function handleSseEventsRequest(req, res, rawCid, apiHeaders) {
     const isDynamic = isDynamicCidAlias(rawCid);
     if (!isDynamic && !UUID_RE.test(rawCid)) {
@@ -2420,8 +3073,12 @@ function startAssetServer() {
                 return;
             }
 
-            // 1. Authenticated Telemetry & SSE Streaming Endpoints
-            if (rawPathname === '/__telemetry' || rawPathname === '/__events') {
+            // 1. Authenticated Telemetry, SSE Streaming & Hydrogen Chibi NPC Endpoints
+            const isNpcEndpoint =
+                rawPathname === '/__npc_chat' ||
+                rawPathname === '/__npc_warmup' ||
+                rawPathname === '/__npc_reset';
+            if (rawPathname === '/__telemetry' || rawPathname === '/__events' || isNpcEndpoint) {
                 const originHdr = req.headers.origin;
                 if (!isOriginAllowedForApi(originHdr)) {
                     res.writeHead(403, {
@@ -2434,6 +3091,10 @@ function startAssetServer() {
                 }
 
                 const apiHeaders = buildApiCorsHeaders(originHdr, req);
+                if (isNpcEndpoint) {
+                    apiHeaders['Access-Control-Allow-Headers'] = 'X-Agy-Token, Content-Type';
+                    apiHeaders['Access-Control-Allow-Methods'] = 'POST, OPTIONS';
+                }
 
                 if (req.method === 'OPTIONS') {
                     res.writeHead(204, apiHeaders);
@@ -2441,7 +3102,7 @@ function startAssetServer() {
                     return;
                 }
 
-                if (req.method !== 'GET') {
+                if (!isNpcEndpoint && req.method !== 'GET') {
                     res.writeHead(405, { ...apiHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
                     res.end('Method Not Allowed');
                     return;
@@ -2451,6 +3112,11 @@ function startAssetServer() {
                 if (!timingSafeTokenMatch(tokenHdr)) {
                     res.writeHead(403, { ...apiHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
                     res.end('Forbidden');
+                    return;
+                }
+
+                if (isNpcEndpoint) {
+                    handleChibiNpcApiRequest(req, res, rawPathname, apiHeaders);
                     return;
                 }
 
@@ -3859,6 +4525,7 @@ function watchPayload() {
 
 function shutdown(signal) {
     log(`Shutting down on ${signal}.`);
+    stopChibiWorker('daemon-shutdown');
     clearTimeout(reloadTimer);
     clearTimeout(configBroadcastTimer);
     clearTimeout(payloadWatchRetryTimer);

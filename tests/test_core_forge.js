@@ -4207,3 +4207,199 @@ describe('F25 — Hệ Thống Hội Thoại Cá Thể Hóa Nhân Vật Chuẩn 
     assert.match(wrap.querySelector('.agy-npc-turn-badge').textContent, /^Lượt \d+$/);
   });
 });
+
+describe('[F26] v3.5 Trục Vô Hạn Thành (#agy-infinity-castle-rail) & Đối Đáp Đôi 2 Lượt Popover', () => {
+  it('[F26-T1-01] Trục Vô Hạn Thành tự ẩn khi <3 mục, phân loại ⚔️/📜/🩸, né Side Panel & lưu Bookmark 🏮 cắt LRU tối đa 20 cid', () => {
+    const env = createTestEnv({ loadCore: true });
+    env.setReducedMotion(true);
+    const mainBody = env.document.querySelector('[data-main-content-body="true"]');
+    assert.ok(mainBody, 'Môi trường chuẩn phải có [data-main-content-body="true"]');
+
+    // Mặc định mới có 1 user-message (< 3 mục) -> Trục Vô Hạn Thành phải tự ẩn!
+    env.core.syncInfinityCastleMinimap();
+    const rail = env.document.getElementById('agy-infinity-castle-rail');
+    assert.ok(rail, 'Phải khởi tạo nav#agy-infinity-castle-rail');
+    assert.equal(rail.dataset.hidden, '1', 'Khi hội thoại < 3 mục phải tự ẩn data-hidden="1"');
+
+    // Thêm 1 phản hồi chứa code (<pre>) và 1 phản hồi chứa lỗi (Error:) -> đủ >= 3 mục!
+    const codeResp = env.document.createElement('div');
+    codeResp.setAttribute('data-testid', 'agent-response');
+    const preEl = env.document.createElement('pre');
+    preEl.textContent = 'function waterBreathing() { return 11; }';
+    codeResp.appendChild(preEl);
+    mainBody.appendChild(codeResp);
+
+    const errResp = env.document.createElement('div');
+    errResp.setAttribute('data-testid', 'agent-response');
+    errResp.textContent = 'Traceback (most recent call last): Error: demon blood overflow';
+    mainBody.appendChild(errResp);
+
+    // Mở thêm Side Panel bên phải (x=880..1280) để kiểm chứng rail không đè lên Side Panel
+    const sidePanel = env.document.createElement('div');
+    sidePanel.setAttribute('data-side-panel-body', 'true');
+    sidePanel._rect = { left: 880, top: 38, width: 400, height: 682, right: 1280, bottom: 720 };
+    env.document.body.appendChild(sidePanel);
+
+    env.core.syncInfinityCastleMinimap();
+    const icState = env.core.getInfinityCastleState();
+    assert.equal(icState.hidden, false, 'Khi >= 3 mục, Trục Vô Hạn Thành phải hiển thị');
+    assert.equal(icState.itemCount, 3);
+    assert.deepEqual(
+      Array.from(icState.items, (x) => x.kind),
+      ['prompt', 'code', 'error'],
+      'Phải phân loại đúng 3 loại mục: prompt (⚔️), code (📜), error (🩸)'
+    );
+    assert.deepEqual(
+      Array.from(icState.items, (x) => x.icon),
+      ['⚔️', '📜', '🩸']
+    );
+    const rightPx = parseInt(rail.style.right, 10);
+    assert.ok(rightPx >= 400, `Khi Side Panel mở ở x=880/1280, rail.style.right (${rail.style.right}) phải dịch sang trái >= 400px để không bao giờ đè lên bảng phụ`);
+
+    // Kiểm tra ghim 🏮 và giới hạn LRU tối đa 20 cuộc hội thoại trong localStorage
+    const pin1 = env.core.toggleInfinityBookmark('a-0', 'cid-test-main', { label: 'Hàm Thủy Hô Hấp', kind: 'code' });
+    assert.equal(pin1.ok, true);
+    assert.equal(pin1.pinned, true);
+
+    for (let i = 1; i <= 24; i++) {
+      env.core.toggleInfinityBookmark('u-0', `cid-lru-${i}`, { label: `Mốc ${i}`, kind: 'prompt' });
+    }
+    const rawStore = JSON.parse(env.localStorage.getItem('agy_infinity_bookmarks_v1'));
+    assert.equal(rawStore.order.length, 20, 'Bộ nhớ Bookmark phải cắt ngặt LRU đúng tối đa 20 cuộc hội thoại');
+    assert.equal(Object.keys(rawStore.byCid).length, 20);
+    assert.equal(rawStore.byCid['cid-test-main'], undefined, 'Cuộc hội thoại cũ nhất vượt ngưỡng 20 phải tự động được giải phóng');
+    assert.ok(rawStore.byCid['cid-lru-24'], 'Cuộc hội thoại mới nhất phải được giữ lại');
+  });
+
+  it('[F26-T1-02] Đối đáp đôi 2 lượt (.agy-npc-dual-banter) & nút ⚡ Hợp Kích / 🎭 Tung hứng hoạt động mượt và dọn sạch khi gỡ theme', () => {
+    const env = createTestEnv({ loadCore: true });
+    env.setReducedMotion(true);
+
+    let dualSkillCalls = 0;
+    env.window.__AGY_KNY_SKILLS__ = {
+      castDualSkill(charA, charB) {
+        dualSkillCalls++;
+        return { ok: true, dual: true, charA, charB };
+      },
+      stopActiveSkill() {}
+    };
+
+    env.core.applyTheme({
+      themeName: '🦋 Trùng Trụ — Shinobu Kocho',
+      bubbleName: '🦋 Trùng Trụ — Shinobu Kocho',
+      masterPersona: 'giyu'
+    }, { skipSaveDisk: true });
+
+    const wrap = env.document.getElementById('agy-shinobu-npc-wrap');
+    assert.ok(wrap);
+    const comboBtn = wrap.querySelector('[data-npc-act="dual-combo"]');
+    const banterBtn = wrap.querySelector('[data-npc-act="dual-banter"]');
+    assert.ok(comboBtn, 'Khi NPC (shinobu) khác Master Persona (giyu) phải hiện nút ⚡ Hợp Kích');
+    assert.ok(banterBtn, 'Khi NPC khác Master Persona phải hiện nút 🎭 Tung hứng');
+
+    banterBtn.click();
+    const banterBox = wrap.querySelector('.agy-npc-dual-banter');
+    assert.equal(banterBox.getAttribute('data-show'), '1', 'Bấm 🎭 Tung hứng phải hiển thị .agy-npc-dual-banter');
+    const turns = banterBox.querySelectorAll('.agy-npc-banter-turn');
+    assert.equal(turns.length, 2, 'Màn đối đáp đôi phải có đúng 2 lượt bong bóng');
+    assert.match(banterBox.textContent, /Tomioka|Kocho|luồng bất đồng bộ/);
+
+    comboBtn.click();
+    assert.equal(dualSkillCalls, 1, 'Bấm ⚡ Hợp Kích phải kích hoạt __AGY_KNY_SKILLS__.castDualSkill');
+
+    // Đảm bảo khu vực gửi tin nhắn đơn .agy-npc-user-sent & .agy-npc-user-msg vẫn hoạt động độc lập 100%
+    assert.ok(wrap.querySelector('.agy-npc-user-sent'), 'Phải bảo toàn nguyên vẹn .agy-npc-user-sent');
+    assert.ok(wrap.querySelector('.agy-npc-user-msg'), 'Phải bảo toàn nguyên vẹn .agy-npc-user-msg');
+
+    // Kiểm tra dọn dẹp 100% khi gọi __ANTIGRAVITY_REMOVE_CUSTOM_THEME__
+    env.window.__ANTIGRAVITY_REMOVE_CUSTOM_THEME__();
+    assert.equal(env.document.getElementById('agy-infinity-castle-rail'), null, 'removeCustomTheme phải gỡ #agy-infinity-castle-rail');
+    assert.equal(env.document.getElementById('antigravity-infinity-castle-style'), null, 'removeCustomTheme phải gỡ #antigravity-infinity-castle-style');
+    assert.equal(env.document.getElementById('agy-shinobu-npc-wrap'), null, 'removeCustomTheme phải gỡ #agy-shinobu-npc-wrap');
+  });
+
+  it('[F27-T1-01] Hộp thoại Chibi kết nối luồng Hydrogen SSE (/__npc_chat, /__npc_warmup, /__npc_reset) & fallback mượt khi ngoại tuyến', async () => {
+    const fetchCalls = [];
+    let shouldFailChat = false;
+
+    const env = createTestEnv({
+      loadCore: true,
+      boot: { assetBase: 'http://127.0.0.1:51234/' }
+    });
+    env.setReducedMotion(true);
+
+    env.window.TextDecoder = class MockTextDecoder {
+      decode(u8) { return Buffer.from(u8).toString('utf8'); }
+    };
+    env.window.fetch = async (url, opts = {}) => {
+      const u = String(url);
+      fetchCalls.push({ url: u, method: opts.method, headers: opts.headers, body: opts.body });
+      if (u.endsWith('__npc_warmup') || u.endsWith('__npc_reset')) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, model: 'gemini-4-hydrogen-low' }) };
+      }
+      if (u.endsWith('__npc_chat')) {
+        if (shouldFailChat) {
+          return { ok: false, status: 503 };
+        }
+        const sseChunks = [
+          Buffer.from('data: {"type":"meta","model":"gemini-4-hydrogen-low"}\n\n', 'utf8'),
+          Buffer.from('data: {"type":"delta","delta":"Ara ara~ "}\n\n', 'utf8'),
+          Buffer.from('data: {"type":"delta","delta":"Tôi đang lắng nghe anh bằng tâm thức Hydrogen đây~"}\n\n', 'utf8'),
+          Buffer.from('data: {"type":"done","ok":true,"reply":"Ara ara~ Tôi đang lắng nghe anh bằng tâm thức Hydrogen đây~","model":"gemini-4-hydrogen-low"}\n\n', 'utf8')
+        ];
+        let idx = 0;
+        return {
+          ok: true,
+          status: 200,
+          body: {
+            getReader() {
+              return {
+                async read() {
+                  if (idx < sseChunks.length) {
+                    return { done: false, value: sseChunks[idx++] };
+                  }
+                  return { done: true, value: undefined };
+                }
+              };
+            }
+          }
+        };
+      }
+      return { ok: false, status: 404 };
+    };
+
+    env.core.applyTheme({
+      themeName: '🦋 Trùng Trụ — Shinobu Kocho',
+      bubbleName: '🦋 Trùng Trụ — Shinobu Kocho',
+      masterPersona: 'giyu'
+    }, { skipSaveDisk: true });
+
+    const wrap = env.document.getElementById('agy-shinobu-npc-wrap');
+    wrap.querySelector('[data-npc-act="chat-toggle"]').click();
+    assert.equal(fetchCalls.some((c) => c.url.endsWith('__npc_warmup')), true, 'Mở hộp chat phải tự động gọi __npc_warmup ở nền');
+
+    // Gửi câu hỏi trực tiếp qua converseWithNpcHydrogen để kiểm chứng luồng delta + done
+    const deltas = [];
+    const hRes = await env.core.converseWithNpcHydrogen('Hôm nay Điệp Phủ thế nào Shinobu?', {
+      charId: 'shinobu',
+      masterId: 'giyu',
+      onDelta(acc) { deltas.push(acc); }
+    });
+    assert.equal(hRes.ok, true);
+    assert.equal(hRes.model, 'gemini-4-hydrogen-low');
+    assert.equal(deltas.length, 2, 'Phải nhận đủ 2 nhịp streaming delta');
+    assert.match(hRes.reply, /tâm thức Hydrogen/);
+
+    // Bấm nút 🔄 reset-memory -> phải gọi __npc_reset
+    wrap.querySelector('[data-npc-act="reset-memory"]').click();
+    assert.equal(fetchCalls.some((c) => c.url.endsWith('__npc_reset')), true, 'Bấm nút 🔄 phải gửi lệnh __npc_reset tới Daemon');
+
+    // Khi máy chủ báo 503 -> submit form tự động fallback êm về Canon Soul Engine
+    shouldFailChat = true;
+    const chatInput = wrap.querySelector('.agy-npc-chat-input');
+    chatInput.value = 'Chào Shinobu nhé!';
+    wrap.querySelector('.agy-npc-chat-row').dispatchEvent({ type: 'submit', preventDefault() {}, stopPropagation() {} });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.ok(wrap.querySelector('.agy-npc-dialog-text').textContent.length > 8, 'Khi ngoại tuyến 503 vẫn phải trả lời mượt bằng bộ linh hồn cục bộ');
+  });
+});

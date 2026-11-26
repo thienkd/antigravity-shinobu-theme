@@ -971,12 +971,25 @@ fn build_persona_shift_step(
 }
 
 pub fn run_pre_invocation_with_input(raw_in: &str, default_code_root: &Path) -> String {
+    if std::env::var("AGY_CHIBI_SIDECAR").ok().as_deref() == Some("1") {
+        return "{}\n".to_string();
+    }
     if raw_in.trim().is_empty() {
         return "{}\n".to_string();
     }
     let Some(input) = parse_hook_input_safe(raw_in) else {
         return "{}\n".to_string();
     };
+    let in_cwd = input.get("cwd").and_then(|v| v.as_str()).unwrap_or("");
+    let in_ws0 = input
+        .get("workspacePaths")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if in_cwd.contains("chibi_npc_sandbox") || in_ws0.contains("chibi_npc_sandbox") {
+        return "{}\n".to_string();
+    }
 
     let raw_cid = input
         .get("conversationId")

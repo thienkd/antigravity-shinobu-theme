@@ -1962,6 +1962,42 @@ describe('F12: Kỹ năng Hơi Thở & Chibi Aura (kny_breathing_skills.js & kny
     assert.ok(newList, 'Drawer đang mở phải còn .agy-skill-list');
     assert.equal(newList.dataset.staleMarker, undefined, '.agy-skill-list phải được dựng lại mới khi uiMatches và drawer đang mở');
   });
+
+  it('F12-T1-08 [v3.5]: Song Kiếm Hợp Bích castDualSkill & resolveDualComboSpec (cặp nguyên tác + cặp động bất kỳ + triggerFinisher tự động)', () => {
+    env = createKnyVmEnv({ userGestureActive: true });
+    const { composer } = env.buildStandardIdeDom();
+    env.loadModules(['agy_security.js', 'kny_semantic_icons.js', 'kny_breathing_skills.js', 'kny_chibi_aura.js']);
+    const skillsApi = env.sandbox.__AGY_KNY_SKILLS__;
+    const aura = env.sandbox.__AGY_KNY_CHIBI_AURA__;
+
+    const canonSpec = skillsApi.resolveDualComboSpec('mitsuri', 'obanai');
+    assert.equal(canonSpec.isCanonPair, true, 'obanai+mitsuri bất kể thứ tự phải nhận diện là cặp nguyên tác');
+    assert.match(canonSpec.nameVi, /Xà Luyến/);
+    assert.match(canonSpec.kanji, /蛇恋/);
+
+    const dynSpec = skillsApi.resolveDualComboSpec('shinobu', 'shadow_monarch');
+    assert.equal(dynSpec.isCanonPair, false, 'Cặp bất kỳ đa vũ trụ phải tổng hợp động an toàn');
+    assert.match(dynSpec.nameVi, /Song Kiếm Hợp Bích/);
+
+    const dualCast = skillsApi.castDualSkill('giyu', 'tanjiro', { durationMs: 2600 });
+    assert.equal(dualCast.ok, true);
+    assert.equal(dualCast.dual, true);
+    env.clock.stepRaf(4, 16);
+    const vfxHost = env.document.querySelector('agy-skill-vfx');
+    assert.ok(vfxHost && vfxHost.style.display === 'block', 'castDualSkill phải mở sân khấu agy-skill-vfx');
+    assert.match(vfxHost.textContent, /Thủy Hỏa Giao Long/);
+
+    // Khi mountChibiAura với shinobu và gọi triggerFinisher có dualPartnerId='giyu' -> tự động tung Song Kiếm Hợp Bích!
+    aura.mountChibiAura(composer, { fxMode: 'wisteria' }, 'shinobu');
+    const finRes = aura.triggerFinisher({ dualPartnerId: 'giyu' });
+    assert.equal(finRes.ok, true);
+    assert.equal(finRes.dual, true, 'triggerFinisher khi hostHero !== dualPartnerId phải kích hoạt hợp kích đôi');
+    assert.equal(finRes.charA, 'shinobu');
+    assert.equal(finRes.charB, 'giyu');
+
+    aura.teardown();
+    skillsApi.destroy();
+  });
 });
 
 /* ============================================================================
@@ -3261,6 +3297,44 @@ describe('F13: Token HUD, Rèn Hách Đao, Echo Banner & Quân Đoàn Cửu Tr�
     env.clock.advanceBy(820);
     assert.deepEqual(sentPayloads, ['/compact', '/compact'], 'Sau fallback paste phải gửi chính xác 1 lệnh /compact');
     assert.equal(hud.getCompactState().failed, false);
+  });
+
+  it('F13-T1-08 [v3.5]: Smart Kasugai Herald (#agy-kasugai-herald) cá biệt hóa sứ giả theo nhân vật & lọc chống spam <12s vs >=12s', () => {
+    env = createKnyVmEnv();
+    const { composer } = env.buildStandardIdeDom();
+    env.loadModules(['agy_security.js', 'kny_semantic_icons.js', 'kny_squad_raid.js', 'kny_token_hud.js']);
+    const hud = env.sandbox.__AGY_TOKEN_HUD__;
+
+    assert.equal(hud.resolveHeraldCompanion({ fxMode: 'thunder_flash' }, 'zenitsu').kind, 'chuntaro');
+    assert.equal(hud.resolveHeraldCompanion({ fxMode: 'serpent_prism' }, 'obanai').kind, 'kaburamaru');
+    assert.equal(hud.resolveHeraldCompanion({ fxMode: 'butterfly' }, 'shinobu').kind, 'butterfly_crow');
+    assert.equal(hud.resolveHeraldCompanion({ fxMode: 'love_sakura' }, 'mitsuri').kind, 'clover_crow');
+    assert.equal(hud.resolveHeraldCompanion({ fxMode: 'mist_sea' }, 'muichiro').kind, 'ginko_crow');
+    assert.equal(hud.resolveHeraldCompanion({ fxMode: 'royal_wisteria' }, 'ubuyashiki').kind, 'royal_crow');
+
+    hud.mountTokenHud(composer, { fxMode: 'thunder_flash' }, 'zenitsu');
+    const heraldEl = env.document.getElementById('agy-kasugai-herald');
+    assert.ok(heraldEl, 'Phải gắn #agy-kasugai-herald vào composer');
+    assert.equal(heraldEl.dataset.kind, 'chuntaro');
+    assert.equal(heraldEl.dataset.visible, undefined, 'Khởi tạo không được tự hiện sứ giả');
+
+    // 1. Baseline sync + lượt ngắn 3s khi cửa sổ đang focus -> KHÔNG spam sứ giả!
+    hud.ingestTelemetrySnapshot({ ok: true, cid: 'cid-herald', contextTokens: 4000, isWorking: false });
+    hud.ingestTelemetrySnapshot({ ok: true, cid: 'cid-herald', contextTokens: 4200, isWorking: true });
+    env.clock.advanceBy(3000);
+    hud.ingestTelemetrySnapshot({ ok: true, cid: 'cid-herald', contextTokens: 4500, isWorking: false });
+    assert.equal(hud.getHeraldState().visible, false, 'Lượt ngắn 3s khi đang xem trực tiếp không được spam sứ giả');
+
+    // 2. Lượt dài >= 12s hoàn tất -> Sứ giả Chuntaro sà xuống truyền tin & tự thu cánh sau 6s!
+    hud.ingestTelemetrySnapshot({ ok: true, cid: 'cid-herald', contextTokens: 5000, isWorking: true });
+    env.clock.advanceBy(13500);
+    hud.ingestTelemetrySnapshot({ ok: true, cid: 'cid-herald', contextTokens: 6800, isWorking: false });
+    assert.equal(hud.getHeraldState().visible, true, 'Lượt >= 12s xong phải triệu hồi Sứ Giả');
+    assert.equal(hud.getHeraldState().lastReason, 'long_task_done');
+    assert.match(heraldEl.textContent, /Chim Sẻ Chuntaro/);
+
+    env.clock.advanceBy(6100);
+    assert.equal(hud.getHeraldState().visible, false, 'Sau 6s Sứ Giả phải tự thu cánh biến mất');
   });
 });
 

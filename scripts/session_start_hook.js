@@ -237,10 +237,26 @@ function runStateGarbageCollection() {
   }
 }
 
+function isChibiSidecarHook(hookInput) {
+  if (process.env.AGY_CHIBI_SIDECAR === '1') return true;
+  if (!hookInput || typeof hookInput !== 'object') return false;
+  const cwdStr = String(hookInput.cwd || '');
+  const ws0 = Array.isArray(hookInput.workspacePaths) ? String(hookInput.workspacePaths[0] || '') : '';
+  return cwdStr.includes('chibi_npc_sandbox') || ws0.includes('chibi_npc_sandbox');
+}
+
 async function main() {
   try {
+    if (process.env.AGY_CHIBI_SIDECAR === '1') {
+      process.stdout.write('{}\n');
+      return;
+    }
     const rawIn = await readStdinJsonFast(800);
     const parsed = parseHookInputSafe(rawIn);
+    if (isChibiSidecarHook(parsed)) {
+      process.stdout.write('{}\n');
+      return;
+    }
     syncWorkspaceProfileOnStart(parsed);
     runStateGarbageCollection();
     ensureDaemonAwake();

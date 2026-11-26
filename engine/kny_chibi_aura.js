@@ -4654,6 +4654,30 @@
     const mappedReqHero = MODE_TO_CHAR[requestedHeroRaw] || requestedHeroRaw;
     const requestedHero = (CHAR_META[mappedReqHero] && CHAR_META[mappedReqHero].charId) || requestedHeroRaw;
     const hostHero = state.uiCharId || state.auraCharId || '';
+
+    // v3.5 Dual Hashira Combo Finisher: when both right-corner NPC and left-corner Master Persona are active and distinct!
+    if (!opts.singleOnly && !requestedHero && hostHero) {
+      let partnerRaw = typeof opts.dualPartnerId === 'string' ? opts.dualPartnerId.trim().toLowerCase() : '';
+      if (!partnerRaw && typeof window !== 'undefined' && window.__AGY_THEME_CORE__ && typeof window.__AGY_THEME_CORE__.getEffectiveState === 'function') {
+        try {
+          const effSt = window.__AGY_THEME_CORE__.getEffectiveState();
+          partnerRaw = String((effSt && effSt.masterPersona) || '').trim().toLowerCase();
+        } catch (_) {}
+      }
+      if (partnerRaw && partnerRaw !== hostHero) {
+        const extDual = typeof window !== 'undefined' ? window.__AGY_KNY_SKILLS__ : null;
+        if (extDual && typeof extDual.castDualSkill === 'function') {
+          const muted = isSfxMuted();
+          const dualRes = extDual.castDualSkill(hostHero, partnerRaw, {
+            soundEnabled: !muted
+          });
+          if (dualRes && dualRes.ok) {
+            return { ok: true, dual: true, charA: dualRes.charA, charB: dualRes.charB, spec: dualRes.spec };
+          }
+        }
+      }
+    }
+
     const useYoriichi =
       requestedHero === 'yoriichi' ||
       Boolean(opts.preferYoriichi) ||

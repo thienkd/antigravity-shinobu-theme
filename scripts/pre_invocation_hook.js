@@ -13,6 +13,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
 const {
   DANGEROUS_KEYS,
   isSafeLocalRegularFile,
@@ -600,8 +601,48 @@ function buildPersonaShiftStep(ctx, registry, showVisibleBadge) {
   return wrapStepOutput(lines.join('\n'), visibleMd);
 }
 
+function ensureDaemonAwakeQuick() {
+  if (
+    process.env.AGY_SKIP_DAEMON_SPAWN === '1' ||
+    process.env.AGY_CHIBI_SIDECAR === '1' ||
+    process.env.AGY_CONFIG_PATH ||
+    process.env.AGY_PID_FILE ||
+    process.env.AGY_PERSONA_STATE_DIR
+  ) {
+    return;
+  }
+  try {
+    const checkAlive = (pidFile) => {
+      if (!fs.existsSync(pidFile)) return false;
+      const raw = fs.readFileSync(pidFile, 'utf8').replace(/^\uFEFF/, '').trim();
+      const pid = raw.startsWith('{') ? JSON.parse(raw).pid : parseInt(raw, 10);
+      if (!Number.isFinite(pid) || pid <= 0) return false;
+      process.kill(pid, 0);
+      return true;
+    };
+    const home = os.homedir();
+    if (checkAlive(path.join(home, '.gemini', 'antigravity', 'theme_daemon.pid'))) return;
+    if (checkAlive(path.join(CODE_ROOT, 'daemon.pid'))) return;
+    const daemonScript = path.join(CODE_ROOT, 'daemon', 'theme_daemon.js');
+    if (fs.existsSync(daemonScript)) {
+      const child = spawn(process.execPath, [daemonScript], {
+        cwd: CODE_ROOT,
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      });
+      child.unref();
+    }
+  } catch (_) {}
+}
+
 async function main() {
   try {
+    if (process.env.AGY_CHIBI_SIDECAR === '1') {
+      process.stdout.write('{}\n');
+      return;
+    }
+    ensureDaemonAwakeQuick();
     const rawIn = await readStdinJsonFast(800);
     if (!rawIn || !rawIn.trim()) {
       process.stdout.write('{}\n');
@@ -610,6 +651,12 @@ async function main() {
 
     const input = parseHookInputSafe(rawIn);
     if (!input || typeof input !== 'object') {
+      process.stdout.write('{}\n');
+      return;
+    }
+    const inCwd = String(input.cwd || '');
+    const inWs0 = Array.isArray(input.workspacePaths) ? String(input.workspacePaths[0] || '') : '';
+    if (inCwd.includes('chibi_npc_sandbox') || inWs0.includes('chibi_npc_sandbox')) {
       process.stdout.write('{}\n');
       return;
     }

@@ -1830,6 +1830,7 @@
     syncLiveWallpaperFx(st, mainTheme);
     syncShinobuNpc(st, bubbleTheme);
     syncTokenHud(st);
+    syncInfinityCastleMinimap(st, mainTheme);
   }
 
   function syncTitleBarOverlay(stOverride) {
@@ -1899,6 +1900,9 @@
     }
     teardownLiveWallpaperFx();
     teardownShinobuNpc();
+    if (typeof teardownInfinityCastleMinimap === 'function') {
+      teardownInfinityCastleMinimap();
+    }
     if (typeof teardownTransparentWorldFlow === 'function') {
       teardownTransparentWorldFlow();
     }
@@ -2103,6 +2107,14 @@
     getNpcSoulMeta: (bThemeOverride, stOverride) => getNpcSoulMeta(bThemeOverride, stOverride),
     getNpcReplyForInput: (rawInput, profileOverride, stOverride) => getNpcReplyForInput(rawInput, profileOverride, stOverride),
     converseWithNpc: (rawInput, profileOverride, stOverride) => buildNpcReplyDetailed(rawInput, profileOverride, stOverride),
+    converseWithNpcHydrogen: (rawInput, opts) => converseWithNpcHydrogen(rawInput, opts),
+    warmupNpcHydrogenBrain: (charId, masterId) => warmupNpcHydrogenBrain(charId, masterId),
+    resetNpcHydrogenMemory: (charId, masterId) => resetNpcHydrogenMemory(charId, masterId),
+    buildDualBanterExchange: (charId, masterId, bThemeOverride, stOverride) => buildDualBanterExchange(charId, masterId, bThemeOverride, stOverride),
+    triggerNpcDualCombo: (opts) => triggerNpcDualCombo(opts),
+    syncInfinityCastleMinimap: (stOverride, themeOverride) => syncInfinityCastleMinimap(stOverride, themeOverride),
+    toggleInfinityBookmark: (itemKey, cidOverride, metaOverride) => toggleInfinityBookmark(itemKey, cidOverride, metaOverride),
+    getInfinityCastleState: () => getInfinityCastleState(),
     DOM_CONTRACTS: AGY_DOM_CONTRACTS
   };
 
@@ -6756,11 +6768,184 @@
     return candidates[Math.floor(Math.random() * candidates.length)] || list[0];
   }
 
+  function getNpcDaemonApiBase() {
+    if (!SEC || typeof SEC.getAssetBase !== 'function') return '';
+    const base = String(SEC.getAssetBase() || '').trim();
+    if (!/^https?:\/\/127\.0\.0\.1:\d+\/?$/.test(base)) return '';
+    return base.endsWith('/') ? base : `${base}/`;
+  }
+
+  function warmupNpcHydrogenBrain(charIdRaw, masterIdRaw) {
+    const base = getNpcDaemonApiBase();
+    if (!base || typeof fetch !== 'function') return Promise.resolve({ ok: false, reason: 'offline' });
+    const st = getEffectiveState();
+    const bTheme = THEMES[st.bubbleName || st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    const charId = String(charIdRaw || resolveNpcCharacterId(bTheme, st) || 'shinobu').trim().toLowerCase();
+    const masterId = String(masterIdRaw || st.masterPersona || 'yoriichi').trim().toLowerCase();
+    const headers = typeof SEC.authHeaders === 'function'
+      ? SEC.authHeaders({ 'Content-Type': 'application/json' })
+      : { 'Content-Type': 'application/json' };
+    return fetch(`${base}__npc_warmup`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ charId, masterId })
+    })
+      .then((r) => (r && r.ok ? r.json() : { ok: false, status: r ? r.status : 0 }))
+      .catch(() => ({ ok: false, reason: 'network_error' }));
+  }
+
+  function resetNpcHydrogenMemory(charIdRaw, masterIdRaw) {
+    const st = getEffectiveState();
+    const bTheme = THEMES[st.bubbleName || st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    const charId = String(charIdRaw || resolveNpcCharacterId(bTheme, st) || 'shinobu').trim().toLowerCase();
+    const masterId = String(masterIdRaw || st.masterPersona || 'yoriichi').trim().toLowerCase();
+    const mem = getNpcConvMemory(charId);
+    mem.turnCount = 0;
+    mem.lastIntent = '';
+    const base = getNpcDaemonApiBase();
+    if (!base || typeof fetch !== 'function') return Promise.resolve({ ok: true, localOnly: true });
+    const headers = typeof SEC.authHeaders === 'function'
+      ? SEC.authHeaders({ 'Content-Type': 'application/json' })
+      : { 'Content-Type': 'application/json' };
+    return fetch(`${base}__npc_reset`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ charId, masterId })
+    })
+      .then((r) => (r && r.ok ? r.json() : { ok: false }))
+      .catch(() => ({ ok: false }));
+  }
+
+  async function converseWithNpcHydrogen(rawInput, rawOpts) {
+    const opts = rawOpts && typeof rawOpts === 'object' ? rawOpts : {};
+    const msg = String(rawInput || '').trim();
+    if (!msg) return { ok: false, reason: 'empty' };
+    const base = getNpcDaemonApiBase();
+    if (!base || typeof fetch !== 'function') {
+      return { ok: false, reason: 'daemon_unavailable' };
+    }
+
+    const st = opts.state || getEffectiveState();
+    const bTheme = opts.bTheme || THEMES[st.bubbleName || st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    const charId = String(opts.charId || resolveNpcCharacterId(bTheme, st) || 'shinobu').trim().toLowerCase();
+    const masterId = String(opts.masterId || st.masterPersona || 'yoriichi').trim().toLowerCase();
+    const liveSig = readLiveIdeContextForNpc();
+
+    const rt = getShinobuRuntime();
+    if (rt.npcStreamAbort) {
+      try { rt.npcStreamAbort.abort(); } catch (_) {}
+      rt.npcStreamAbort = null;
+    }
+    const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    if (ac) rt.npcStreamAbort = ac;
+
+    const headers = typeof SEC.authHeaders === 'function'
+      ? SEC.authHeaders({ 'Content-Type': 'application/json', Accept: 'text/event-stream' })
+      : { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
+
+    const useStream = opts.stream !== false;
+    try {
+      const res = await fetch(`${base}__npc_chat`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          charId,
+          masterId,
+          message: msg,
+          uiLang: normalizeUiLang(st.uiLang),
+          stream: useStream,
+          liveContext: {
+            ctxTokens: liveSig.tokensLabel || '',
+            bladePct: liveSig.heatPct || 0,
+            aiWorking: Boolean(liveSig.isWorking),
+            crisis: Boolean(liveSig.isCrisis)
+          }
+        }),
+        signal: ac ? ac.signal : undefined
+      });
+
+      if (!res || !res.ok) {
+        return { ok: false, reason: `http_${res ? res.status : 0}` };
+      }
+
+      if (!useStream || !res.body || typeof res.body.getReader !== 'function') {
+        const json = await res.json();
+        if (json && json.ok && json.reply) {
+          return { ok: true, reply: String(json.reply).trim(), model: json.model || 'gemini-4-hydrogen-low', conversationId: json.conversationId || '' };
+        }
+        return { ok: false, reason: (json && json.error) || 'empty_reply' };
+      }
+
+      const reader = res.body.getReader();
+      const dec = typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8') : null;
+      let buf = '';
+      let streamedText = '';
+      let finalPayload = null;
+
+      while (true) {
+        const step = await reader.read();
+        if (step.done) break;
+        const chunkStr = dec ? dec.decode(step.value, { stream: true }) : '';
+        buf += chunkStr;
+        let boundary = buf.indexOf('\n\n');
+        while (boundary >= 0) {
+          const block = buf.slice(0, boundary);
+          buf = buf.slice(boundary + 2);
+          boundary = buf.indexOf('\n\n');
+          const lines = block.split(/\r?\n/);
+          for (let i = 0; i < lines.length; i++) {
+            const ln = lines[i].trim();
+            if (!ln.startsWith('data:')) continue;
+            const jsonPart = ln.slice(5).trim();
+            if (!jsonPart) continue;
+            let evt = null;
+            try { evt = JSON.parse(jsonPart); } catch (_) { continue; }
+            if (!evt || typeof evt !== 'object') continue;
+            if (evt.type === 'delta' && typeof evt.delta === 'string') {
+              streamedText += evt.delta;
+              if (typeof opts.onDelta === 'function') {
+                try { opts.onDelta(streamedText, evt.delta); } catch (_) {}
+              }
+            } else if (evt.type === 'done') {
+              finalPayload = evt;
+            } else if (evt.type === 'error') {
+              return { ok: false, reason: evt.error || 'stream_error' };
+            }
+          }
+        }
+      }
+
+      const cleanReply = String((finalPayload && finalPayload.reply) || streamedText || '').trim();
+      if (!cleanReply) {
+        return { ok: false, reason: 'empty_stream_reply' };
+      }
+      return {
+        ok: true,
+        reply: cleanReply,
+        model: (finalPayload && finalPayload.model) || 'gemini-4-hydrogen-low',
+        conversationId: (finalPayload && finalPayload.conversationId) || ''
+      };
+    } catch (err) {
+      if (err && err.name === 'AbortError') {
+        return { ok: false, aborted: true, reason: 'aborted' };
+      }
+      return { ok: false, reason: String((err && err.message) || 'fetch_failed') };
+    } finally {
+      if (ac && rt.npcStreamAbort === ac) {
+        rt.npcStreamAbort = null;
+      }
+    }
+  }
+
   function teardownShinobuNpc() {
     const rt = window.__AGY_SHINOBU_RT__;
     if (rt) {
       if (rt.typeTimer) { clearInterval(rt.typeTimer); rt.typeTimer = 0; }
       if (rt.remindTimer) { clearInterval(rt.remindTimer); rt.remindTimer = 0; }
+      if (rt.npcStreamAbort) {
+        try { rt.npcStreamAbort.abort(); } catch (_) {}
+        rt.npcStreamAbort = null;
+      }
       rt.activeNpcKey = '';
     }
     if (window.__AGY_KNY_CHIBI_AURA__ && typeof window.__AGY_KNY_CHIBI_AURA__.teardown === 'function') {
@@ -7085,6 +7270,63 @@
         color: #ffffff;
         transform: translateY(-1px);
       }
+      .agy-npc-pill-combo {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.24) 0%, rgba(250, 204, 21, 0.20) 100%);
+        border-color: rgba(250, 204, 21, 0.62);
+        color: #fef08a;
+        font-weight: 700;
+      }
+      .agy-npc-pill-banter {
+        background: rgba(94, 234, 212, 0.12);
+        border-color: rgba(94, 234, 212, 0.48);
+        color: #ccfbf1;
+      }
+      .agy-npc-dual-banter {
+        display: none;
+        flex-direction: column;
+        gap: 5px;
+        padding: 6px 8px;
+        border-radius: 9px;
+        background: linear-gradient(145deg, rgba(15, 23, 42, 0.82) 0%, rgba(28, 14, 38, 0.84) 100%);
+        border: 1px solid var(--npc-border, rgba(192, 132, 252, 0.42));
+      }
+      .agy-npc-dual-banter[data-show="1"] {
+        display: flex;
+      }
+      .agy-npc-banter-turn {
+        display: flex;
+        align-items: flex-start;
+        gap: 6.5px;
+      }
+      .agy-npc-banter-av {
+        width: 20px;
+        height: 20px;
+        border-radius: 9999px;
+        background-size: cover;
+        background-position: center;
+        background-color: rgba(30, 41, 59, 0.9);
+        border: 1.4px solid var(--npc-primary, #c084fc);
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .agy-npc-banter-col {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        flex: 1;
+      }
+      .agy-npc-banter-speaker {
+        font-size: 9.6px;
+        font-weight: 700;
+        letter-spacing: 0.14px;
+        color: var(--npc-secondary, #5eead4);
+      }
+      .agy-npc-banter-line {
+        font-size: 11.2px;
+        line-height: 1.36;
+        color: #f1f5f9;
+        word-break: break-word;
+      }
       .agy-npc-chat-row {
         display: none;
         align-items: center;
@@ -7344,8 +7586,14 @@
       const initMem = getNpcConvMemory(soulMeta.charId);
       const initTurnShow = initMem.turnCount > 0 ? ' data-show="1"' : '';
       const initTurnTxt = initMem.turnCount > 0 ? `Lượt ${initMem.turnCount}` : '';
+      const canDualPair = Boolean(soulMeta.charId && soulMeta.masterId && soulMeta.charId !== soulMeta.masterId);
+      const dualPillsHtml = canDualPair
+        ? `<button type="button" class="agy-npc-pill agy-npc-pill-combo" data-npc-act="dual-combo" title="Phóng tuyệt kỹ Song Kiếm Hợp Bích chữ X toàn màn hình">⚡ Hợp Kích</button>` +
+          `<button type="button" class="agy-npc-pill agy-npc-pill-banter" data-npc-act="dual-banter" title="Xem màn tung hứng 2 lượt giữa hai nhân vật">🎭 Tung hứng</button>`
+        : '';
 
       wrap.dataset.charId = soulMeta.charId;
+      wrap.dataset.masterId = soulMeta.masterId || 'yoriichi';
       wrap.innerHTML = `
         <button type="button" class="agy-npc-badge" title="${safeTitle}">${safeBadge}</button>
         <div class="agy-npc-popover" role="region" aria-label="${safeTitle}">
@@ -7357,7 +7605,8 @@
             <div class="agy-npc-tools">
               <button type="button" class="agy-npc-icon-btn" data-npc-act="motion" title="${fxPausedInit ? 'Phát hiệu ứng nền' : 'Tạm dừng hiệu ứng nền'}" aria-label="${fxPausedInit ? 'Phát hiệu ứng nền' : 'Tạm dừng hiệu ứng nền'}">${fxPausedInit ? '▶' : '⏸'}</button>
               <button type="button" class="agy-npc-icon-btn" data-npc-act="random" title="Đổi câu thoại ngẫu nhiên" aria-label="Đổi câu thoại ngẫu nhiên">🎲</button>
-              <button type="button" class="agy-npc-icon-btn" data-npc-act="chat-toggle" title="Trò chuyện riêng" aria-label="Trò chuyện riêng">💬</button>
+              <button type="button" class="agy-npc-icon-btn" data-npc-act="reset-memory" title="Làm mới trí nhớ trò chuyện Hydrogen của nhân vật" aria-label="Làm mới trí nhớ trò chuyện Hydrogen của nhân vật">🔄</button>
+              <button type="button" class="agy-npc-icon-btn" data-npc-act="chat-toggle" title="Trò chuyện riêng (Model Hydrogen)" aria-label="Trò chuyện riêng (Model Hydrogen)">💬</button>
               <button type="button" class="agy-npc-icon-btn" data-npc-act="close" title="Thu gọn hộp thoại" aria-label="Thu gọn hộp thoại">✕</button>
             </div>
           </div>
@@ -7372,8 +7621,10 @@
               <span class="agy-npc-user-msg"></span>
             </div>
           </div>
+          <div class="agy-npc-dual-banter" aria-live="polite"></div>
           <div class="agy-npc-dialog-text"></div>
           <div class="agy-npc-pills">
+            ${dualPillsHtml}
             ${pillsHtml}
             <button type="button" class="agy-npc-pill" data-npc-act="chat-open">💬 Trò chuyện</button>
           </div>
@@ -7394,13 +7645,19 @@
       const chatInput = wrap.querySelector('.agy-npc-chat-input');
       const motionBtn = wrap.querySelector('[data-npc-act="motion"]');
 
+      const soulTextEl = wrap.querySelector('.agy-npc-soul-text');
+      const dialogTextEl = wrap.querySelector('.agy-npc-dialog-text');
+
       function syncChatVisibility(focusInput) {
         if (topicChipsWrap) {
           topicChipsWrap.style.display = (rt.npcChatOpen && soulMeta.chips.length > 0) ? 'flex' : 'none';
         }
         chatRow.style.display = rt.npcChatOpen ? 'flex' : 'none';
-        if (rt.npcChatOpen && focusInput && chatInput) {
-          setTimeout(() => chatInput.focus(), 20);
+        if (rt.npcChatOpen) {
+          warmupNpcHydrogenBrain(soulMeta.charId, soulMeta.masterId);
+          if (focusInput && chatInput) {
+            setTimeout(() => chatInput.focus(), 20);
+          }
         }
       }
 
@@ -7413,14 +7670,79 @@
           sentMsg.textContent = msg;
           sentBox.dataset.show = '1';
         }
+
         const curStNow = getEffectiveState();
-        const res = buildNpcReplyDetailed(msg, prof, curStNow);
-        if (turnBadgeEl) {
-          turnBadgeEl.textContent = `Lượt ${res.turnCount}`;
-          turnBadgeEl.dataset.show = '1';
+        const hasLiveDaemon = Boolean(getNpcDaemonApiBase() && typeof fetch === 'function');
+        if (!hasLiveDaemon) {
+          const res = buildNpcReplyDetailed(msg, prof, curStNow);
+          if (turnBadgeEl) {
+            turnBadgeEl.textContent = `Lượt ${res.turnCount}`;
+            turnBadgeEl.dataset.show = '1';
+          }
+          triggerChibiBounce(composer, res.reaction);
+          speakShinobuLine(res.reply, true);
+          return;
         }
-        triggerChibiBounce(composer, res.reaction);
-        speakShinobuLine(res.reply, true);
+
+        // Live Hydrogen Sidecar Streaming Mode (with automatic instant fallback if daemon/CLI is offline)
+        rt.npcCollapsed = false;
+        popover.style.display = 'flex';
+        badge.style.display = 'none';
+        clearInterval(rt.typeTimer);
+        rt.typeTimer = 0;
+        if (dialogTextEl) {
+          dialogTextEl.textContent = 'Đang lắng nghe anh...';
+          dialogTextEl.dataset.typing = '1';
+        }
+        if (soulTextEl) {
+          soulTextEl.textContent = `✦ Hydrogen • ${soulMeta.displayVi} đang suy nghĩ...`;
+        }
+        triggerChibiBounce(composer, 'thinking');
+
+        let sawAnyDelta = false;
+        converseWithNpcHydrogen(msg, {
+          charId: soulMeta.charId,
+          masterId: soulMeta.masterId,
+          bTheme,
+          state: curStNow,
+          onDelta(fullSoFar) {
+            if (coreDestroyed || !wrap.isConnected) return;
+            sawAnyDelta = true;
+            if (dialogTextEl) {
+              dialogTextEl.textContent = fullSoFar.trimStart();
+              dialogTextEl.dataset.typing = '1';
+            }
+          }
+        }).then((aiRes) => {
+          if (coreDestroyed || !wrap.isConnected || (aiRes && aiRes.aborted)) return;
+          if (soulTextEl) {
+            soulTextEl.textContent = soulMeta.statusLine || '';
+          }
+          if (aiRes && aiRes.ok && aiRes.reply) {
+            const mem = getNpcConvMemory(soulMeta.charId);
+            mem.turnCount += 1;
+            if (turnBadgeEl) {
+              turnBadgeEl.textContent = `✦ Hydrogen • Lượt ${mem.turnCount}`;
+              turnBadgeEl.dataset.show = '1';
+            }
+            triggerChibiBounce(composer, 'happy');
+            if (sawAnyDelta && dialogTextEl) {
+              dialogTextEl.textContent = aiRes.reply;
+              delete dialogTextEl.dataset.typing;
+            } else {
+              speakShinobuLine(aiRes.reply, true);
+            }
+            return;
+          }
+          // Graceful fallback to local Canon Soul Engine when offline or unauthenticated
+          const fb = buildNpcReplyDetailed(msg, prof, curStNow);
+          if (turnBadgeEl) {
+            turnBadgeEl.textContent = `Lượt ${fb.turnCount}`;
+            turnBadgeEl.dataset.show = '1';
+          }
+          triggerChibiBounce(composer, fb.reaction);
+          speakShinobuLine(fb.reply, true);
+        });
       }
 
       wrap.querySelectorAll('[data-npc-topic-idx]').forEach((chipBtn) => {
@@ -7460,6 +7782,22 @@
         speakShinobuLine(pickRandomLine(chosen, cur, prof), true);
       });
 
+      const resetMemBtn = wrap.querySelector('[data-npc-act="reset-memory"]');
+      if (resetMemBtn) {
+        resetMemBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          resetNpcHydrogenMemory(soulMeta.charId, soulMeta.masterId);
+          if (turnBadgeEl) {
+            turnBadgeEl.textContent = '';
+            delete turnBadgeEl.dataset.show;
+          }
+          const sentBox = wrap.querySelector('.agy-npc-user-sent');
+          if (sentBox) delete sentBox.dataset.show;
+          triggerChibiBounce(composer, 'happy');
+          speakShinobuLine(pickRandomLine('welcome', '', prof), true);
+        });
+      }
+
       if (motionBtn) {
         motionBtn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -7482,6 +7820,52 @@
         rt.npcChatOpen = true;
         syncChatVisibility(true);
       });
+
+      const dualBanterBox = wrap.querySelector('.agy-npc-dual-banter');
+      const renderDualBanterInPopover = () => {
+        if (!dualBanterBox) return null;
+        const curStNow = getEffectiveState();
+        const exchange = buildDualBanterExchange(soulMeta.charId, soulMeta.masterId, bTheme, curStNow);
+        if (!exchange || !Array.isArray(exchange.turns) || exchange.turns.length < 2) return null;
+        dualBanterBox.innerHTML = exchange.turns.map((t) => {
+          const avUrl = safeCssUrl(t.avatar || '');
+          const avStyle = `${avUrl ? `background-image: url(&quot;${SEC.escapeHtml(avUrl)}&quot;);` : ''} border-color: ${SEC.escapeHtml(SEC.sanitizeCssValue(t.ringColor, '#fde047'))};`;
+          const spkStyle = `color: ${SEC.escapeHtml(SEC.sanitizeCssValue(t.ringColor, '#5eead4'))};`;
+          return (
+            `<div class="agy-npc-banter-turn" data-speaker-id="${SEC.escapeHtml(t.id || '')}">` +
+              `<span class="agy-npc-banter-av" style="${avStyle}"></span>` +
+              `<div class="agy-npc-banter-col">` +
+                `<span class="agy-npc-banter-speaker" style="${spkStyle}">${SEC.escapeHtml(t.name || '')}</span>` +
+                `<span class="agy-npc-banter-line">${SEC.escapeHtml(t.text || '')}</span>` +
+              `</div>` +
+            `</div>`
+          );
+        }).join('');
+        dualBanterBox.dataset.show = '1';
+        return exchange;
+      };
+
+      const dualBanterBtn = wrap.querySelector('[data-npc-act="dual-banter"]');
+      if (dualBanterBtn) {
+        dualBanterBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          triggerChibiBounce(composer, 'happy');
+          renderDualBanterInPopover();
+        });
+      }
+
+      const dualComboBtn = wrap.querySelector('[data-npc-act="dual-combo"]');
+      if (dualComboBtn) {
+        dualComboBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          triggerNpcDualCombo({
+            charA: soulMeta.charId,
+            charB: soulMeta.masterId,
+            bTheme
+          });
+          renderDualBanterInPopover();
+        });
+      }
 
       wrap.querySelector('[data-npc-act="close"]').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -7562,6 +7946,744 @@
     if (rt.remindTimer) {
       clearInterval(rt.remindTimer);
       rt.remindTimer = 0;
+    }
+  }
+
+  /* ==========================================================================
+   * v3.5 PILLAR #3 (PART B): 2-TURN POPOVER DUAL BANTER & DUAL COMBO DISPATCH
+   * ========================================================================== */
+
+  const DUAL_BANTER_DB = {
+    'shinobu+giyu': [
+      [
+        { speaker: 'shinobu', text: 'Ara ara~ Anh Tomioka lại đứng lặng một góc nhìn code chạy một mình nữa rồi kìa~' },
+        { speaker: 'giyu', text: '...Tôi không đứng một mình. Tôi đang canh chừng luồng bất đồng bộ.' }
+      ],
+      [
+        { speaker: 'giyu', text: 'Kocho, bản vá vừa rồi gọn và chính xác đấy.' },
+        { speaker: 'shinobu', text: 'Ô kìa, hôm nay Thủy Trụ biết khen người khác cơ đấy! Trời sắp đổ mưa hoa tử đằng mất thôi~' }
+      ]
+    ],
+    'obanai+mitsuri': [
+      [
+        { speaker: 'mitsuri', text: 'Waa~ Đường kiếm kiểm thử của Iguro-san sắc bén quá, không một con bug nào thoát nổi luôn!' },
+        { speaker: 'obanai', text: 'Chuyện nhỏ thôi Kanroji. Em cứ yên tâm viết tính năng mới, hậu phương để anh và Kaburamaru lo.' }
+      ],
+      [
+        { speaker: 'obanai', text: 'Kanroji, làm xong module này anh dẫn em đi ăn bánh sakura mochi nóng nhé.' },
+        { speaker: 'mitsuri', text: 'Thật ạ?! Em có thêm mười phần sức mạnh Luyến Trụ rồi đây!!' }
+      ]
+    ],
+    'giyu+tanjiro': [
+      [
+        { speaker: 'tanjiro', text: 'Anh Giyu ơi! Em vừa giữ nhịp thở đều và gỡ xong lỗi hóc búa nhất rồi ạ!' },
+        { speaker: 'giyu', text: 'Làm tốt lắm Tanjiro. Cứ giữ mặt nước tâm trí tĩnh lặng như thế.' }
+      ],
+      [
+        { speaker: 'giyu', text: 'Tanjiro, ăn chút củ cải hầm cá hồi lấy sức cho ca trực tiếp theo không?' },
+        { speaker: 'tanjiro', text: 'Dạ có ạ! Em cảm ơn anh Giyu nhiều lắm, nhìn anh mỉm cười là em vui lây luôn!' }
+      ]
+    ],
+    'rengoku+tanjiro': [
+      [
+        { speaker: 'rengoku', text: 'UMU! Tinh thần tập trung của em hôm nay rực cháy lắm, thiếu niên Kamado!' },
+        { speaker: 'tanjiro', text: 'Vâng thưa anh Rengoku! Em sẽ giữ ngọn lửa nhiệt huyết này đến dòng code cuối cùng!' }
+      ]
+    ],
+    'rengoku+uzui': [
+      [
+        { speaker: 'uzui', text: 'Này Kyojuro, màn phối hợp vừa rồi hào nhoáng chuẩn điểm mười lễ hội đấy nhỉ!' },
+        { speaker: 'rengoku', text: 'HAHA! Quả thực vô cùng tráng lệ đấy Tengen! Cùng tiến lên nào!' }
+      ]
+    ],
+    'rengoku+mitsuri': [
+      [
+        { speaker: 'mitsuri', text: 'Sư phụ Rengoku ơi, kiến trúc mới của em đã vượt qua toàn bộ bài kiểm thử rồi ạ!' },
+        { speaker: 'rengoku', text: 'TUYỆT VỜI LẮM KANROJI! Sư phụ vô cùng tự hào về hơi thở riêng của em!' }
+      ]
+    ],
+    'sanemi+gyomei': [
+      [
+        { speaker: 'sanemi', text: 'Lũ bug cứng đầu cỡ nào gặp chùy sắt của Himejima-san với gió lốc của tôi cũng nát vụn!' },
+        { speaker: 'gyomei', text: 'Nam Mô A Di Đà Phật... Sự quyết liệt của cậu luôn là điểm tựa vững chắc, Shinazugawa.' }
+      ]
+    ],
+    'sanemi+obanai': [
+      [
+        { speaker: 'obanai', text: 'Shinazugawa, hướng bên trái tôi khóa chặt rồi, đừng để sót tên lỗi nào nhé.' },
+        { speaker: 'sanemi', text: 'Hỏi thừa đấy Iguro! Nhào vô quét sạch cả ổ chúng trong một nhát luôn!' }
+      ]
+    ],
+    'sanemi+giyu': [
+      [
+        { speaker: 'sanemi', text: 'Này Tomioka, hôm nay tốc độ chém bug của anh cũng ra gì phết đấy, ăn ohagi đậu đỏ không?' },
+        { speaker: 'giyu', text: '...Cảm ơn Shinazugawa. Tôi nhận một chiếc.' }
+      ]
+    ],
+    'zenitsu+inosuke': [
+      [
+        { speaker: 'inosuke', text: 'HAHAHA! Nhìn thấy uy lực càn quét của Đấng Inosuke vĩ đại chưa hả Monitsu!!' },
+        { speaker: 'zenitsu', text: 'Cậu gọi sai tên tớ rồi đồ đầu heo kia!! Nhưng mà pha hợp kích vừa nãy đỉnh thật đấy!' }
+      ]
+    ],
+    'tanjiro+nezuko': [
+      [
+        { speaker: 'tanjiro', text: 'Nezuko ơi, anh em mình vừa dọn sạch hết lỗi đỏ cho anh chủ rồi nè!' },
+        { speaker: 'nezuko', text: 'Ưm~ ưm!! ✨ (Ánh mắt Nezuko lấp lánh vui vẻ gật đầu khen ngợi!)' }
+      ]
+    ],
+    'zenitsu+nezuko': [
+      [
+        { speaker: 'zenitsu', text: 'Nezuko-chaaan~ Anh vừa phóng Hích Lôi Nhất Thiểm siêu ngầu để bảo vệ bản build đó!!' },
+        { speaker: 'nezuko', text: 'Ưm ưm~ 🌸 (Nezuko vỗ nhẹ đầu Zenitsu khích lệ đầy dịu dàng!)' }
+      ]
+    ],
+    'muichiro+tanjiro': [
+      [
+        { speaker: 'muichiro', text: 'Ở cạnh Tanjiro lúc nào đầu óc tớ cũng quang đãng lạ thường, nhìn thấu ngay chỗ rò bộ nhớ.' },
+        { speaker: 'tanjiro', text: 'Đường kiếm Hà Chi Hô Hấp của cậu vừa nhanh vừa chuẩn xác thật đấy Muichiro!' }
+      ]
+    ],
+    'yoriichi+tanjiro': [
+      [
+        { speaker: 'tanjiro', text: 'Thưa ngài Yoriichi, em đã cố gắng giữ trọn nhịp thở Mặt Trời như lời cha truyền dạy ạ!' },
+        { speaker: 'yoriichi', text: 'Ánh nắng ấm áp trong đôi mắt cháu chính là điều quý giá nhất mà ta hằng mong ước, Tanjiro.' }
+      ]
+    ],
+    'yoriichi+muichiro': [
+      [
+        { speaker: 'muichiro', text: 'Kỳ lạ thật... nhìn kiếm thế của ngài, sương mù trong tâm trí cháu lập tức tĩnh lặng.' },
+        { speaker: 'yoriichi', text: 'Cháu đã trưởng thành rất kiên cường, Muichiro. Ta luôn dõi theo bước chân cháu.' }
+      ]
+    ]
+  };
+
+  let dualBanterCursor = 0;
+
+  function resolveMiniActorVisual(actorId, bThemeFallback) {
+    const clean = String(actorId || '').trim().toLowerCase();
+    const soul = CHAR_SOUL_DB[clean] || null;
+    const pFromForge = hasValidMasterPersona(clean) ? getActiveMasterPersona({ masterPersona: clean }) : null;
+    if (pFromForge && pFromForge.id === clean) {
+      return {
+        id: clean,
+        name: (soul && soul.displayVi) || String(pFromForge.tagLabel || clean).replace(/\s*\(Anh\)\s*$/i, ''),
+        avatar: pFromForge.userAvatar || (bThemeFallback && bThemeFallback.userAvatar) || '',
+        ringColor: pFromForge.ringColor || '#fde047'
+      };
+    }
+    const matchingKey = THEME_KEYS.find((k) => resolveNpcCharacterId(THEMES[k], { bubbleName: k }) === clean);
+    const th = (matchingKey && THEMES[matchingKey]) || bThemeFallback || {};
+    return {
+      id: clean,
+      name: (soul && soul.displayVi) || th.name || clean,
+      avatar: th.sticker || th.userAvatar || '',
+      ringColor: th.primary || '#c084fc'
+    };
+  }
+
+  function buildDualBanterExchange(charIdRaw, masterIdRaw, bThemeOverride, stOverride) {
+    const st = stOverride || getEffectiveState();
+    const bTheme = bThemeOverride || THEMES[st.bubbleName || st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    const charA = String(charIdRaw || resolveNpcCharacterId(bTheme, st) || 'shinobu').trim().toLowerCase();
+    const charB = String(masterIdRaw || st.masterPersona || 'yoriichi').trim().toLowerCase();
+    const effB = charB === charA ? (charA === 'yoriichi' ? 'shinobu' : 'yoriichi') : charB;
+
+    const visA = resolveMiniActorVisual(charA, bTheme);
+    const visB = resolveMiniActorVisual(effB, bTheme);
+    const visMap = { [charA]: visA, [effB]: visB };
+
+    const directKey = `${charA}+${effB}`;
+    const revKey = `${effB}+${charA}`;
+    const pool = DUAL_BANTER_DB[directKey] || DUAL_BANTER_DB[revKey] || null;
+
+    if (pool && pool.length > 0) {
+      const picked = pool[dualBanterCursor % pool.length];
+      dualBanterCursor += 1;
+      return {
+        pairKey: directKey,
+        isCanonPair: true,
+        turns: picked.map((item) => {
+          const v = visMap[item.speaker] || (item.speaker === charA ? visA : visB);
+          return {
+            id: v.id,
+            name: v.name,
+            avatar: v.avatar,
+            ringColor: v.ringColor,
+            text: item.text
+          };
+        })
+      };
+    }
+
+    // Reverent exchange whenever Lord Ubuyashiki is one of the two speakers
+    const soulA = CHAR_SOUL_DB[charA] || CHAR_SOUL_DB.shinobu;
+    const soulB = CHAR_SOUL_DB[effB] || CHAR_SOUL_DB.yoriichi;
+    if (effB === 'ubuyashiki' && charA !== 'ubuyashiki') {
+      return {
+        pairKey: directKey,
+        isCanonPair: true,
+        turns: [
+          {
+            id: visA.id,
+            name: visA.name,
+            avatar: visA.avatar,
+            ringColor: visA.ringColor,
+            text: (soulA.stances && soulA.stances.lordGreeting) || 'Thuộc hạ xin kính cẩn thưa Chúa Công, trận địa mã nguồn đã bình ổn!'
+          },
+          {
+            id: visB.id,
+            name: visB.name,
+            avatar: visB.avatar,
+            ringColor: visB.ringColor,
+            text: `Cảm ơn con rất nhiều, ${visA.name}. Ta luôn tự hào về thanh kiếm kiên định của con.`
+          }
+        ]
+      };
+    }
+
+    // Dynamic personality-true exchange for any arbitrary pair across all 19 characters
+    dualBanterCursor += 1;
+    const lineA = (soulA.chemistry && soulA.chemistry[effB] && soulA.chemistry[effB].greet) ||
+      (soulA.intents && Array.isArray(soulA.intents.praise) && soulA.intents.praise[0]) ||
+      `Phối hợp ăn ý lắm ${visB.name}, nhịp triển khai đang rất mượt!`;
+    const lineB = (soulB.chemistry && soulB.chemistry[charA] && soulB.chemistry[charA].greet) ||
+      (soulB.intents && Array.isArray(soulB.intents.greet) && soulB.intents.greet[0]) ||
+      `Cứ giữ vững thế trận này nhé ${visA.name}, không bug nào cản nổi chúng ta đâu!`;
+
+    return {
+      pairKey: directKey,
+      isCanonPair: false,
+      turns: [
+        { id: visA.id, name: visA.name, avatar: visA.avatar, ringColor: visA.ringColor, text: lineA },
+        { id: visB.id, name: visB.name, avatar: visB.avatar, ringColor: visB.ringColor, text: lineB }
+      ]
+    };
+  }
+
+  function triggerNpcDualCombo(rawOpts) {
+    const opts = rawOpts && typeof rawOpts === 'object' ? rawOpts : {};
+    const st = getEffectiveState();
+    const bTheme = opts.bTheme || THEMES[st.bubbleName || st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+    const charA = String(opts.charA || resolveNpcCharacterId(bTheme, st) || 'shinobu').trim().toLowerCase();
+    const charB = String(opts.charB || st.masterPersona || 'yoriichi').trim().toLowerCase();
+    const personaB = getActiveMasterPersona(st);
+    if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.castDualSkill === 'function') {
+      return window.__AGY_KNY_SKILLS__.castDualSkill(charA, charB, {
+        actionStickerA: bTheme.actionSticker || '',
+        actionStickerB: (personaB && personaB.actionSticker) || bTheme.userActionSticker || ''
+      });
+    }
+    return { ok: false, reason: 'skills_engine_unavailable' };
+  }
+
+  /* ==========================================================================
+   * v3.5 PILLAR #2: INFINITY CASTLE SESSION MINIMAP (#agy-infinity-castle-rail)
+   * ========================================================================== */
+
+  const INFINITY_RAIL_ID = 'agy-infinity-castle-rail';
+  const INFINITY_STYLE_ID = 'antigravity-infinity-castle-style';
+  const INFINITY_BOOKMARK_STORAGE_KEY = 'agy_infinity_bookmarks_v1';
+  const MAX_INFINITY_BOOKMARK_CIDS = 20;
+
+  let infinityCastleScrollTimer = 0;
+  let infinityCastleFlashTimer = 0;
+  let lastInfinityRailSig = '';
+  let lastInfinityItemsSnapshot = [];
+
+  function readInfinityBookmarkStore() {
+    try {
+      if (typeof localStorage === 'undefined') return { order: [], byCid: {} };
+      const raw = localStorage.getItem(INFINITY_BOOKMARK_STORAGE_KEY);
+      if (!raw) return { order: [], byCid: {} };
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return { order: [], byCid: {} };
+      const order = Array.isArray(parsed.order) ? parsed.order.filter((x) => typeof x === 'string' && x) : [];
+      const byCid = parsed.byCid && typeof parsed.byCid === 'object' ? parsed.byCid : {};
+      return { order, byCid };
+    } catch (_) {
+      return { order: [], byCid: {} };
+    }
+  }
+
+  function writeInfinityBookmarkStore(store) {
+    try {
+      if (typeof localStorage === 'undefined' || !store) return false;
+      const cleanOrder = [];
+      const seen = new Set();
+      for (let i = 0; i < store.order.length; i++) {
+        const cid = String(store.order[i] || '').trim();
+        if (!cid || seen.has(cid) || !store.byCid[cid] || Object.keys(store.byCid[cid]).length === 0) continue;
+        seen.add(cid);
+        cleanOrder.push(cid);
+      }
+      while (cleanOrder.length > MAX_INFINITY_BOOKMARK_CIDS) {
+        const evicted = cleanOrder.shift();
+        if (evicted) delete store.byCid[evicted];
+      }
+      const cleanByCid = {};
+      cleanOrder.forEach((cid) => {
+        cleanByCid[cid] = store.byCid[cid];
+      });
+      localStorage.setItem(INFINITY_BOOKMARK_STORAGE_KEY, JSON.stringify({ order: cleanOrder, byCid: cleanByCid }));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function resolveActiveInfinityCid() {
+    if (typeof window !== 'undefined' && window.location) {
+      const loc = `${window.location.pathname || ''}${window.location.hash || ''}${window.location.search || ''}`;
+      const m = loc.match(/\/c\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+      if (m) return m[1].toLowerCase();
+    }
+    if (typeof document !== 'undefined') {
+      const el = document.querySelector('[data-main-content-body="true"] [data-conversation-id], [data-main-content-body="true"] [data-cascade-id], [data-conversation-id], [data-cascade-id]');
+      if (el) {
+        const v = String(el.getAttribute('data-conversation-id') || el.getAttribute('data-cascade-id') || '').trim().toLowerCase();
+        if (v) return v;
+      }
+    }
+    return 'default-session';
+  }
+
+  function getBookmarksForCid(cid) {
+    const key = String(cid || resolveActiveInfinityCid()).trim() || 'default-session';
+    const store = readInfinityBookmarkStore();
+    return (store.byCid && store.byCid[key]) ? { ...store.byCid[key] } : {};
+  }
+
+  function toggleInfinityBookmark(itemKey, cidOverride, metaOverride) {
+    const cleanKey = String(itemKey || '').trim();
+    if (!cleanKey) return { ok: false, pinned: false };
+    const cid = String(cidOverride || resolveActiveInfinityCid()).trim() || 'default-session';
+    const store = readInfinityBookmarkStore();
+    if (!store.byCid[cid] || typeof store.byCid[cid] !== 'object') {
+      store.byCid[cid] = {};
+    }
+    let pinned = false;
+    if (Object.prototype.hasOwnProperty.call(store.byCid[cid], cleanKey)) {
+      delete store.byCid[cid][cleanKey];
+      pinned = false;
+    } else {
+      const m = metaOverride && typeof metaOverride === 'object' ? metaOverride : {};
+      store.byCid[cid][cleanKey] = {
+        label: String(m.label || cleanKey).slice(0, 80),
+        kind: String(m.kind || 'prompt'),
+        pinnedAt: Date.now()
+      };
+      pinned = true;
+    }
+    store.order = store.order.filter((x) => x !== cid);
+    if (Object.keys(store.byCid[cid]).length > 0) {
+      store.order.push(cid);
+    } else {
+      delete store.byCid[cid];
+    }
+    writeInfinityBookmarkStore(store);
+    lastInfinityRailSig = '';
+    syncInfinityCastleMinimap();
+    return {
+      ok: true,
+      cid,
+      itemKey: cleanKey,
+      pinned,
+      storedCidCount: readInfinityBookmarkStore().order.length
+    };
+  }
+
+  function ensureInfinityCastleStyles() {
+    if (typeof document === 'undefined' || document.getElementById(INFINITY_STYLE_ID)) return;
+    const st = document.createElement('style');
+    st.id = INFINITY_STYLE_ID;
+    st.textContent = `
+      #${INFINITY_RAIL_ID} {
+        position: fixed;
+        top: 76px;
+        right: 8px;
+        max-height: calc(100vh - 188px);
+        width: 8px;
+        z-index: 46;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 6px 1px;
+        border-radius: 10px;
+        background: rgba(11, 9, 22, 0.46);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        overflow-x: hidden;
+        overflow-y: auto;
+        scrollbar-width: none;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'Noto Sans', sans-serif;
+        -webkit-app-region: no-drag;
+        transition: width 0.18s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.18s ease, border-color 0.18s ease, padding 0.18s ease;
+      }
+      #${INFINITY_RAIL_ID}::-webkit-scrollbar {
+        display: none;
+      }
+      #${INFINITY_RAIL_ID}[data-hidden="1"] {
+        display: none !important;
+      }
+      #${INFINITY_RAIL_ID}:hover,
+      #${INFINITY_RAIL_ID}:focus-within,
+      #${INFINITY_RAIL_ID}[data-expanded="1"] {
+        width: 248px;
+        padding: 8px;
+        background: linear-gradient(165deg, rgba(16, 12, 30, 0.97) 0%, rgba(26, 16, 36, 0.96) 100%);
+        border-color: var(--ic-border, rgba(250, 204, 21, 0.58));
+        box-shadow: 0 14px 34px rgba(2, 4, 14, 0.85), 0 0 18px var(--ic-glow, rgba(250, 204, 21, 0.22));
+      }
+      .agy-ic-hdr {
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 5px;
+        margin-bottom: 2px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--ic-primary, #fde047);
+        letter-spacing: 0.2px;
+        white-space: nowrap;
+      }
+      #${INFINITY_RAIL_ID}:hover .agy-ic-hdr,
+      #${INFINITY_RAIL_ID}:focus-within .agy-ic-hdr,
+      #${INFINITY_RAIL_ID}[data-expanded="1"] .agy-ic-hdr {
+        display: flex;
+      }
+      .agy-ic-row {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-height: 8px;
+      }
+      .agy-ic-tick {
+        width: 6px;
+        height: 6px;
+        border-radius: 9999px;
+        flex-shrink: 0;
+        background: var(--ic-primary, #c084fc);
+        box-shadow: 0 0 6px var(--ic-primary, #c084fc);
+      }
+      .agy-ic-row[data-kind="code"] .agy-ic-tick {
+        background: var(--ic-secondary, #5eead4);
+        box-shadow: 0 0 6px var(--ic-secondary, #5eead4);
+      }
+      .agy-ic-row[data-kind="error"] .agy-ic-tick {
+        background: #ef4444;
+        box-shadow: 0 0 7px rgba(239, 68, 68, 0.9);
+      }
+      .agy-ic-row[data-pinned="1"] .agy-ic-tick {
+        height: 9px;
+        background: #facc15;
+        box-shadow: 0 0 9px rgba(250, 204, 21, 0.95);
+      }
+      .agy-ic-jump-btn {
+        display: none;
+        align-items: center;
+        gap: 5.5px;
+        min-width: 0;
+        flex: 1;
+        padding: 3.5px 6px;
+        border-radius: 7px;
+        border: none;
+        background: transparent;
+        color: #e2e8f0;
+        font-size: 10.8px;
+        text-align: left;
+        cursor: pointer;
+        transition: background-color 0.14s ease, color 0.14s ease;
+      }
+      .agy-ic-jump-btn:hover {
+        background: rgba(255, 255, 255, 0.11);
+        color: #ffffff;
+      }
+      .agy-ic-ico {
+        font-size: 11px;
+        flex-shrink: 0;
+      }
+      .agy-ic-lbl {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+      }
+      .agy-ic-pin-btn {
+        display: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: rgba(226, 232, 240, 0.45);
+        font-size: 10.5px;
+        line-height: 1;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0;
+        flex-shrink: 0;
+        transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+      }
+      .agy-ic-pin-btn:hover,
+      .agy-ic-row[data-pinned="1"] .agy-ic-pin-btn {
+        color: #fde047;
+        border-color: rgba(250, 204, 21, 0.42);
+        background: rgba(250, 204, 21, 0.12);
+      }
+      #${INFINITY_RAIL_ID}:hover .agy-ic-tick,
+      #${INFINITY_RAIL_ID}:focus-within .agy-ic-tick,
+      #${INFINITY_RAIL_ID}[data-expanded="1"] .agy-ic-tick {
+        display: none;
+      }
+      #${INFINITY_RAIL_ID}:hover .agy-ic-jump-btn,
+      #${INFINITY_RAIL_ID}:focus-within .agy-ic-jump-btn,
+      #${INFINITY_RAIL_ID}[data-expanded="1"] .agy-ic-jump-btn,
+      #${INFINITY_RAIL_ID}:hover .agy-ic-pin-btn,
+      #${INFINITY_RAIL_ID}:focus-within .agy-ic-pin-btn,
+      #${INFINITY_RAIL_ID}[data-expanded="1"] .agy-ic-pin-btn {
+        display: inline-flex;
+      }
+      @keyframes agyShojiGoldenFlash {
+        0%   { outline: 2px solid #fde047; box-shadow: 0 0 26px rgba(250, 204, 21, 0.62), inset 0 0 14px rgba(250, 204, 21, 0.24); }
+        100% { outline: 2px solid rgba(250, 204, 21, 0); box-shadow: 0 0 0 rgba(250, 204, 21, 0); }
+      }
+      .agy-ic-shoji-flash {
+        border-radius: 10px;
+        animation: agyShojiGoldenFlash 1.1s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function collectInfinityCastleItems() {
+    if (typeof document === 'undefined') return [];
+    const mainRoot = document.querySelector('[data-main-content-body="true"]') || document.body;
+    if (!mainRoot) return [];
+    const nodes = Array.from(mainRoot.querySelectorAll('[data-testid="user-message"], [data-testid="agent-response"]'));
+    const cid = resolveActiveInfinityCid();
+    const bookmarks = getBookmarksForCid(cid);
+
+    let userOrd = 0;
+    let agentOrd = 0;
+    const out = [];
+
+    for (let i = 0; i < nodes.length; i++) {
+      const el = nodes[i];
+      if (!el || (typeof el.closest === 'function' && el.closest('[data-side-panel-body="true"], [data-sidebar="true"], aside, #agy-custom-theme-modal-backdrop'))) {
+        continue;
+      }
+      const tid = String(el.getAttribute('data-testid') || '');
+      const isUser = tid === 'user-message';
+      const ord = isUser ? (userOrd++) : (agentOrd++);
+      const explicitId = String(el.getAttribute('data-message-id') || el.id || '').trim();
+      const itemKey = explicitId || `${isUser ? 'u' : 'a'}-${ord}`;
+
+      const rawText = String(el.textContent || '').replace(/\s+/g, ' ').trim();
+      const preview = rawText ? rawText.slice(0, 52) + (rawText.length > 52 ? '…' : '') : (isUser ? `Lệnh #${ord + 1}` : `Phản hồi #${ord + 1}`);
+
+      let kind = 'reply';
+      let icon = '🏯';
+      if (isUser) {
+        kind = 'prompt';
+        icon = '⚔️';
+      } else {
+        const hasErr = Boolean(
+          (typeof el.querySelector === 'function' && el.querySelector('.error, [data-error="true"]')) ||
+          /(?:Traceback \(most recent|Error:|Exception:|panicked at|\bFAIL\b|ERR!|exit code [1-9])/i.test(rawText)
+        );
+        const hasCode = Boolean(typeof el.querySelector === 'function' && el.querySelector('pre'));
+        if (hasErr) {
+          kind = 'error';
+          icon = '🩸';
+        } else if (hasCode) {
+          kind = 'code';
+          icon = '📜';
+        }
+      }
+
+      const pinned = Boolean(Object.prototype.hasOwnProperty.call(bookmarks, itemKey));
+      out.push({
+        index: out.length,
+        itemKey,
+        cid,
+        kind,
+        icon: pinned ? '🏮' : icon,
+        baseIcon: icon,
+        pinned,
+        label: preview,
+        el
+      });
+    }
+    return out;
+  }
+
+  function updateInfinityRailGeometry(rail) {
+    if (!rail || typeof document === 'undefined' || typeof window === 'undefined') return;
+    let rightPx = 8;
+    const vw = Math.max(320, Number(window.innerWidth) || 1280);
+    const mainEl = document.querySelector('[data-main-content-body="true"]');
+    if (mainEl && typeof mainEl.getBoundingClientRect === 'function') {
+      const r = mainEl.getBoundingClientRect();
+      if (r.width > 80 && r.right > 0 && r.right <= vw) {
+        rightPx = Math.max(rightPx, Math.round(vw - r.right + 6));
+      }
+      if (r.top > 24 && r.top < 240) {
+        rail.style.top = `${Math.round(r.top + 14)}px`;
+      }
+    }
+    const sideEl = document.querySelector('[data-side-panel-body="true"]');
+    if (sideEl && typeof sideEl.getBoundingClientRect === 'function') {
+      const sr = sideEl.getBoundingClientRect();
+      if (sr.width > 24 && sr.left > 80 && sr.left < vw) {
+        rightPx = Math.max(rightPx, Math.round(vw - sr.left + 8));
+      }
+    }
+    rail.style.right = `${rightPx}px`;
+  }
+
+  function syncInfinityCastleMinimap(stOverride, themeOverride) {
+    if (coreDestroyed || typeof document === 'undefined' || !document.body) return null;
+    const st = stOverride || getEffectiveState();
+    const mTheme = themeOverride || THEMES[st.themeName] || THEMES[DEFAULT_THEME_KEY] || {};
+
+    ensureInfinityCastleStyles();
+    let rail = document.getElementById(INFINITY_RAIL_ID);
+    if (!rail) {
+      rail = document.createElement('nav');
+      rail.id = INFINITY_RAIL_ID;
+      rail.setAttribute('aria-label', 'Trục điều hướng Vô Hạn Thành');
+      document.body.appendChild(rail);
+    }
+
+    rail.style.setProperty('--ic-primary', SEC.sanitizeCssValue(mTheme.primary, '#fde047'));
+    rail.style.setProperty('--ic-secondary', SEC.sanitizeCssValue(mTheme.accent || mTheme.secondary, '#5eead4'));
+    rail.style.setProperty('--ic-border', SEC.sanitizeCssValue(mTheme.borderColor, 'rgba(250, 204, 21, 0.55)'));
+    rail.style.setProperty('--ic-glow', SEC.sanitizeCssValue(mTheme.glow, 'rgba(250, 204, 21, 0.22)'));
+
+    const items = collectInfinityCastleItems();
+    lastInfinityItemsSnapshot = items;
+
+    if (items.length < 3) {
+      rail.dataset.hidden = '1';
+      lastInfinityRailSig = 'hidden:<3';
+      return rail;
+    }
+    delete rail.dataset.hidden;
+    updateInfinityRailGeometry(rail);
+
+    const sig = items.map((it) => `${it.itemKey}:${it.kind}:${it.pinned ? 1 : 0}:${it.label.slice(0, 18)}`).join('|');
+    if (sig === lastInfinityRailSig && rail.childElementCount > 0) {
+      return rail;
+    }
+    lastInfinityRailSig = sig;
+
+    const pinnedCount = items.filter((x) => x.pinned).length;
+    const hdrHtml =
+      `<div class="agy-ic-hdr">` +
+        `<span>🏯 Trục Vô Hạn Thành (${items.length})</span>` +
+        `<span>${pinnedCount > 0 ? `🏮 ${pinnedCount}` : 'Đàn Tỳ Bà'}</span>` +
+      `</div>`;
+
+    const rowsHtml = items.map((it, idx) => {
+      const safeKey = SEC.escapeHtml(it.itemKey);
+      const safeKind = SEC.escapeHtml(it.kind);
+      const safeLbl = SEC.escapeHtml(it.label);
+      const pinAttr = it.pinned ? ' data-pinned="1"' : '';
+      const pinTitle = it.pinned ? 'Bỏ ghim đèn lồng Vô Hạn Thành' : 'Ghim dấu mốc đèn lồng 🏮';
+      return (
+        `<div class="agy-ic-row" data-idx="${idx}" data-item-key="${safeKey}" data-kind="${safeKind}"${pinAttr}>` +
+          `<span class="agy-ic-tick" title="${safeLbl}"></span>` +
+          `<button type="button" class="agy-ic-jump-btn" data-ic-jump="${idx}" title="${safeLbl}">` +
+            `<span class="agy-ic-ico">${it.icon}</span>` +
+            `<span class="agy-ic-lbl">${safeLbl}</span>` +
+          `</button>` +
+          `<button type="button" class="agy-ic-pin-btn" data-ic-pin="${idx}" title="${pinTitle}" aria-label="${pinTitle}">🏮</button>` +
+        `</div>`
+      );
+    }).join('');
+
+    rail.innerHTML = hdrHtml + rowsHtml;
+
+    rail.querySelectorAll('[data-ic-jump]').forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const idx = parseInt(btn.getAttribute('data-ic-jump'), 10);
+        const targetItem = lastInfinityItemsSnapshot[idx];
+        if (!targetItem || !targetItem.el) return;
+        if (window.__AGY_BIO_AUDIO__ && typeof window.__AGY_BIO_AUDIO__.playBiwaPluck === 'function') {
+          try { window.__AGY_BIO_AUDIO__.playBiwaPluck({ semitone: (idx % 5) - 2 }); } catch (_) {}
+        }
+        try {
+          if (typeof targetItem.el.scrollIntoView === 'function') {
+            targetItem.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+          document.querySelectorAll('.agy-ic-shoji-flash').forEach((n) => n.classList.remove('agy-ic-shoji-flash'));
+          void targetItem.el.offsetWidth;
+          targetItem.el.classList.add('agy-ic-shoji-flash');
+          clearTimeout(infinityCastleFlashTimer);
+          infinityCastleFlashTimer = setTimeout(() => {
+            infinityCastleFlashTimer = 0;
+            try { targetItem.el.classList.remove('agy-ic-shoji-flash'); } catch (_) {}
+          }, 1150);
+        } catch (_) {}
+      });
+    });
+
+    rail.querySelectorAll('[data-ic-pin]').forEach((pinBtn) => {
+      pinBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const idx = parseInt(pinBtn.getAttribute('data-ic-pin'), 10);
+        const targetItem = lastInfinityItemsSnapshot[idx];
+        if (!targetItem) return;
+        if (window.__AGY_BIO_AUDIO__ && typeof window.__AGY_BIO_AUDIO__.playBiwaPluck === 'function') {
+          try { window.__AGY_BIO_AUDIO__.playBiwaPluck({ semitone: 5 }); } catch (_) {}
+        }
+        toggleInfinityBookmark(targetItem.itemKey, targetItem.cid, {
+          label: targetItem.label,
+          kind: targetItem.kind
+        });
+      });
+    });
+
+    return rail;
+  }
+
+  function getInfinityCastleState() {
+    const rail = typeof document !== 'undefined' ? document.getElementById(INFINITY_RAIL_ID) : null;
+    const cid = resolveActiveInfinityCid();
+    const store = readInfinityBookmarkStore();
+    return {
+      mounted: Boolean(rail && rail.isConnected),
+      hidden: Boolean(!rail || rail.dataset.hidden === '1'),
+      cid,
+      itemCount: lastInfinityItemsSnapshot.length,
+      items: lastInfinityItemsSnapshot.map((it) => ({
+        itemKey: it.itemKey,
+        kind: it.kind,
+        icon: it.icon,
+        pinned: it.pinned,
+        label: it.label
+      })),
+      storedCidCount: store.order.length,
+      bookmarksForCid: store.byCid[cid] || {}
+    };
+  }
+
+  function teardownInfinityCastleMinimap() {
+    clearTimeout(infinityCastleScrollTimer);
+    infinityCastleScrollTimer = 0;
+    clearTimeout(infinityCastleFlashTimer);
+    infinityCastleFlashTimer = 0;
+    lastInfinityRailSig = '';
+    lastInfinityItemsSnapshot = [];
+    if (typeof document !== 'undefined') {
+      const rail = document.getElementById(INFINITY_RAIL_ID);
+      if (rail) rail.remove();
+      const st = document.getElementById(INFINITY_STYLE_ID);
+      if (st) st.remove();
+      document.querySelectorAll('.agy-ic-shoji-flash').forEach((el) => el.classList.remove('agy-ic-shoji-flash'));
     }
   }
 
@@ -7784,6 +8906,7 @@
     syncLiveWallpaperFx();
     syncShinobuNpc();
     syncTokenHud();
+    syncInfinityCastleMinimap();
   }
 
   function scheduleTick() {
@@ -7817,6 +8940,7 @@
   if (staleSettingsBtn) staleSettingsBtn.remove();
   try { teardownLiveWallpaperFx(); } catch (e) {}
   try { teardownShinobuNpc(); } catch (e) {}
+  try { teardownInfinityCastleMinimap(); } catch (e) {}
   try { document.querySelectorAll('.agy-yoriichi-msg-hit').forEach(el => el.remove()); } catch (e) {}
   try { if (window.__AGY_KNY_SKILLS__ && typeof window.__AGY_KNY_SKILLS__.stopActiveSkill === 'function') window.__AGY_KNY_SKILLS__.stopActiveSkill(); } catch (e) {}
 
@@ -7831,7 +8955,7 @@
   }
 
   const INTERNAL_ENGINE_MUTATION_SELECTOR =
-    '#agy-token-context-bar, #agy-yoriichi-msg-echo, #agy-shinobu-npc-wrap, agy-chibi-aura, agy-hashira-squad, agy-skill-vfx, agy-live-fx, #agy-live-fx-host, #agy-cinema-director-panel, #agy-cinema-privacy-badge, #agy-cinema-stage-banner, #agy-cinema-metsu-seal, #agy-cinema-red-blade-crest, #agy-kny-bio-audio-popover, #agy-kny-circadian-toast, agy-circadian-veil, #agy-kny-dawn-glow-layer, #agy-metsu-victory-overlay, .agy-kasugai-crow-flyby, #agy-custom-theme-modal-backdrop';
+    '#agy-token-context-bar, #agy-yoriichi-msg-echo, #agy-kasugai-herald, #agy-infinity-castle-rail, #agy-shinobu-npc-wrap, agy-chibi-aura, agy-hashira-squad, agy-skill-vfx, agy-live-fx, #agy-live-fx-host, #agy-cinema-director-panel, #agy-cinema-privacy-badge, #agy-cinema-stage-banner, #agy-cinema-metsu-seal, #agy-cinema-red-blade-crest, #agy-kny-bio-audio-popover, #agy-kny-circadian-toast, agy-circadian-veil, #agy-kny-dawn-glow-layer, #agy-metsu-victory-overlay, .agy-kasugai-crow-flyby, #agy-custom-theme-modal-backdrop';
 
   function isInternalEngineMutation(m) {
     const t = m && m.target;

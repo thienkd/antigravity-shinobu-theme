@@ -525,6 +525,262 @@
     });
   }
 
+  let lastBiwaAt = 0;
+  let lastHeraldAt = 0;
+
+  /**
+   * 1b) playBiwaPluck(): Nakime Infinity Castle Satsuma Biwa String Pluck (~120ms crisp attack + woody sawari decay)
+   * Pure 0KB WebAudio synthesis obeying Kagura bell mute state (enabled && chimeEnabled).
+   */
+  function playBiwaPluck(opts = {}) {
+    const force = Boolean(opts && opts.force);
+    if (state.destroyed) return false;
+    if (!force && (!state.prefs.enabled || !state.prefs.chimeEnabled)) return false;
+
+    const nowMs = Date.now();
+    if (!force && nowMs - lastBiwaAt < 75) return false;
+
+    return withRunningAudioContext(900, (ctx) => {
+      const fireMs = Date.now();
+      if (!force && fireMs - lastBiwaAt < 75) return;
+      lastBiwaAt = fireMs;
+
+      const t0 = ctx.currentTime + 0.008;
+      const semi = Number.isFinite(Number(opts.semitone)) ? Math.max(-7, Math.min(12, Number(opts.semitone))) : 0;
+      const baseFreq = 196.0 * Math.pow(2, semi / 12); // G3 Hirajoshi root
+
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0.088, t0);
+      masterGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.26);
+      masterGain.connect(ctx.destination);
+
+      // Sawari woody resonance filter (sweeps down fast for unmistakable Biwa "ben!" timbre)
+      const bodyFilter = ctx.createBiquadFilter();
+      bodyFilter.type = 'lowpass';
+      bodyFilter.frequency.setValueAtTime(2650, t0);
+      bodyFilter.frequency.exponentialRampToValueAtTime(540, t0 + 0.14);
+      bodyFilter.Q.setValueAtTime(2.8, t0);
+      bodyFilter.connect(masterGain);
+
+      let partsLeft = 3;
+      const donePart = (nodes) => {
+        disconnectAll(nodes);
+        partsLeft -= 1;
+        if (partsLeft <= 0) {
+          disconnectAll([bodyFilter, masterGain]);
+        }
+      };
+
+      // Voice 1: Sawtooth Sawari string buzz with slight downward bachi pitch bend
+      const sawOsc = ctx.createOscillator();
+      const sawGain = ctx.createGain();
+      sawOsc.type = 'sawtooth';
+      sawOsc.frequency.setValueAtTime(baseFreq * 1.032, t0);
+      sawOsc.frequency.exponentialRampToValueAtTime(baseFreq, t0 + 0.026);
+      sawGain.gain.setValueAtTime(0.0001, t0);
+      sawGain.gain.linearRampToValueAtTime(0.68, t0 + 0.004);
+      sawGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+      sawOsc.connect(sawGain);
+      sawGain.connect(bodyFilter);
+      sawOsc.onended = () => donePart([sawOsc, sawGain]);
+      sawOsc.start(t0);
+      sawOsc.stop(t0 + 0.24);
+
+      // Voice 2: Detuned fifth/octave resonance string
+      const resOsc = ctx.createOscillator();
+      const resGain = ctx.createGain();
+      resOsc.type = 'triangle';
+      resOsc.frequency.setValueAtTime(baseFreq * 1.498, t0);
+      resGain.gain.setValueAtTime(0.0001, t0);
+      resGain.gain.linearRampToValueAtTime(0.38, t0 + 0.006);
+      resGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+      resOsc.connect(resGain);
+      resGain.connect(bodyFilter);
+      resOsc.onended = () => donePart([resOsc, resGain]);
+      resOsc.start(t0);
+      resOsc.stop(t0 + 0.20);
+
+      // Voice 3: Wooden Bachi plectrum transient snap (~18ms)
+      const snapSrc = ctx.createBufferSource();
+      snapSrc.buffer = getNoiseBuffer(ctx, 'white');
+      const snapBp = ctx.createBiquadFilter();
+      snapBp.type = 'bandpass';
+      snapBp.frequency.setValueAtTime(1780, t0);
+      snapBp.Q.setValueAtTime(2.2, t0);
+      const snapGain = ctx.createGain();
+      snapGain.gain.setValueAtTime(0.75, t0);
+      snapGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.022);
+      snapSrc.connect(snapBp);
+      snapBp.connect(snapGain);
+      snapGain.connect(masterGain);
+      snapSrc.onended = () => donePart([snapSrc, snapBp, snapGain]);
+      snapSrc.start(t0);
+      snapSrc.stop(t0 + 0.028);
+
+      markOneShotActivity(0.8);
+    });
+  }
+
+  /**
+   * 1c) playKasugaiHeraldChime(kind, opts): Character-Specific Messenger Arrival Cue (~0.45s - 0.58s)
+   * - 'chuntaro'  : Twin crisp sparrow chirps (Zenitsu)
+   * - 'kaburamaru': Soft silk-scale whisper + silver suzu bell (Obanai)
+   * - 'butterfly' : Crystalline Furin twin harmonic (Shinobu / Mitsuri / Nezuko)
+   * - 'crow'      : Warm Hirajoshi messenger bell + wing breeze (Kasugai Crow / Royal / Multiverse)
+   */
+  function playKasugaiHeraldChime(kind = 'crow', opts = {}) {
+    const force = Boolean(opts && opts.force);
+    if (state.destroyed) return false;
+    if (!force && (!state.prefs.enabled || !state.prefs.chimeEnabled)) return false;
+
+    const nowMs = Date.now();
+    if (!force && nowMs - lastHeraldAt < 550) return false;
+
+    const normKind = String(kind || 'crow').trim().toLowerCase();
+
+    return withRunningAudioContext(1000, (ctx) => {
+      const fireMs = Date.now();
+      if (!force && fireMs - lastHeraldAt < 550) return;
+      lastHeraldAt = fireMs;
+
+      const t0 = ctx.currentTime + 0.01;
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0.072, t0);
+      masterGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.62);
+      masterGain.connect(ctx.destination);
+
+      if (normKind === 'chuntaro') {
+        let left = 2;
+        [0, 0.115].forEach((offset, idx) => {
+          const st = t0 + offset;
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = 'sine';
+          const fStart = idx === 0 ? 2280 : 2560;
+          const fPeak = idx === 0 ? 3180 : 3520;
+          osc.frequency.setValueAtTime(fStart, st);
+          osc.frequency.exponentialRampToValueAtTime(fPeak, st + 0.048);
+          osc.frequency.exponentialRampToValueAtTime(fStart * 1.08, st + 0.088);
+          g.gain.setValueAtTime(0.0001, st);
+          g.gain.linearRampToValueAtTime(0.85, st + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.0001, st + 0.095);
+          osc.connect(g);
+          g.connect(masterGain);
+          osc.onended = () => {
+            disconnectAll([osc, g]);
+            left -= 1;
+            if (left <= 0) disconnectAll([masterGain]);
+          };
+          osc.start(st);
+          osc.stop(st + 0.105);
+        });
+      } else if (normKind === 'kaburamaru') {
+        let left = 2;
+        const done = (nodes) => {
+          disconnectAll(nodes);
+          left -= 1;
+          if (left <= 0) disconnectAll([masterGain]);
+        };
+        const hiss = ctx.createBufferSource();
+        hiss.buffer = getNoiseBuffer(ctx, 'white');
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(3600, t0);
+        bp.frequency.exponentialRampToValueAtTime(2400, t0 + 0.24);
+        bp.Q.setValueAtTime(3.2, t0);
+        const hg = ctx.createGain();
+        hg.gain.setValueAtTime(0.0001, t0);
+        hg.gain.linearRampToValueAtTime(0.32, t0 + 0.03);
+        hg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.26);
+        hiss.connect(bp);
+        bp.connect(hg);
+        hg.connect(masterGain);
+        hiss.onended = () => done([hiss, bp, hg]);
+        hiss.start(t0);
+        hiss.stop(t0 + 0.28);
+
+        const bell = ctx.createOscillator();
+        const bg = ctx.createGain();
+        bell.type = 'sine';
+        bell.frequency.setValueAtTime(1318.51, t0 + 0.05);
+        bg.gain.setValueAtTime(0.0001, t0 + 0.05);
+        bg.gain.linearRampToValueAtTime(0.68, t0 + 0.062);
+        bg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.48);
+        bell.connect(bg);
+        bg.connect(masterGain);
+        bell.onended = () => done([bell, bg]);
+        bell.start(t0 + 0.05);
+        bell.stop(t0 + 0.50);
+      } else if (normKind === 'butterfly' || normKind === 'clover' || normKind === 'ribbon') {
+        const freqs = normKind === 'clover' ? [1567.98, 2349.32] : [1760.0, 2637.02];
+        let left = freqs.length;
+        freqs.forEach((f, idx) => {
+          const st = t0 + idx * 0.065;
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(f, st);
+          g.gain.setValueAtTime(0.0001, st);
+          g.gain.linearRampToValueAtTime(idx === 0 ? 0.72 : 0.46, st + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, st + 0.50);
+          osc.connect(g);
+          g.connect(masterGain);
+          osc.onended = () => {
+            disconnectAll([osc, g]);
+            left -= 1;
+            if (left <= 0) disconnectAll([masterGain]);
+          };
+          osc.start(st);
+          osc.stop(st + 0.52);
+        });
+      } else {
+        // Kasugai Crow / Mist Ginko / Royal / Multiverse: twin Hirajoshi chime + soft wing rustle
+        const notes = [587.33, 880.0];
+        let left = notes.length + 1;
+        const done = (nodes) => {
+          disconnectAll(nodes);
+          left -= 1;
+          if (left <= 0) disconnectAll([masterGain]);
+        };
+        notes.forEach((f, idx) => {
+          const st = t0 + idx * 0.085;
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(f * 1.01, st);
+          osc.frequency.exponentialRampToValueAtTime(f, st + 0.024);
+          g.gain.setValueAtTime(0.0001, st);
+          g.gain.linearRampToValueAtTime(0.76 - idx * 0.14, st + 0.009);
+          g.gain.exponentialRampToValueAtTime(0.0001, st + 0.46);
+          osc.connect(g);
+          g.connect(masterGain);
+          osc.onended = () => done([osc, g]);
+          osc.start(st);
+          osc.stop(st + 0.48);
+        });
+
+        const wing = ctx.createBufferSource();
+        wing.buffer = getNoiseBuffer(ctx, 'pink');
+        const wFilter = ctx.createBiquadFilter();
+        wFilter.type = 'bandpass';
+        wFilter.frequency.setValueAtTime(620, t0);
+        wFilter.Q.setValueAtTime(1.4, t0);
+        const wg = ctx.createGain();
+        wg.gain.setValueAtTime(0.0001, t0);
+        wg.gain.linearRampToValueAtTime(0.45, t0 + 0.025);
+        wg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16);
+        wing.connect(wFilter);
+        wFilter.connect(wg);
+        wg.connect(masterGain);
+        wing.onended = () => done([wing, wFilter, wg]);
+        wing.start(t0);
+        wing.stop(t0 + 0.18);
+      }
+
+      markOneShotActivity(1.2);
+    });
+  }
+
   /**
    * 2) playNichirinSheathe(): Crisp "Kachin!" Nichirin Blade Sheathing (~0.45s)
    * Metallic harmonic shimmer (2800Hz -> 4200Hz) + wooden saya / brass habaki tsuba lock (180Hz).
@@ -1942,6 +2198,8 @@
       state.audioCtx = null;
     }
     state.noiseBuffers = { pink: null, brown: null, white: null };
+    lastBiwaAt = 0;
+    lastHeraldAt = 0;
 
     if (typeof document !== 'undefined') {
       if (document.documentElement) {
@@ -1969,6 +2227,8 @@
     playNichirinSheathe,
     playSheathe: playNichirinSheathe,
     playKaguraChime,
+    playBiwaPluck,
+    playKasugaiHeraldChime,
     playSwordDraw,
     setSwordSfxEnabled,
     setAmbientMode,

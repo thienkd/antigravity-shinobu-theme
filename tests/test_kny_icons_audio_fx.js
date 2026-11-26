@@ -1624,6 +1624,36 @@ describe('F10 — Âm cảnh Điệp Phủ WebAudio 0 KB & Circadian Veil (kny_b
     assert.strictEqual(api.playKaguraChime(), true, 'Lần gọi hợp lệ ngay sau resume() reject không được bị chặn debounce');
     assert.ok(env.audioTelemetry.oscillators.length > 0, 'Phải tạo oscillators khi AudioContext đã running');
   });
+
+  it('F10-T1-07 [v3.5]: playBiwaPluck() & playKasugaiHeraldChime(kind) tổng hợp WebAudio 0KB chuẩn xác và tuân thủ chuông Kagura', () => {
+    const env = createKnyEnv({
+      hasBeenActive: true,
+      audio: { initialState: 'running' }
+    });
+    activeEnvsToClean.push(env);
+    env.loadModule(BIO_AUDIO_SRC, 'kny_bio_audio.js');
+    const api = env.window.__AGY_BIO_AUDIO__;
+
+    const osc0 = env.audioTelemetry.oscillators.length;
+    const buf0 = env.audioTelemetry.bufferSources.length;
+    assert.strictEqual(api.playBiwaPluck({ semitone: 2 }), true, 'playBiwaPluck phải phát thành công khi chimeEnabled=true');
+    assert.ok(env.audioTelemetry.oscillators.length >= osc0 + 2, 'playBiwaPluck phải tạo ít nhất 2 oscillators dây đàn sawari');
+    assert.ok(env.audioTelemetry.bufferSources.length >= buf0 + 1, 'playBiwaPluck phải tạo bachi plectrum snap');
+
+    for (const kind of ['chuntaro', 'kaburamaru', 'butterfly', 'crow']) {
+      env.advanceTimers(650);
+      const before = env.audioTelemetry.oscillators.length;
+      assert.strictEqual(api.playKasugaiHeraldChime(kind), true, `playKasugaiHeraldChime("${kind}") phải trả true`);
+      assert.ok(env.audioTelemetry.oscillators.length > before, `playKasugaiHeraldChime("${kind}") phải tạo WebAudio oscillators`);
+    }
+
+    // Khi tắt chuông Kagura (toggle -> enabled=false), cả Biwa và Herald đều im lặng tuyệt đối
+    env.advanceTimers(700);
+    api.toggle();
+    assert.strictEqual(api.isEnabled(), false);
+    assert.strictEqual(api.playBiwaPluck(), false, 'Tắt chuông Kagura phải chặn playBiwaPluck');
+    assert.strictEqual(api.playKasugaiHeraldChime('chuntaro'), false, 'Tắt chuông Kagura phải chặn playKasugaiHeraldChime');
+  });
 });
 
 /* ============================================================================
